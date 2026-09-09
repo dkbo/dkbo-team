@@ -17,7 +17,7 @@ if [ "$gate1" = 1 ]; then
   dk_process "gate1 approved"; dk_index_set "$DK_DISPLAY" running "—"; exit 0
 fi
 [ -n "$display" ] || dk_die "display name required"
-[[ "$display" != *[\"\$\`]* ]] || dk_die "display name must not contain \" \$ or backtick"
+[[ "$display" != *[\"\$\`\\]* ]] || dk_die "display name must not contain \" \$ \` or backslash"
 date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
@@ -43,7 +43,10 @@ dk_render "$DK_ROOT/templates/task.env"   "${vars[@]}" > "$dir/.task.env"
 mkdir -p "$DK_ROOT/.sessions"; echo "$name" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
 
 current=$(herdr agent get "$HERDR_PANE_ID" 2>/dev/null | dk_json '.result.agent.name // empty' || true)
-[ -n "$current" ] || herdr agent rename "$HERDR_PANE_ID" "leader-$short" >/dev/null
+if [ -z "$current" ] && ! herdr agent rename "$HERDR_PANE_ID" "leader-$short" >/dev/null; then
+  echo "dk-task-new: agent rename failed (pane without agent?)" >&2
+  dk_process "rename failed (pane without agent?)"
+fi
 dk_index_add "$date" "$display" task planning "—"
 
 if [ -x "$DK_ROOT/bin/dk-watch" ] && [ -z "${DK_NO_WATCH:-}" ]; then

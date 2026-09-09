@@ -9,6 +9,9 @@ teardown() { teardown_project; }
   grep -q 'dk-task-new pay "金流"' "$HERDR_STUB_LOG"
 }
 @test "dk-leader validates short name" { run dk-leader Pay x; [ "$status" -eq 1 ]; }
+@test "dk-leader rejects a display name with backslash/quote/dollar/backtick" {
+  run dk-leader pay 'abc\'; [ "$status" -eq 1 ]
+}
 @test "dk-leader rejects unknown model/effort and unknown kind" {
   run dk-leader pay x --model gpt-5; [ "$status" -eq 1 ]; [[ "$output" == *"unknown model"* ]]
   run dk-leader pay x --effort max; [ "$status" -eq 1 ]; [[ "$output" == *"unknown effort"* ]]

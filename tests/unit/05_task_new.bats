@@ -19,8 +19,15 @@ teardown() { teardown_project; }
   run dk-task-new Login x; [ "$status" -eq 1 ]
   run dk-task-new averyveryverylongname x; [ "$status" -eq 1 ]
   run dk-task-new login 'bad "quote'; [ "$status" -eq 1 ]
+  run dk-task-new login 'abc\'; [ "$status" -eq 1 ]
   run dk-task-new login "with space & hash #1"; [ "$status" -eq 0 ]; grep -q '^DK_DISPLAY="with space & hash #1"$' "$output/.task.env"
   run dk-task-new login x; [ "$status" -eq 1 ]
+}
+@test "task-new tolerates agent rename failure" {
+  HERDR_STUB_FAIL="agent rename" run dk-task-new login x
+  [ "$status" -eq 0 ]
+  grep -q '| x | task | planning |' "$DK_ROOT/tasks/INDEX.md"
+  grep -q 'rename failed' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
 }
 @test "task-new skips rename when agent already named" {
   echo '{"result":{"agent":{"name":"leader-login","agent_status":"idle","pane_id":"wB:p1"}}}' > "$HERDR_STUB_RESPONSES/agent_get.json"
