@@ -25,3 +25,8 @@ teardown() { teardown_project; }
   pid=$(sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$output/.task.env"); [[ "$pid" =~ ^[0-9]+$ ]]
   kill "$pid" 2>/dev/null || true
 }
+@test "tick survives an agent list without agents array" {
+  echo '{"id":"cli:agent:list","result":{}}' > "$HERDR_STUB_RESPONSES/agent_list.json"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/login-qa" ]
+}

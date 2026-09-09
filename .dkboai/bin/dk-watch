@@ -11,7 +11,7 @@ tick() {
   local now list; now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
   while read -r agent _pane; do
     [ -n "$agent" ] || continue
-    st=$(echo "$list" | jq -r --arg a "$agent" '.result.agents[] | select(.name==$a) | .agent_status' | head -1)
+    st=$(printf '%s' "$list" | jq -r --arg a "$agent" '(.result.agents // [])[] | select(.name==$a) | .agent_status' 2>/dev/null | head -1 || true)
     m="$dir/.blocked/$agent"
     if [ "$st" = blocked ]; then
       if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
