@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# dk-watch [--once] [--interval SEC]  — background blocked-agent detector for one task.
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+once=0; interval=30
+while [ $# -gt 0 ]; do case "$1" in --once) once=1; shift;; --interval) interval="$2"; shift 2;; *) dk_die "unknown flag $1";; esac; done
+thr="${DK_BLOCK_SEC:-60}"; mkdir -p "$dir/.blocked"
+tick() {
+  [ -f "$dir/.panes" ] || exit 0
+  local now list; now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
+  while read -r agent _pane; do
+    [ -n "$agent" ] || continue
+    st=$(echo "$list" | jq -r --arg a "$agent" '.result.agents[] | select(.name==$a) | .agent_status' | head -1)
+    m="$dir/.blocked/$agent"
+    if [ "$st" = blocked ]; then
+      if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
+      since=$(head -1 "$m"); [ "$(wc -l < "$m")" -ge 2 ] && continue   # already notified
+      if [ $((now - since)) -ge "$thr" ]; then
+        herdr notification show "dkboai: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 </dev/null || true
+        herdr agent prompt "$(dk_leader_name)" "[BLOCKED] from dk-watch: $agent 卡在審批" >/dev/null 2>&1 </dev/null || true
+        dk_process "blocked $agent"; echo notified >> "$m"
+      fi
+    else rm -f "$m"; fi
+  done < "$dir/.panes"
+}
+if [ "$once" = 1 ]; then tick; exit 0; fi
+while :; do tick; sleep "$interval"; done
