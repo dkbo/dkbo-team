@@ -38,9 +38,9 @@ dk_render() { # TEMPLATE_FILE KEY=VALUE... → stdout with every {{KEY}} replace
   for kv in "$@"; do c=${c//"{{${kv%%=*}}}"/"${kv#*=}"}; done
   printf '%s\n' "$c"
 }
-dk_index_add() { printf '| %s | %s | %s | %s | %s |\n' "$1" "$2" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
-dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column matches
-  local name="$1" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md"
+dk_index_add() { local name="${2//|/／}"; printf '| %s | %s | %s | %s | %s |\n' "$1" "$name" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
+dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column matches ('|' in NAME is stored as '／')
+  local name="${1//|/／}" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md"
   awk -F'|' -v n="$name" -v s="$status" -v o="$note" 'BEGIN{OFS="|"}
     { if ($3 == " " n " ") { $5=" " s " "; $6=" " o " " } print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 }

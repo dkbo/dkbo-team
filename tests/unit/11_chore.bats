@@ -43,3 +43,10 @@ teardown() { teardown_project; }
   run dk-chore-close chore-frontend-1 --abandon; [ "$status" -eq 0 ]
   ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
 }
+@test "instruction containing a pipe still round-trips through INDEX" {
+  dk-chore frontend "翻譯 a|b 文件" >/dev/null
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/' "$f"
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+  grep -q '| 翻譯 a／b 文件 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
+  [ "$(grep -c '翻譯 a' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
+}
