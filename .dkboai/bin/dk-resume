@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# dk-resume [<task-folder|short>] — print a ≤150-line recovery pack for the leader.
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+if [ -n "${1:-}" ]; then
+  t="$1"; [ -d "$DK_ROOT/tasks/$t" ] || t=$(ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$1" 2>/dev/null | xargs -rn1 basename | tail -1 || true)
+  [ -n "$t" ] && [ -d "$DK_ROOT/tasks/$t" ] || dk_die "no task '$1'"
+  mkdir -p "$DK_ROOT/.sessions"; echo "$t" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
+fi
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+render() { # $1=process lines $2=state lines
+  echo "## 你是 $(dk_leader_name)（任務 $(basename "$dir")）"
+  echo "規範在 .dkboai/LEADER.md 與 .dkboai/PROTOCOL.md，先讀再行動。任務目錄 $dir"
+  echo "## brief"; cat "$dir/brief.md"
+  echo "## process（最後 $1 行）"; tail -n "$1" "$dir/process.md"
+  echo "## 未處理訊息（最後一則 ACK 之後，寄給 leader）"
+  awk -v me="$(dk_leader_name)" '/\[ACK\]$/{buf=""; next} index($0, "-> " me " ")>0 {buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/messages.log"
+  echo "## state 摘要（每檔前 $2 行）"
+  for f in "$dir"/state/*.md; do [ -f "$f" ] || continue; n=$(basename "$f" .md); head -n "$2" "$f" | sed "s/^/$n: /"; done
+  echo "## 在線員工"
+  herdr agent list 2>/dev/null | jq -r --arg p "$DK_SHORT-" '.result.agents[] | select(.name != null and (.name|startswith($p))) | "\(.name) \(.agent_status)"' || true
+  echo "## BACKLOG"; cat "$DK_ROOT/tasks/BACKLOG.md"
+}
+out=$(render 20 5); [ "$(echo "$out" | wc -l)" -le 150 ] || out=$(render 20 3)
+[ "$(echo "$out" | wc -l)" -le 150 ] || out=$(render 10 3)
+printf '%s\n' "$out"
