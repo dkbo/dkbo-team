@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Fake AI CLI: only answers `mcp list`; anything else is a no-op.
+case "${1:-} ${2:-}" in
+  "mcp list") echo "${FAKE_MCP_LIST:-No MCP servers configured.}";;
+esac

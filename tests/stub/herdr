@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Fake herdr. Logs every call; answers from canned JSON files.
+set -uo pipefail
+log="${HERDR_STUB_LOG:?}"
+printf '%s\n' "$*" >> "$log"
+cmd="${1:-}"; sub="${2:-}"
+key="${cmd}_${sub}"
+if [ "${HERDR_STUB_FAIL:-}" = "$cmd $sub" ]; then
+  echo '{"error":{"code":"stubbed_failure"}}' >&2; exit 1
+fi
+f="${HERDR_STUB_RESPONSES:?}/${key}.json"
+if [ -f "$f" ]; then cat "$f"; else echo "{\"id\":\"cli:$cmd:$sub\",\"result\":{}}"; fi

@@ -1,1 +1,4 @@
-dkboai/.sessions/
+.dkboai/.sessions/*
+!.dkboai/.sessions/.gitkeep
+tests/lib/
+example/node_modules/

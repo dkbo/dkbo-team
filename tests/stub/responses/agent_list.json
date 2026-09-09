@@ -1,0 +1,1 @@
+{"id":"cli:agent:list","result":{"agents":[{"agent":"claude","name":"leader-login","agent_status":"idle","pane_id":"wB:p1"},{"agent":"claude","name":"login-frontend","agent_status":"working","pane_id":"wC:p2"},{"agent":"claude","name":"login-qa","agent_status":"blocked","pane_id":"wC:p3"}]}}
