@@ -38,3 +38,14 @@ teardown() { teardown_project; }
   ! git -C "$PROJECT" rev-parse --verify -q dk/login
   grep -q '| abandoned | 需求改了 |' "$DK_ROOT/tasks/INDEX.md"
 }
+@test "in-tree task (no worktree) closes without merge" {
+  echo '# r' > "$d/report.md"
+  sed -i "s|^DK_WORKTREE=.*|DK_WORKTREE=\"$PROJECT\"|; s|^DK_WORKSPACE=.*|DK_WORKSPACE=\"\"|" "$d/.task.env"
+  run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == closed* ]]
+  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
+  grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
+  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+  grep -Eq '\| 使用者登入 \| task \| done \| in-tree [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
+  grep -q 'task-close in-tree' "$d/process.md"
+  git -C "$PROJECT" rev-parse --verify -q dk/login   # branch untouched
+}
