@@ -7,12 +7,13 @@ repo="$(cd "$(dirname "$0")/../.." && pwd)"
 tmp=$(mktemp -d); cp -r "$repo/.dkboai" "$tmp/"; cd "$tmp"
 git init -q; git -c user.name=t -c user.email=t@t commit -q --allow-empty -m init; git branch -M main
 .dkboai/install.sh >/dev/null; export DK_ROOT="$tmp/.dkboai"; PATH="$tmp/.dkboai/bin:$PATH"
+mkdir -p notes; touch notes/.gitkeep
+git add -A; git -c user.name=t -c user.email=t@t commit -q -m "add dkboai"
 dir=$(dk-task-new smoke "smoke")
 cat >> "$dir/brief.md" <<'B'
 | it | notes/** | — |
 B
 printf '| 1 | 實作 | it | 在 notes/ 建檔 | S | leader 收到 DONE |\n' >> "$dir/brief.md"
-mkdir -p notes
 dk-spawn it --tier S --kind "$kind"
 . .dkboai/lib/common.sh; DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; agent=$(dk_agent_name it)
 for _ in $(seq 1 60); do [ -f "$dir/state/it.md" ] && break; sleep 2; done
