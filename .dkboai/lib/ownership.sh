@@ -2,7 +2,7 @@
 # dk_owned BRIEF STATE_NAME PATH → exit 0 if PATH matches one of the member's 可改 globs.
 dk_owned() {
   local brief="$1" who="$2" path="$3" globs g
-  globs=$(awk -F'|' -v w="$who" '$2 ~ "^ *"w" *$" {print $3; exit}' "$brief" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
+  globs=$(awk -F'|' -v w="$who" '{c=$2; gsub(/^ +| +$/, "", c)} c==w {print $3; exit}' "$brief" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
   [ -n "$globs" ] || return 1
   while IFS= read -r g; do
     [ -n "$g" ] || continue

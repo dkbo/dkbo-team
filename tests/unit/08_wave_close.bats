@@ -29,3 +29,10 @@ teardown() { teardown_project; }
   grep -q 'violation login-frontend: src/api/login.ts' "$d/process.md"
   [[ "$output" == *"state too long"* ]]
 }
+@test "ownership matches member names exactly" {
+  . "$DK_ROOT/lib/ownership.sh"
+  printf '| qa-a | docs/** | — |\n' >> "$d/brief.md"
+  dk_owned "$d/brief.md" qa tests/x.ts
+  ! dk_owned "$d/brief.md" qa docs/x.md
+  dk_owned "$d/brief.md" qa-a docs/x.md
+}
