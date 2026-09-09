@@ -18,10 +18,11 @@ dk-spawn it --tier S --kind "$kind"
 . .dkboai/lib/common.sh; DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; agent=$(dk_agent_name it)
 for _ in $(seq 1 60); do [ -f "$dir/state/it.md" ] && break; sleep 2; done
 [ -f "$dir/state/it.md" ] && echo "OK state file created" || { echo "FAIL no state file"; herdr agent read "$agent" --lines 60; exit 1; }
+herdr agent list
 herdr agent prompt "$agent" "請把 notes/a.txt 寫入 100 行遞增數字，完成後執行 .dkboai/bin/dk-msg leader \"[DONE] a\"" >/dev/null
 sleep 2
-DK_MSG_WAIT_MS=1000 dk-msg "$agent" "[TASK] 完成後再把 notes/b.txt 寫入 hello，並執行 .dkboai/bin/dk-msg leader \"[DONE] b\"" || true
-q=no; for _ in $(seq 1 90); do grep -q '\[DONE\] a' "$dir/messages.log" && grep -q '\[DONE\] b' "$dir/messages.log" && { q=yes; break; }; sleep 2; done
+herdr agent prompt "$agent" "[TASK] from leader-smoke: 完成後再把 notes/b.txt 寫入 hello，並執行 .dkboai/bin/dk-msg leader \"[DONE] b\"" >/dev/null 2>&1 || true
+q=no; for _ in $(seq 1 90); do grep -v UNDELIVERED "$dir/messages.log" | grep -q -- '-> leader-smoke \[DONE\] a' && grep -v UNDELIVERED "$dir/messages.log" | grep -q -- '-> leader-smoke \[DONE\] b' && { q=yes; break; }; sleep 2; done
 echo "QUEUES=$q"
 if [ "$write" = 1 ]; then sed -i "s/^KIND_PROMPT_QUEUES=.*/KIND_PROMPT_QUEUES=$q/" "$repo/.dkboai/kinds/$kind.sh"; fi
 dk-wave-close --force || true; dk-task-close --abandon smoke >/dev/null || true
