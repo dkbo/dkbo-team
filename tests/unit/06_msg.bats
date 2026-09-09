@@ -32,3 +32,8 @@ teardown() { teardown_project; }
   dk-msg --ack
   grep -Eq '^[0-9T:-]+ leader-login \[ACK\]$' "$DK_ROOT/tasks/$(date +%F)-login/messages.log"
 }
+@test "counts characters not bytes even when the caller's LC_ALL=C" {
+  body=$(printf '測%.0s' $(seq 1 150))
+  LC_ALL=C DK_AGENT=login-qa run dk-msg login-frontend "[TASK] $body"
+  [ "$status" -eq 0 ]
+}

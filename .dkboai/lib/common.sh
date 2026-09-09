@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # Shared helpers for dkboai bin scripts. Source, do not execute. No `set` here: bats sources this too.
-export LC_ALL="${LC_ALL:-C.UTF-8}"
+case "${LC_ALL:-}" in *UTF-8*|*utf8*) ;; *) export LC_ALL=C.UTF-8;; esac
 DK_ROOT="${DK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DK_PROJECT_ROOT="${DK_PROJECT_ROOT:-$(dirname "$DK_ROOT")}"
 export DK_ROOT DK_PROJECT_ROOT
