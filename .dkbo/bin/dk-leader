@@ -16,5 +16,5 @@ dk_kind_load "$kind"
 pane=$(herdr pane split --current --direction right --cwd "$DK_PROJECT_ROOT" --no-focus --env "DK_ROOT=$DK_ROOT" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id' || echo "")
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
 herdr agent start "leader-$short" --kind "$kind" --pane "$pane" -- --model "$model" --effort "$effort" >/dev/null
-herdr agent prompt "leader-$short" "讀 .dkboai/LEADER.md，然後執行 .dkboai/bin/dk-task-new $short \"$display\" 並開始寫 brief。" --wait --timeout 60000 >/dev/null
+herdr agent prompt "leader-$short" "讀 .dkbo/LEADER.md，然後執行 .dkbo/bin/dk-task-new $short \"$display\" 並開始寫 brief。" --wait --timeout 60000 >/dev/null
 echo "leader-$short $pane"

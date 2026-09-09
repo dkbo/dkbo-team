@@ -77,4 +77,4 @@ has no `.result.path`; `dk-task-new`/`dk-chore` already fall back to
 themselves; one bug found and fixed in this script (real herdr rejects `--workspace` +
 `--cwd` together on `worktree create` — production code only ever passes `--cwd`, so it
 was unaffected). Unit suite (`tests/run.sh`) re-checked at 73/73 passing since no stub or
-`.dkboai/` script changes were needed.
+`.dkbo/` script changes were needed.

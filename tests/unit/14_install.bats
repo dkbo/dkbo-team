@@ -3,47 +3,47 @@ setup() { setup_project; }
 teardown() { teardown_project; }
 
 @test "install creates symlinks, entry files, gitignore; idempotent" {
-  run .dkboai/install.sh; [ "$status" -eq 0 ]
+  run .dkbo/install.sh; [ "$status" -eq 0 ]
   for s in init add-role; do
-    [ "$(readlink .claude/skills/dkboai-$s)" = "../../.dkboai/skills/$s" ]
-    [ "$(readlink .agents/skills/dkboai-$s)" = "../../.dkboai/skills/$s" ]
+    [ "$(readlink .claude/skills/dkboai-$s)" = "../../.dkbo/skills/$s" ]
+    [ "$(readlink .agents/skills/dkboai-$s)" = "../../.dkbo/skills/$s" ]
     [ -f ".claude/skills/dkboai-$s/SKILL.md" ]
   done
-  grep -q '^讀 .dkboai/ENTRY.md' AGENTS.md; grep -q '^@AGENTS.md$' CLAUDE.md; grep -q '.dkboai/.sessions' .gitignore
-  run .dkboai/install.sh; [ "$status" -eq 0 ]
+  grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md; grep -q '^@AGENTS.md$' CLAUDE.md; grep -q '.dkbo/.sessions' .gitignore
+  run .dkbo/install.sh; [ "$status" -eq 0 ]
   [ "$(grep -c '^@AGENTS.md$' CLAUDE.md)" -eq 1 ]
 }
 @test "install appends to an existing CLAUDE.md and AGENTS.md" {
-  echo '# my project' > CLAUDE.md; echo '# agents rules' > AGENTS.md; .dkboai/install.sh >/dev/null
+  echo '# my project' > CLAUDE.md; echo '# agents rules' > AGENTS.md; .dkbo/install.sh >/dev/null
   head -1 CLAUDE.md | grep -q '# my project'; grep -q '^@AGENTS.md$' CLAUDE.md
-  head -1 AGENTS.md | grep -q '# agents rules'; grep -q '^讀 .dkboai/ENTRY.md' AGENTS.md
+  head -1 AGENTS.md | grep -q '# agents rules'; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
 }
 @test "install skips CLAUDE.md line when it symlinks AGENTS.md" {
-  echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; .dkboai/install.sh >/dev/null
-  ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkboai/ENTRY.md' AGENTS.md
+  echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; .dkbo/install.sh >/dev/null
+  ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
 }
 @test "README carries the one-shot install and update commands" {
-  for needle in '.dkboai/install.sh' 'git add -A' '/dkboai-init' 'HERDR_ENV' 'herdr --version' 'dk-whoami' 'rsync' '--exclude=tasks'; do
-    grep -qF -- "$needle" .dkboai/README.md || { echo "missing: $needle"; return 1; }
+  for needle in '.dkbo/install.sh' 'git add -A' '/dkboai-init' 'HERDR_ENV' 'herdr --version' 'dk-whoami' 'rsync' '--exclude=tasks'; do
+    grep -qF -- "$needle" .dkbo/README.md || { echo "missing: $needle"; return 1; }
   done
-  [ -f "$REPO_ROOT/README.md" ]; grep -q '.dkboai/README.md' "$REPO_ROOT/README.md"
+  [ -f "$REPO_ROOT/README.md" ]; grep -q '.dkbo/README.md' "$REPO_ROOT/README.md"
 }
 @test "skills have agent-skills frontmatter" {
   for s in init add-role; do
-    head -1 ".dkboai/skills/$s/SKILL.md" | grep -q '^---$'
-    grep -q "^name: dkboai-$s$" ".dkboai/skills/$s/SKILL.md"; grep -q '^description: ' ".dkboai/skills/$s/SKILL.md"
+    head -1 ".dkbo/skills/$s/SKILL.md" | grep -q '^---$'
+    grep -q "^name: dkboai-$s$" ".dkbo/skills/$s/SKILL.md"; grep -q '^description: ' ".dkbo/skills/$s/SKILL.md"
   done
 }
 @test "install appends cleanly to files without a trailing newline" {
   printf 'node_modules' > .gitignore; printf '# my project' > CLAUDE.md; printf '# rules' > AGENTS.md
-  .dkboai/install.sh >/dev/null
-  grep -qx 'node_modules' .gitignore; grep -qx '.dkboai/.sessions/\*' .gitignore
+  .dkbo/install.sh >/dev/null
+  grep -qx 'node_modules' .gitignore; grep -qx '.dkbo/.sessions/\*' .gitignore
   grep -qx '# my project' CLAUDE.md; grep -qx '@AGENTS.md' CLAUDE.md
-  grep -qx '# rules' AGENTS.md; grep -q '^讀 .dkboai/ENTRY.md' AGENTS.md
+  grep -qx '# rules' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
 }
 @test "install leaves a pre-existing real directory alone" {
   mkdir -p .claude/skills/dkboai-init; touch .claude/skills/dkboai-init/keep
-  run .dkboai/install.sh; [ "$status" -eq 0 ]; [[ "$output" == *"not a symlink"* ]]
+  run .dkbo/install.sh; [ "$status" -eq 0 ]; [[ "$output" == *"not a symlink"* ]]
   [ ! -L .claude/skills/dkboai-init ]; [ -f .claude/skills/dkboai-init/keep ]; [ ! -e .claude/skills/dkboai-init/init ]
-  [ "$(readlink .agents/skills/dkboai-init)" = "../../.dkboai/skills/init" ]
+  [ "$(readlink .agents/skills/dkboai-init)" = "../../.dkbo/skills/init" ]
 }

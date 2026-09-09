@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .dkboai/install.sh [--target DIR]  — wire dkboai into a project (idempotent).
+# .dkbo/install.sh [--target DIR]  — wire dkboai into a project (idempotent).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$(dirname "$here")"; [ "${1:-}" = --target ] && target="$(cd "$2" && pwd)"
@@ -14,19 +14,19 @@ for s in init add-role; do
     if [ -e "$d/dkboai-$s" ] && [ ! -L "$d/dkboai-$s" ]; then
       echo "install.sh: $d/dkboai-$s exists and is not a symlink; left untouched" >&2
     else
-      ln -sfn "../../.dkboai/skills/$s" "$d/dkboai-$s"
+      ln -sfn "../../.dkbo/skills/$s" "$d/dkboai-$s"
     fi
   done
 done
-grep -qs '^讀 .dkboai/ENTRY.md' AGENTS.md || append_line AGENTS.md '讀 .dkboai/ENTRY.md 並依其行事。'
+grep -qs '^讀 .dkbo/ENTRY.md' AGENTS.md || append_line AGENTS.md '讀 .dkbo/ENTRY.md 並依其行事。'
 if [ -L CLAUDE.md ] && [ "$(readlink CLAUDE.md)" = AGENTS.md ]; then
   echo "CLAUDE.md is a symlink to AGENTS.md; nothing to add"
 else
   grep -qs '^@AGENTS.md$' CLAUDE.md || append_line CLAUDE.md '@AGENTS.md'
 fi
-if ! grep -qs '.dkboai/.sessions' .gitignore; then
-  append_line .gitignore '.dkboai/.sessions/*'
-  append_line .gitignore '!.dkboai/.sessions/.gitkeep'
+if ! grep -qs '.dkbo/.sessions' .gitignore; then
+  append_line .gitignore '.dkbo/.sessions/*'
+  append_line .gitignore '!.dkbo/.sessions/.gitkeep'
 fi
-chmod +x .dkboai/bin/* .dkboai/install.sh
+chmod +x .dkbo/bin/* .dkbo/install.sh
 echo "dkboai installed into $target"

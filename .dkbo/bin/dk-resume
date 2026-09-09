@@ -10,7 +10,7 @@ fi
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
 render() { # $1=process lines $2=state lines
   echo "## 你是 $(dk_leader_name)（任務 $(basename "$dir")）"
-  echo "規範在 .dkboai/LEADER.md 與 .dkboai/PROTOCOL.md，先讀再行動。任務目錄 $dir"
+  echo "規範在 .dkbo/LEADER.md 與 .dkbo/PROTOCOL.md，先讀再行動。任務目錄 $dir"
   echo "## brief"; cat "$dir/brief.md"
   echo "## process（最後 $1 行）"; tail -n "$1" "$dir/process.md"
   echo "## 未處理訊息（最後一則 ACK 之後，寄給 leader）"

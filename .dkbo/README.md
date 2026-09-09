@@ -18,10 +18,10 @@
 > herdr --version && command -v jq git claude >/dev/null || { echo "缺少 herdr/jq/git/claude"; exit 1; }
 > git status --porcelain | grep -q . && { echo "工作樹不乾淨，請先 commit 或 stash"; exit 1; }
 > REPO=https://github.com/dkbo/dkboai.git   # fork 的話改這裡
-> tmp=$(mktemp -d) && git clone -q --depth 1 "$REPO" "$tmp" && cp -r "$tmp/.dkboai" ./.dkboai && rm -rf "$tmp"
-> .dkboai/install.sh
+> tmp=$(mktemp -d) && git clone -q --depth 1 "$REPO" "$tmp" && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+> .dkbo/install.sh
 > git add -A && git commit -m "chore: add dkboai"
-> .dkboai/bin/dk-whoami   # 預期印出 leader
+> .dkbo/bin/dk-whoami   # 預期印出 leader
 > ```
 >
 > 全部成功後執行 `/dkboai-init`，依它的提問完成初始化。
@@ -33,14 +33,14 @@ leader
 ```
 
 ## 手動安裝（同一件事拆開）
-1. 複製 `.dkboai/` 到專案根目錄。
-2. `.dkboai/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkboai-init`、`dkboai-add-role` 兩個 symlink；在 `AGENTS.md` 尾端追加一行指向 `.dkboai/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `.dkboai/.sessions/`。既有內容一律不動。
+1. 複製 `.dkbo/` 到專案根目錄。
+2. `.dkbo/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkboai-init`、`dkboai-add-role` 兩個 symlink；在 `AGENTS.md` 尾端追加一行指向 `.dkbo/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `.dkbo/.sessions/`。既有內容一律不動。
 3. `git add -A && git commit`。員工在 worktree 工作，只看得到已 commit 的檔案，這步不能省。
-4. 在 herdr 內的 Claude Code 執行 `/dkboai-init`：偵測已裝的 AI CLI、選主模型與第二三意見、改寫角色檔的 model/effort、預填 `.dkboai/PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkboai 規則的衝突、檢查 MCP 需求。
+4. 在 herdr 內的 Claude Code 執行 `/dkboai-init`：偵測已裝的 AI CLI、選主模型與第二三意見、改寫角色檔的 model/effort、預填 `.dkbo/PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkboai 規則的衝突、檢查 MCP 需求。
 
 ## 驗證
 ```bash
-.dkboai/bin/dk-whoami            # leader
+.dkbo/bin/dk-whoami            # leader
 ls -l .claude/skills .agents/skills | grep dkboai   # 四個 symlink
 tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 ```
@@ -48,8 +48,8 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 ## 日常使用
 - 開任務：對領導說「開任務 login，顯示名『使用者登入』，需求是…」。領導會寫 brief 給你確認（關卡①）、分波派工、員工升報時問你（關卡②）、結案時給你 report 拍板（關卡③）。
 - 雜務：對領導說「翻譯 README 成英文」「先修登入頁那個 bug」。領導評估後派一位員工，不自己動手。
-- 領導失憶：在領導 pane `/clear`，然後說「執行 .dkboai/bin/dk-resume 然後繼續」。
-- 第二位領導：在任何 herdr shell 執行 `.dkboai/bin/dk-leader pay "金流"`。
+- 領導失憶：在領導 pane `/clear`，然後說「執行 .dkbo/bin/dk-resume 然後繼續」。
+- 第二位領導：在任何 herdr shell 執行 `.dkbo/bin/dk-leader pay "金流"`。
 - 新角色：`/dkboai-add-role`。
 
 ## 目錄
@@ -67,16 +67,16 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 只更新核心，保留你的 `tasks/`、`PROJECT.md`、`decisions.md` 與自訂角色：
 ```bash
 tmp=$(mktemp -d) && git clone -q --depth 1 https://github.com/dkbo/dkboai.git "$tmp"
-rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=LEADER.md "$tmp/.dkboai/" ./.dkboai/   # LEADER.md 略過，因為 /dkboai-init 已依你的專案客製過
-rsync -a --ignore-existing "$tmp/.dkboai/roles/" ./.dkboai/roles/   # 只補新角色，不覆蓋既有
-rm -rf "$tmp" && .dkboai/install.sh && git add -A && git commit -m "chore: update dkboai"
+rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=LEADER.md "$tmp/.dkbo/" ./.dkbo/   # LEADER.md 略過，因為 /dkboai-init 已依你的專案客製過
+rsync -a --ignore-existing "$tmp/.dkbo/roles/" ./.dkbo/roles/   # 只補新角色，不覆蓋既有
+rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update dkboai"
 ```
 
 ## 疑難排解
 | 症狀 | 原因 / 處理 |
 |---|---|
 | `dk: not running inside herdr` | 不是從 herdr 的 pane 執行。`herdr` 開啟終端後再試。 |
-| 員工 pane 說找不到 `.dkboai/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
+| 員工 pane 說找不到 `.dkbo/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
 | 員工卡住不動 | 卡在審批對話框。dk-watch 會通知；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
 | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
-| 領導自己開始寫程式 | 提醒它讀 `.dkboai/LEADER.md`；必要時 `/clear` 後 `dk-resume`。 |
+| 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md`；必要時 `/clear` 後 `dk-resume`。 |

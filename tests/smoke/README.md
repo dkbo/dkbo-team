@@ -12,11 +12,11 @@ tests/smoke/kind-smoke.sh codex --write
 tests/smoke/kind-smoke.sh agy --write
 ```
 
-The `--write` flag updates `KIND_PROMPT_QUEUES` in `.dkboai/kinds/<kind>.sh` with the test result (`yes` or `no`).
+The `--write` flag updates `KIND_PROMPT_QUEUES` in `.dkbo/kinds/<kind>.sh` with the test result (`yes` or `no`).
 
 ## How it Works
 
-1. Creates a temp git project with `.dkboai` installed
+1. Creates a temp git project with `.dkbo` installed
 2. Spawns an agent of the given kind in role `it` at tier S. `dk-task-new` renames the current pane's agent to `leader-smoke` (the leader in this scenario), and `dk-task-close --abandon` at the end clears that binding.
 3. Waits for the agent's state file to appear, then prints `herdr agent list` once (compare its real `agent_status` vocabulary against `dk-watch`'s literal `blocked`)
 4. Sends an initial prompt via `herdr agent prompt`

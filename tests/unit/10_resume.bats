@@ -15,7 +15,7 @@ teardown() { teardown_project; }
 @test "resume prints the recovery pack under 150 lines" {
   run dk-resume; [ "$status" -eq 0 ]
   [ "${#lines[@]}" -le 150 ]
-  [[ "$output" == *"## 你是 leader-login"* ]]; [[ "$output" == *".dkboai/LEADER.md"* ]]
+  [[ "$output" == *"## 你是 leader-login"* ]]; [[ "$output" == *".dkbo/LEADER.md"* ]]
   [[ "$output" == *"# 使用者登入"* ]]
   [[ "$output" == *" ev30"* ]]; [[ "$output" != *" ev5"* ]]
   [[ "$output" == *"[ESCALATE] 修一次未好"* ]]; [[ "$output" != *"[DONE] old"* ]]; [[ "$output" != *"[BUG] x"* ]]
