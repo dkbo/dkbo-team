@@ -403,3 +403,6 @@ dkboai 本身不提供 MCP server（herdr CLI 經 bash 已是三家最大公約�
 - 三 kind 在 working 中收到 `agent prompt` 的行為（決定 dk-msg 是否必須等 idle）。
 - codex 免審批的正確旗標組合（`-a never -s workspace-write`）在目前版本是否足夠。
 - `herdr pane split --env` 注入的變數是否被 agent 子進程繼承。
+  - **已驗證（2026-09-10，真實 herdr 0.9.0，`tests/integration/herdr-real.sh`）**：`--env K=V` 注入的變數確實被新 pane 的 shell 繼承（`echo $VAR` 可讀到）。
+- `herdr worktree create` 的回傳 JSON 形狀（`.result.workspace.workspace_id`、`.result.root_pane.pane_id` 是否存在；`.result.path` 是否存在）。
+  - **已驗證（2026-09-10，真實 herdr 0.9.0）**：`.result.workspace.workspace_id` 與 `.result.root_pane.pane_id` 都存在，形狀與 stub 相符。真實 herdr **沒有** `.result.path`（路徑改放在 `.result.worktree.path` / `.result.workspace.worktree.checkout_path`），但 `dk-task-new`／`dk-chore` 本就對 `.result.path // empty` 的落空有 `git worktree list --porcelain` 的 fallback，實測可正確取得路徑，不需改動。另發現真實 herdr 的 `worktree create` 不接受 `--workspace` 與 `--cwd` 同時給（互斥，會回 usage error exit 2）；`.dkboai/bin/` 內的呼叫本來就只用 `--cwd`，不受影響，只有驗證腳本本身需要對應修正（已修正）。
