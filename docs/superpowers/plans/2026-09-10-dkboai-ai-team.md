@@ -711,23 +711,7 @@ DONE 前 `touched` 必須完整，領導會拿它比對所有權。
 - 已知坑：
 ```
 
-`README.md`:
-```markdown
-# dkboai
-
-以 herdr 為底的多模型 AI 團隊套件。設計見 `docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`。
-
-## 安裝到目標專案
-1. 把 `dkboai/` 複製到專案根目錄。
-2. 在專案根目錄執行 `dkboai/install.sh`：建 `.claude/skills/` 與 `.agents/skills/` 的 symlink、在 `AGENTS.md` 尾端追加一行指向 `dkboai/ENTRY.md`、在 `CLAUDE.md` 尾端追加 `@AGENTS.md`。既有內容不動。
-3. `git add -A && git commit`。員工在 worktree 裡工作，只看得到已 commit 的 dkboai/ 與入口檔。
-4. 在 herdr 內開 Claude Code，執行 `/dkboai-init`。
-
-## 日常
-- 開任務：跟領導說「開任務 X」。
-- 雜務：跟領導說要翻譯、畫圖、修小 bug。
-- 領導失憶：`/clear` 後執行 `dkboai/bin/dk-resume`。
-```
+`README.md`: one line for now — `# dkboai\n\n安裝與使用說明見 Task 14 完成後的版本。` (Task 14 replaces it with the full AI-installable README).
 
 `roles/README.md`:
 ```markdown
@@ -1785,15 +1769,18 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Task 14: `install.sh` and the two skills
+### Task 14: `install.sh`, the two skills, and the AI-installable README
 
 **Files:**
 - Create: `dkboai/install.sh`, `dkboai/skills/init/SKILL.md`, `dkboai/skills/add-role/SKILL.md`
+- Create: `README.md` (repo root, points to `dkboai/README.md`)
+- Modify: `dkboai/README.md` (full version replacing the Task 4 stub)
 - Test: `tests/unit/14_install.bats`
 
 **Interfaces:**
 - Produces: `dkboai/install.sh` (run from target project root or with `--target DIR`): never overwrites existing files, only appends; skips the CLAUDE.md line when CLAUDE.md is a symlink to AGENTS.md; creates `.claude/skills/dkboai-init`, `.claude/skills/dkboai-add-role`, `.agents/skills/dkboai-init`, `.agents/skills/dkboai-add-role` relative symlinks into `dkboai/skills/*`; writes `AGENTS.md` line `讀 dkboai/ENTRY.md 並依其行事。` if absent; writes `CLAUDE.md` line `@AGENTS.md` if absent (appends if file exists without it); `chmod +x dkboai/bin/*`; appends `dkboai/.sessions/*` to `.gitignore` if missing. Idempotent.
 - Skills are markdown only; their frontmatter `name` and `description` follow the Agent Skills format so all three CLIs list them.
+- `dkboai/README.md` is written for an AI reader as much as a human: a copy-pasteable block that installs everything without further questions, exact expected outputs, and an update procedure that never overwrites `tasks/`, `PROJECT.md`, `decisions.md` or customised `roles/`.
 
 - [ ] **Step 1: Failing test**
 
@@ -1821,6 +1808,12 @@ teardown() { teardown_project; }
 @test "install skips CLAUDE.md line when it symlinks AGENTS.md" {
   echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; dkboai/install.sh >/dev/null
   ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 dkboai/ENTRY.md' AGENTS.md
+}
+@test "README carries the one-shot install and update commands" {
+  for needle in 'dkboai/install.sh' 'git add -A' '/dkboai-init' 'HERDR_ENV' 'herdr --version' 'dk-whoami' 'rsync' '--exclude=tasks'; do
+    grep -qF -- "$needle" dkboai/README.md || { echo "missing: $needle"; return 1; }
+  done
+  [ -f README.md ]; grep -q 'dkboai/README.md' README.md
 }
 @test "skills have agent-skills frontmatter" {
   for s in init add-role; do
@@ -1901,13 +1894,111 @@ description: 為 dkboai 團隊新增一個角色（例如 translator、designer�
 8. 用 `bash -c '. dkboai/lib/common.sh; . dkboai/lib/frontmatter.sh; . dkboai/lib/kinds.sh; for t in S M L; do v=$(dk_fm_tier dkboai/roles/<name>.md $t); [ -n "$v" ] && dk_kind_args <kind> "$v"; done'` 驗證三檔都能轉成旗標。
 ```
 
-- [ ] **Step 6: Run** → `4 tests, 0 failures`
+- [ ] **Step 6: Write `dkboai/README.md`**
 
-- [ ] **Step 7: Commit**
+```markdown
+# dkboai
+
+以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`。
+
+## 前置需求
+- herdr ≥ 0.9.0（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。
+- git、jq、bash 5。
+- 至少一個 AI CLI：`claude`（必要，領導用）。可選 `codex`、`agy`（第二、第三意見）。
+- 目標專案是 git repo，且工作樹乾淨。
+
+## 給 AI 的一鍵安裝
+把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code（或任何能跑 bash 的 agent）：
+
+> 請在目前專案安裝 dkboai。依序執行以下指令，任何一步失敗就停下回報，不要自行變通：
+>
+> ```bash
+> test "$HERDR_ENV" = 1 || { echo "不在 herdr 內，請先用 herdr 開啟終端"; exit 1; }
+> herdr --version && command -v jq git claude >/dev/null || { echo "缺少 herdr/jq/git/claude"; exit 1; }
+> git status --porcelain | grep -q . && { echo "工作樹不乾淨，請先 commit 或 stash"; exit 1; }
+> REPO=https://github.com/dkbo/dkboai.git   # fork 的話改這裡
+> tmp=$(mktemp -d) && git clone -q --depth 1 "$REPO" "$tmp" && cp -r "$tmp/dkboai" ./dkboai && rm -rf "$tmp"
+> dkboai/install.sh
+> git add -A && git commit -m "chore: add dkboai"
+> dkboai/bin/dk-whoami   # 預期印出 leader
+> ```
+>
+> 全部成功後執行 `/dkboai-init`，依它的提問完成初始化。
+
+預期輸出的最後兩行：
+```
+dkboai installed into /path/to/project
+leader
+```
+
+## 手動安裝（同一件事拆開）
+1. 複製 `dkboai/` 到專案根目錄。
+2. `dkboai/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkboai-init`、`dkboai-add-role` 兩個 symlink；在 `AGENTS.md` 尾端追加一行指向 `dkboai/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `dkboai/.sessions/`。既有內容一律不動。
+3. `git add -A && git commit`。員工在 worktree 工作，只看得到已 commit 的檔案，這步不能省。
+4. 在 herdr 內的 Claude Code 執行 `/dkboai-init`：偵測已裝的 AI CLI、選主模型與第二三意見、改寫角色檔的 model/effort、預填 `dkboai/PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkboai 規則的衝突、檢查 MCP 需求。
+
+## 驗證
+```bash
+dkboai/bin/dk-whoami            # leader
+ls -l .claude/skills .agents/skills | grep dkboai   # 四個 symlink
+tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
+```
+
+## 日常使用
+- 開任務：對領導說「開任務 login，顯示名『使用者登入』，需求是…」。領導會寫 brief 給你確認（關卡①）、分波派工、員工升報時問你（關卡②）、結案時給你 report 拍板（關卡③）。
+- 雜務：對領導說「翻譯 README 成英文」「先修登入頁那個 bug」。領導評估後派一位員工，不自己動手。
+- 領導失憶：在領導 pane `/clear`，然後說「執行 dkboai/bin/dk-resume 然後繼續」。
+- 第二位領導：在任何 herdr shell 執行 `dkboai/bin/dk-leader pay "金流"`。
+- 新角色：`/dkboai-add-role`。
+
+## 目錄
+| 路徑 | 用途 |
+|---|---|
+| `ENTRY.md` | 唯一入口，決定你是領導或員工 |
+| `LEADER.md` / `PROTOCOL.md` | 領導規範 / 通訊協定與升報規則 |
+| `roles/` | 角色檔（kind、S/M/L 三檔、職責） |
+| `kinds/` | 各 AI CLI 的旗標對應 |
+| `bin/` | `dk-*` 腳本，全部封裝 herdr |
+| `tasks/<日期-短名>/` | 一個任務的全部記憶：brief、process、report、messages.log、state/ |
+| `tasks/INDEX.md`、`tasks/BACKLOG.md`、`decisions.md`、`PROJECT.md` | 跨任務記憶 |
+
+## 更新 dkboai
+只更新核心，保留你的 `tasks/`、`PROJECT.md`、`decisions.md` 與自訂角色：
+```bash
+tmp=$(mktemp -d) && git clone -q --depth 1 https://github.com/dkbo/dkboai.git "$tmp"
+rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions "$tmp/dkboai/" ./dkboai/
+rsync -a --ignore-existing "$tmp/dkboai/roles/" ./dkboai/roles/   # 只補新角色，不覆蓋既有
+rm -rf "$tmp" && dkboai/install.sh && git add -A && git commit -m "chore: update dkboai"
+```
+
+## 疑難排解
+| 症狀 | 原因 / 處理 |
+|---|---|
+| `dk: not running inside herdr` | 不是從 herdr 的 pane 執行。`herdr` 開啟終端後再試。 |
+| 員工 pane 說找不到 `dkboai/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
+| 員工卡住不動 | 卡在審批對話框。dk-watch 會通知；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
+| codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
+| 領導自己開始寫程式 | 提醒它讀 `dkboai/LEADER.md`；必要時 `/clear` 後 `dk-resume`。 |
+```
+
+Also write the repo-root `README.md`:
+```markdown
+# dkboai
+
+多模型 AI 開發團隊套件，可攜目錄在 `dkboai/`。安裝、使用、更新與疑難排解全部在 **[dkboai/README.md](dkboai/README.md)**；把那份 README 的「給 AI 的一鍵安裝」段落貼給 Claude Code 即可安裝。
+
+- 設計規格：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`
+- 實作計畫：`docs/superpowers/plans/2026-09-10-dkboai-ai-team.md`
+- 測試：`tests/run.sh`（單元）、`tests/integration/`（真 herdr）、`tests/smoke/`（真 agent）、`tests/e2e/RUNBOOK.md`
+```
+
+- [ ] **Step 7: Run** → `5 tests, 0 failures`
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add dkboai/install.sh dkboai/skills tests/unit/14_install.bats
-git commit -m "feat: install.sh wiring and init/add-role skills
+git add README.md dkboai/README.md dkboai/install.sh dkboai/skills tests/unit/14_install.bats
+git commit -m "feat: install.sh, init/add-role skills, AI-installable README
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
