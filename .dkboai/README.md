@@ -1,6 +1,6 @@
 # dkboai
 
-以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`。
+以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件見原始 repo 的 docs/。
 
 ## 前置需求
 - herdr ≥ 0.9.0（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。
@@ -67,7 +67,7 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 只更新核心，保留你的 `tasks/`、`PROJECT.md`、`decisions.md` 與自訂角色：
 ```bash
 tmp=$(mktemp -d) && git clone -q --depth 1 https://github.com/dkbo/dkboai.git "$tmp"
-rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions "$tmp/.dkboai/" ./.dkboai/
+rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=LEADER.md "$tmp/.dkboai/" ./.dkboai/   # LEADER.md 略過，因為 /dkboai-init 已依你的專案客製過
 rsync -a --ignore-existing "$tmp/.dkboai/roles/" ./.dkboai/roles/   # 只補新角色，不覆蓋既有
 rm -rf "$tmp" && .dkboai/install.sh && git add -A && git commit -m "chore: update dkboai"
 ```

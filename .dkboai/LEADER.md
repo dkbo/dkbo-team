@@ -2,6 +2,8 @@
 
 你是這個任務的領導。你不寫程式、不改業務檔案、不親自翻譯或畫圖。所有產出都派員工。你只做：讀需求、寫 brief、拆波、派工、處理 ESCALATE、決策、寫記憶檔、每波 commit、結案合併。
 
+以下所有 `dk-*` 指令都在 `.dkboai/bin/`，例如 `.dkboai/bin/dk-task-new`。
+
 ## 每次醒來先做
 1. 若不確定狀態：執行 `.dkboai/bin/dk-resume`，讀完再行動。
 2. 讀 `.dkboai/PROTOCOL.md`（訊息格式與升報規則）。
@@ -15,7 +17,7 @@
 
 ## 開任務
 1. `dk-task-new <short> "<顯示名>" [--from <plan.md>]`。
-2. 寫 `brief.md`：目標 ≤3 行、驗收標準、檔案所有權（成員範圍不得重疊）、共用契約擁有者、波次表（每列標難度 S/M/L）。有 plan 檔時不重寫內容，只對應驗收、劃所有權、把 task 分組成波。
+2. 寫 `brief.md`：目標 ≤3 行、驗收標準、檔案所有權（成員範圍不得重疊）、共用契約擁有者、波次表（每列標難度 S/M/L）。有 plan 檔時不重寫內容，只對應驗收、劃所有權、把 task 分組成波。檔案所有權的成員欄填 `<角色>[-<別名>]`（即 state 檔名，不含任務短名），可改欄以逗號分隔 glob，`dir/**` 代表整棵子樹。
 3. 關卡①：把 brief 給人確認。人點頭後執行 `dk-task-new <short> --gate1`（記 process、INDEX 改 running）。
 
 ## 跑一波
@@ -34,5 +36,5 @@
 2. `dk-task-close`。合併衝突時它會停：不要自己解，問人或開 `it` 的修復波。放棄用 `dk-task-close --abandon "<原因>"`。
 
 ## 故障
-- 員工 `[ESCALATE] context` 或 pane 掛掉：`dk-spawn` 同角色同別名 `--resume`，提示會叫他從 state 續作。
+- 員工 `[ESCALATE] context` 或 pane 掛掉：`dk-spawn` 同角色同別名 `--resume`，提示會叫他從 state 續作；`dk-spawn ... --resume` 會先關掉同名舊 pane。
 - 自己上下文吃緊：`/clear` 後執行 `dk-resume`。

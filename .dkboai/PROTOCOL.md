@@ -6,7 +6,7 @@
 | 類型 | 方向 | 何時 |
 |---|---|---|
 | TASK | 領導→員工 | 補充派工 |
-| DONE | 員工→領導 | 完成，且 state 已寫 `status: done` |
+| DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done` |
 | BUG | 員工→員工 | 附重現方式，指向 state |
 | FIXED | 員工→員工 | 修好了，請重驗 |
 | QUESTION / ANSWER | 任意 | 釐清介面、契約 |
@@ -37,3 +37,5 @@ blocked_by: （無則省略）
 notes: 給接手者的必要事實，≤5 行
 ```
 DONE 前 `touched` 必須完整，領導會拿它比對所有權。
+
+雜務員工（`chore-*`）沒有任務綁定，不適用上面的 state 檔／dk-msg 流程；他們以 `herdr agent prompt "$DK_LEADER" "[DONE] from <agent>: ..."` 作為回報第一句。

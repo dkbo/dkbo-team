@@ -1,6 +1,6 @@
 # 端對端示範（層 4，人工一次）
 
-前置：在 herdr 內、`example/` 已 `git init` 並 commit、`cp -r ../.dkboai example/.dkboai && cd example && .dkboai/install.sh`。開 Claude Code（S 檔即可：`claude --model sonnet --effort low`）。
+前置：在 herdr 內、`example/` 已 `git init` 並 commit、從 repo 根目錄執行 `cp -r .dkboai example/.dkboai && cd example && .dkboai/install.sh`。開 Claude Code（S 檔即可：`claude --model sonnet --effort low`）。
 
 1. 對領導說：「開任務 login，顯示名『使用者登入』。需求：POST /login 接 JSON {user,pass}，空密碼回 400，正確回 200；web.js 的 renderLogin 產出含 user/pass 欄位的表單；qa 寫測試驗證兩者。」
 2. 預期：領導執行 dk-task-new，寫 brief（所有權：backend=src/api.js，frontend=src/web.js，qa=test/**；波次表 wave1 backend(M)+qa(S)，wave2 frontend(S)+qa(S)），問你確認（關卡①）。回「OK」。
