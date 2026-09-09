@@ -38,3 +38,8 @@ teardown() { teardown_project; }
   run dk-spawn pm; [ "$status" -eq 0 ]
   grep -q -- "^pane split --pane wB:p1 --direction right --cwd $PROJECT --no-focus" "$HERDR_STUB_LOG"
 }
+@test "spawn records prompt failure but keeps the pane entry" {
+  HERDR_STUB_FAIL="agent prompt" run dk-spawn qa
+  [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+  grep -q '^login-qa wC:p2$' "$d/.panes"; grep -q 'spawn login-qa (claude M) prompt-failed' "$d/process.md"
+}

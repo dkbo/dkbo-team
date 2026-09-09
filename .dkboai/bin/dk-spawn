@@ -33,6 +33,11 @@ dk_kind_load "$kind"; have=$(kind_mcp_list || true); missing=""
 for m in $(dk_fm_list "$rf" mcp); do echo "$have" | grep -qx "$m" || missing="$missing $m"; done
 if [ -n "$missing" ]; then echo "dk-spawn: mcp missing for $kind:$missing" >&2; dk_process "mcp-missing $agent:$missing"; fi
 
-herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume")" --wait --timeout 60000 >/dev/null
-dk_process "spawn $agent ($kind $tier)$notes"
-echo "$agent $pane"
+if herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume")" --wait --timeout 60000 >/dev/null; then
+  dk_process "spawn $agent ($kind $tier)$notes"
+  echo "$agent $pane"
+else
+  dk_process "spawn $agent ($kind $tier)$notes prompt-failed"
+  echo "dk-spawn: first prompt to $agent failed or timed out; pane $pane is live — herdr agent read $agent, then re-prompt or dk-wave-close --force" >&2
+  echo "$agent $pane"; exit 1
+fi
