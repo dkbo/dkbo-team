@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# dk-wave-close [--force]
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"
+dk_require_herdr
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+force=0; [ "${1:-}" = --force ] && force=1
+[ -s "$dir/.panes" ] || dk_die "no live panes recorded in $dir/.panes"
+notdone=""
+while read -r agent pane; do
+  sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
+  if [ ! -f "$sf" ] || ! grep -q '^status: done' "$sf"; then notdone="$notdone $agent"; fi
+done < "$dir/.panes"
+if [ -n "$notdone" ] && [ "$force" = 0 ]; then echo "dk-wave-close: not done:$notdone (use --force to close anyway)"; exit 1; fi
+n=0
+while read -r agent pane; do
+  sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
+  if [ -f "$sf" ]; then
+    [ "$(wc -l < "$sf")" -le 20 ] || echo "dk-wave-close: state too long: $sf"
+    while IFS= read -r p; do
+      [ -n "$p" ] || continue
+      dk_owned "$dir/brief.md" "$sname" "$p" || { echo "dk-wave-close: violation $agent touched $p"; dk_process "violation $agent: $p"; }
+    done < <(dk_touched "$sf")
+  fi
+  herdr pane close "$pane" >/dev/null </dev/null && n=$((n+1))
+done < "$dir/.panes"
+: > "$dir/.panes"
+dk_process "wave-close: $n agents closed"
+echo "closed $n"
