@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# dk-spawn <role> [alias] [--tier S|M|L] [--kind K] [--isolated] [--resume]
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+. "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"
+dk_require_herdr
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+role="${1:-}"; shift || true; [ -n "$role" ] || dk_die "usage: dk-spawn <role> [alias] [--tier T] [--kind K] [--isolated] [--resume]"
+alias=""; tier=M; kind=""; isolated=0; resume=0; notes=""
+while [ $# -gt 0 ]; do case "$1" in
+  --tier) tier="$2"; shift 2;; --kind) kind="$2"; notes="$notes override-kind"; shift 2;;
+  --isolated) isolated=1; notes="$notes isolated"; shift;; --resume) resume=1; notes="$notes resume"; shift;;
+  --*) dk_die "unknown flag $1";; *) alias="$1"; shift;; esac; done
+rf="$DK_ROOT/roles/$role.md"; [ -f "$rf" ] || dk_die "no role file $rf (use add-role skill first)"
+[ -n "$kind" ] || kind=$(dk_fm "$rf" kind)
+spec=$(dk_fm_tier "$rf" "$tier"); [ -n "$spec" ] || dk_die "role $role has no tier $tier"
+if [ "$kind" != "$(dk_fm "$rf" kind)" ]; then dk_kind_load "$kind"; spec=$(echo "$KIND_DEFAULT_TIERS" | tr ' ' '\n' | awk -F= -v t="$tier" '$1==t{print $2}'); fi
+args=$(dk_kind_args "$kind" "$spec")
+direction=$(dk_fm "$rf" split); direction="${direction:-right}"
+agent=$(dk_agent_name "$role" "$alias"); state="$dir/state/$(dk_state_name "$role" "$alias").md"
+from_pane="$DK_ROOT_PANE"; cwd="$DK_WORKTREE"
+if [ "$(dk_fm "$rf" worktree)" = false ]; then from_pane="${HERDR_PANE_ID:?}"; cwd="$DK_PROJECT_ROOT"; fi   # e.g. pm works in the main tree beside the leader
+
+pane=$(herdr pane split --pane "$from_pane" --direction "$direction" --cwd "$cwd" --no-focus \
+  --env "DK_ROOT=$DK_ROOT" --env "DK_TASK_DIR=$dir" --env "DK_ROLE=$role" --env "DK_AGENT=$agent" \
+  --env "DK_LEADER=$(dk_leader_name)" --env "DK_ISOLATED=$isolated" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
+[ -n "$pane" ] || dk_die "pane split returned no pane_id"
+# shellcheck disable=SC2086
+herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null
+echo "$agent $pane" >> "$dir/.panes"
+
+dk_kind_load "$kind"; have=$(kind_mcp_list || true); missing=""
+for m in $(dk_fm_list "$rf" mcp); do echo "$have" | grep -qx "$m" || missing="$missing $m"; done
+if [ -n "$missing" ]; then echo "dk-spawn: mcp missing for $kind:$missing" >&2; dk_process "mcp-missing $agent:$missing"; fi
+
+herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume")" --wait --timeout 60000 >/dev/null
+dk_process "spawn $agent ($kind $tier)$notes"
+echo "$agent $pane"
