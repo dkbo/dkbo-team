@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# dk-task-new <short> "<display>" [--from <plan>] [--no-worktree]
+# dk-task-new <short> --gate1
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+dk_require_herdr
+short="${1:-}"; shift || true
+[[ "$short" =~ ^[a-z][a-z0-9-]{0,11}$ ]] || dk_die "short name must be ascii lowercase, ≤12 chars: '$short'"
+display=""; from="人的口頭需求"; worktree=1; gate1=0
+while [ $# -gt 0 ]; do case "$1" in
+  --from) from="$2"; shift 2;; --no-worktree) worktree=0; shift;; --gate1) gate1=1; shift;;
+  --*) dk_die "unknown flag $1";; *) display="$1"; shift;; esac; done
+
+if [ "$gate1" = 1 ]; then
+  existing=$(ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" 2>/dev/null | tail -1 || true); [ -n "$existing" ] || dk_die "no task $short"
+  DK_TASK_DIR="$existing"; export DK_TASK_DIR; dk_task_env
+  dk_process "gate1 approved"; dk_index_set "$DK_DISPLAY" running "—"; exit 0
+fi
+[ -n "$display" ] || dk_die "display name required"
+[[ "$display" != *[\"\$\`]* ]] || dk_die "display name must not contain \" \$ or backtick"
+date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
+[ ! -e "$dir" ] || dk_die "task exists: $dir"
+ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
+
+branch="dk/$short"; wt_path=""; ws=""; root_pane=""
+if [ "$worktree" = 1 ]; then
+  base=$(git -C "$DK_PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
+  out=$(herdr worktree create --branch "$branch" --base "$base" --cwd "$DK_PROJECT_ROOT" --no-focus)
+  wt_path=$(echo "$out" | dk_json '.result.path // empty')
+  ws=$(echo "$out" | dk_json '.result.workspace.workspace_id')
+  root_pane=$(echo "$out" | dk_json '.result.root_pane.pane_id')
+  [ -n "$wt_path" ] || wt_path=$(git -C "$DK_PROJECT_ROOT" worktree list --porcelain | awk -v b="refs/heads/$branch" '$1=="worktree"{p=$2} $1=="branch"&&$2==b{print p}')
+else
+  wt_path="$DK_PROJECT_ROOT"; ws="${HERDR_WORKSPACE_ID:-}"; root_pane="${HERDR_PANE_ID:-}"
+fi
+
+mkdir -p "$dir/state"; : > "$dir/.panes"   # dk-watch exits when this file disappears (dk-task-close removes it)
+vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=$wt_path" "SOURCE=$from" "DATE=$(dk_now)" "WORKSPACE=$ws" "ROOT_PANE=$root_pane")
+dk_render "$DK_ROOT/templates/brief.md"   "${vars[@]}" > "$dir/brief.md"
+dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"
+dk_render "$DK_ROOT/templates/task.env"   "${vars[@]}" > "$dir/.task.env"
+: > "$dir/messages.log"
+mkdir -p "$DK_ROOT/.sessions"; echo "$name" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
+
+current=$(herdr agent get "$HERDR_PANE_ID" 2>/dev/null | dk_json '.result.agent.name // empty' || true)
+[ -n "$current" ] || herdr agent rename "$HERDR_PANE_ID" "leader-$short" >/dev/null
+dk_index_add "$date" "$display" task planning "—"
+
+if [ -x "$DK_ROOT/bin/dk-watch" ] && [ -z "${DK_NO_WATCH:-}" ]; then
+  # close fd 3 and stdin so bats/herdr never wait on the detached watcher
+  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" </dev/null >/dev/null 2>&1 3>&- &
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$!\"/" "$dir/.task.env"
+fi
+echo "$dir"
