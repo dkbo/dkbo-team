@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- All scripts are bash with `set -euo pipefail`; no node/python runtime dependency in `dkboai/`.
+- Every `bin/dk-*` script starts with `set -euo pipefail` before sourcing libs; `lib/*.sh` never set shell options (they are sourced by bats tests too). No node/python runtime dependency in `dkboai/`.
+- `lib/common.sh` exports `LC_ALL=C.UTF-8` so string lengths count characters, not bytes.
 - herdr agent names must match `[a-z][a-z0-9_-]{0,31}` and be unique among live agents.
 - Employee agent name: `<short>-<role>[-<alias>]`; state file name: `<role>[-<alias>].md`; leader: `leader-<short>`; chore agent: `chore-<role>-<n>`.
 - Task short name: ascii lowercase, ≤12 chars. Task folder: `dkboai/tasks/<yyyy-mm-dd>-<short>/`. Branch: `dk/<short>`. Chore branch: `chore/<name>`.
@@ -43,13 +44,14 @@ dkboai/
 ├── roles/ README.md pm.md frontend.md backend.md qa.md it.md reviewer.md
 ├── templates/ brief.md process.md state.md report.md chore.md task.env
 ├── skills/ init/SKILL.md  add-role/SKILL.md
-├── bin/ dk-whoami dk-task-new dk-leader dk-spawn dk-msg dk-wave-close dk-watch dk-resume dk-chore dk-task-close
+├── bin/ dk-whoami dk-process dk-task-new dk-leader dk-spawn dk-msg dk-wave-close dk-watch dk-resume dk-chore dk-chore-close dk-task-close
 ├── tasks/ INDEX.md BACKLOG.md _chores/.gitkeep
 └── .sessions/.gitkeep
 tests/
 ├── run.sh                     # bootstraps bats-core if missing, runs tests/unit
 ├── helpers.bash               # temp project fixture, PATH with stub, env
 ├── stub/herdr                 # fake herdr: logs calls, returns canned JSON, overridable per test
+├── stub/cli/{claude,codex,agy} # fake AI CLIs so `mcp list` never hits the real tools
 ├── unit/*.bats
 ├── integration/herdr-real.sh  # layer 2: real herdr in named session `dktest`
 ├── smoke/kind-smoke.sh        # layer 3: one real agent per kind
@@ -65,7 +67,7 @@ Responsibilities: `lib/common.sh` owns paths and herdr plumbing; each `bin/dk-*`
 
 **Files:**
 - Create: `dkboai/.sessions/.gitkeep`, `dkboai/tasks/_chores/.gitkeep`, `dkboai/tasks/INDEX.md`, `dkboai/tasks/BACKLOG.md`, `dkboai/decisions.md`
-- Create: `tests/run.sh`, `tests/helpers.bash`, `tests/stub/herdr`, `tests/stub/responses/*.json`, `tests/unit/00_harness.bats`
+- Create: `tests/run.sh`, `tests/helpers.bash`, `tests/stub/herdr`, `tests/stub/responses/*.json`, `tests/stub/cli/{claude,codex,agy}`, `tests/unit/00_harness.bats`
 - Modify: `.gitignore`
 
 **Interfaces:**
@@ -137,6 +139,16 @@ if [ -f "$f" ]; then cat "$f"; else echo "{\"id\":\"cli:$cmd:$sub\",\"result\":{
 
 Note: `__WORKTREE__` and `__PROJECT__` are literal placeholders the helper replaces per fixture (Step 3).
 
+Fake AI CLIs so unit tests never invoke the real `claude`/`codex`/`agy`. One script, three names (`tests/stub/cli/claude`, copied to `codex` and `agy`):
+```bash
+#!/usr/bin/env bash
+# Fake AI CLI: only answers `mcp list`; anything else is a no-op.
+case "${1:-} ${2:-}" in
+  "mcp list") echo "${FAKE_MCP_LIST:-No MCP servers configured.}";;
+esac
+```
+They live in their own directory so the Task 3 PATH test can leave them out.
+
 - [ ] **Step 3: Write `tests/helpers.bash`**
 
 ```bash
@@ -157,7 +169,7 @@ setup_project() {
   WORKTREE_PATH="$PROJECT/.worktrees/login"
   sed -i "s#__WORKTREE__#$WORKTREE_PATH#; s#__PROJECT__#$PROJECT#" "$HERDR_STUB_RESPONSES"/*.json
   export HERDR_STUB_LOG HERDR_STUB_RESPONSES PROJECT WORKTREE_PATH
-  export PATH="$REPO_ROOT/tests/stub:$PROJECT/dkboai/bin:$PATH"
+  export PATH="$REPO_ROOT/tests/stub:$REPO_ROOT/tests/stub/cli:$PROJECT/dkboai/bin:$PATH"
   export HERDR_ENV=1 HERDR_PANE_ID=wB:p1 HERDR_WORKSPACE_ID=wB HERDR_TAB_ID=wB:t1
   export DK_ROOT="$PROJECT/dkboai"
   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
@@ -174,13 +186,13 @@ fixture_task() { # $1=short $2=display
     "$DK_ROOT/templates/brief.md" > "$d/brief.md"
   : > "$d/process.md"; : > "$d/messages.log"; : > "$d/.panes"
   cat > "$d/.task.env" <<E
-DK_SHORT=$1
-DK_DISPLAY=$2
-DK_BRANCH=dk/$1
-DK_WORKTREE=$WORKTREE_PATH
-DK_WORKSPACE=wC
-DK_ROOT_PANE=wC:p1
-DK_WATCH_PID=
+DK_SHORT="$1"
+DK_DISPLAY="$2"
+DK_BRANCH="dk/$1"
+DK_WORKTREE="$WORKTREE_PATH"
+DK_WORKSPACE="wC"
+DK_ROOT_PANE="wC:p1"
+DK_WATCH_PID=""
 E
   mkdir -p "$WORKTREE_PATH"
   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
@@ -197,7 +209,7 @@ cd "$(dirname "$0")/.."
 if [ ! -x tests/lib/bats-core/bin/bats ]; then
   git clone -q --depth 1 https://github.com/bats-core/bats-core tests/lib/bats-core
 fi
-chmod +x tests/stub/herdr dkboai/bin/* 2>/dev/null || true
+chmod +x tests/stub/herdr tests/stub/cli/* dkboai/bin/* 2>/dev/null || true
 exec tests/lib/bats-core/bin/bats "${@:-tests/unit}"
 ```
 
@@ -223,7 +235,7 @@ teardown() { teardown_project; }
 
 - [ ] **Step 6: Run the harness**
 
-Run: `chmod +x tests/run.sh tests/stub/herdr && tests/run.sh`
+Run: `chmod +x tests/run.sh tests/stub/herdr tests/stub/cli/* && tests/run.sh`
 Expected: `2 tests, 0 failures`
 
 - [ ] **Step 7: Commit**
@@ -244,7 +256,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Test: `tests/unit/01_common.bats`
 
 **Interfaces:**
-- Produces (`common.sh`): `DK_ROOT`, `DK_PROJECT_ROOT`; `dk_die MSG` (stderr, exit 1); `dk_now` (`YYYY-MM-DDTHH:MM`); `dk_today`; `dk_slug STR` (herdr-safe ≤32); `dk_require_herdr`; `dk_task_dir` (echo absolute task dir from `DK_TASK_DIR` or `.sessions/$HERDR_PANE_ID`, die if none); `dk_task_env` (source `.task.env`, exports `DK_SHORT DK_DISPLAY DK_BRANCH DK_WORKTREE DK_WORKSPACE DK_ROOT_PANE DK_WATCH_PID`); `dk_process LINE` (append `now LINE` to process.md); `dk_leader_name` (`leader-$DK_SHORT`); `dk_agent_name ROLE [ALIAS]` (`$DK_SHORT-role[-alias]`); `dk_state_name ROLE [ALIAS]` (`role[-alias]`); `dk_json` (`jq -r "$1"` on stdin); `dk_index_add DATE NAME TYPE STATUS NOTE`; `dk_index_set NAME STATUS NOTE`.
+- Produces (`common.sh`): `DK_ROOT`, `DK_PROJECT_ROOT`; `dk_die MSG` (stderr, exit 1); `dk_now` (`YYYY-MM-DDTHH:MM`); `dk_today`; `dk_slug STR` (herdr-safe ≤32); `dk_require_herdr`; `dk_task_dir` (echo absolute task dir from `DK_TASK_DIR` or `.sessions/$HERDR_PANE_ID`, die if none); `dk_task_env` (source `.task.env`, exports `DK_SHORT DK_DISPLAY DK_BRANCH DK_WORKTREE DK_WORKSPACE DK_ROOT_PANE DK_WATCH_PID`); `dk_process LINE` (append `now LINE` to process.md); `dk_leader_name` (`leader-$DK_SHORT`); `dk_agent_name ROLE [ALIAS]` (`$DK_SHORT-role[-alias]`); `dk_state_name ROLE [ALIAS]` (`role[-alias]`); `dk_json` (`jq -r "$1"` on stdin); `dk_render TEMPLATE KEY=VAL...` (token substitution via bash expansion, safe for any characters); `dk_index_add DATE NAME TYPE STATUS NOTE`; `dk_index_set NAME STATUS NOTE`.
 - Produces (`frontmatter.sh`): `dk_fm FILE KEY` (top-level scalar), `dk_fm_tier FILE S|M|L` (value under `tiers:`), `dk_fm_list FILE KEY` (inline `[a, b]` → lines).
 
 - [ ] **Step 1: Write failing tests**
@@ -288,6 +300,12 @@ teardown() { teardown_project; }
   grep -q '| 使用者登入 | task | done | merged abc123 |' "$DK_ROOT/tasks/INDEX.md"
 }
 
+@test "dk_render replaces tokens and tolerates sed metacharacters" {
+  printf '# {{DISPLAY}}\nsrc={{SOURCE}}\n' > "$PROJECT/t.md"
+  out=$(dk_render "$PROJECT/t.md" 'DISPLAY=登入 & 註冊 #1' 'SOURCE=a/b\\c')
+  [ "$out" = "$(printf '# 登入 & 註冊 #1\nsrc=a/b\\c')" ]
+}
+
 @test "frontmatter readers" {
   cat > "$PROJECT/r.md" <<'R'
 ---
@@ -318,8 +336,8 @@ Expected: FAIL (`No such file` for lib/common.sh)
 
 ```bash
 # shellcheck shell=bash
-# Shared helpers for dkboai bin scripts. Source, do not execute.
-set -euo pipefail
+# Shared helpers for dkboai bin scripts. Source, do not execute. No `set` here: bats sources this too.
+export LC_ALL="${LC_ALL:-C.UTF-8}"
 DK_ROOT="${DK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DK_PROJECT_ROOT="${DK_PROJECT_ROOT:-$(dirname "$DK_ROOT")}"
 export DK_ROOT DK_PROJECT_ROOT
@@ -351,6 +369,11 @@ dk_leader_name() { echo "leader-${DK_SHORT:?}"; }
 dk_agent_name() { local n="${DK_SHORT:?}-$1"; [ -n "${2:-}" ] && n="$n-$2"; echo "$n"; }
 dk_state_name() { local n="$1"; [ -n "${2:-}" ] && n="$n-$2"; echo "$n"; }
 
+dk_render() { # TEMPLATE_FILE KEY=VALUE... → stdout with every {{KEY}} replaced; values may contain any character
+  local c kv; c=$(<"$1"); shift
+  for kv in "$@"; do c=${c//"{{${kv%%=*}}}"/${kv#*=}}; done
+  printf '%s\n' "$c"
+}
 dk_index_add() { printf '| %s | %s | %s | %s | %s |\n' "$1" "$2" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
 dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column matches
   local name="$1" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md"
@@ -373,7 +396,7 @@ dk_fm_list() { dk_fm "$1" "$2" | tr -d '[]' | tr ',' '\n' | sed 's/^ *//; s/ *$/
 - [ ] **Step 5: Run tests**
 
 Run: `tests/run.sh tests/unit/01_common.bats`
-Expected: `6 tests, 0 failures`
+Expected: `7 tests, 0 failures`
 
 - [ ] **Step 6: Commit**
 
@@ -605,7 +628,7 @@ teardown() { teardown_project; }
 @test "templates carry substitution tokens" {
   grep -q '{{DISPLAY}}' "$DK_ROOT/templates/brief.md"
   grep -q '{{BRANCH}}' "$DK_ROOT/templates/brief.md"
-  grep -q 'DK_SHORT={{SHORT}}' "$DK_ROOT/templates/task.env"
+  grep -q 'DK_SHORT="{{SHORT}}"' "$DK_ROOT/templates/task.env"
   grep -q '^status:' "$DK_ROOT/templates/state.md"
 }
 ```
@@ -625,7 +648,7 @@ teardown() { teardown_project; }
 
 ## 收到人的請求時分流
 - 是進行中任務的一部分 → 調波次表（記 process.md），不改 brief 的需求與驗收。
-- 獨立、不改程式（翻譯、畫圖、整理） → `dk-chore <角色> "<交代>"`。
+- 獨立、不改程式（翻譯、畫圖、整理） → `dk-chore <角色> "<交代>"`。雜務不屬於任務，對雜務員工回話用 `herdr agent prompt <agent> "..."`（不是 dk-msg）；收到它的 `[DONE]` 後看結果，再 `dk-chore-close <agent>`（`--code` 的會合併回 main）。
 - 獨立、改程式、範圍小 → 先評估：涉及檔案、是否落在在線成員所有權內、嚴重度。給三選一附建議：立刻修（`dk-chore <角色> --code`）/ 併入當前任務 / 延後進 `tasks/BACKLOG.md`。人選後執行；人說「照建議」就直接做。
 - 範圍大 → 建議開新任務，問人。
 - 角色檔不存在 → 先用 add-role skill 建立，再派工。不用通用員工矇混。
@@ -633,12 +656,12 @@ teardown() { teardown_project; }
 ## 開任務
 1. `dk-task-new <short> "<顯示名>" [--from <plan.md>]`。
 2. 寫 `brief.md`：目標 ≤3 行、驗收標準、檔案所有權（成員範圍不得重疊）、共用契約擁有者、波次表（每列標難度 S/M/L）。有 plan 檔時不重寫內容，只對應驗收、劃所有權、把 task 分組成波。
-3. 關卡①：把 brief 給人確認。人點頭後 `dk-process "gate1 approved"`（`dk-task-new --gate1` 會改 INDEX 為 running）。
+3. 關卡①：把 brief 給人確認。人點頭後執行 `dk-task-new <short> --gate1`（記 process、INDEX 改 running）。
 
 ## 跑一波
 1. 對波次表每位成員 `dk-spawn <角色> [別名] [--tier S|M|L] [--kind K] [--isolated]`。
 2. 結束這個 turn，閒置。員工訊息與人的輸入會自己推進來。不輪詢、不主動讀員工終端。
-3. 收到 `[DONE]`：確認 state 檔 `status: done`。收到 `[ESCALATE]`：能依 brief 判定就 `dk-msg <員工> "[DECISION] ..."` 並 `dk-process`；不能就問人（關卡②），得到答案後回 DECISION 並在 `decisions.md` 加一行。收到 `[BLOCKED]`：告知人去按審批。
+3. 收到 `[DONE]`：確認 state 檔 `status: done`。收到 `[ESCALATE]`：能依 brief 判定就 `dk-msg <員工> "[DECISION] ..."` 並 `dk-process "decision: ..."`；不能就問人（關卡②），得到答案後回 DECISION 並在 `decisions.md` 加一行。收到 `[BLOCKED]`：告知人去按審批。
 4. 全員 DONE → `dk-wave-close`。看它的越界與超限警告。然後在 worktree 內 `git add -A && git commit -m "wave N: ..."`。
 5. 處理完一批訊息後 `dk-msg --ack`。
 6. 依結果增刪下一波，記 process。
@@ -660,7 +683,7 @@ teardown() { teardown_project; }
 ```markdown
 # 通訊協定
 
-所有訊息一律用 `dkboai/bin/dk-msg <對象> "[類型] 內文"`。腳本補寄件人、時間，寫進 messages.log，並等對方閒置才送。內文一到三句、≤200 字元，細節寫在你的 state 檔並指路，不貼程式碼。對象可寫 `leader`，腳本會解析成本任務的領導。
+所有訊息一律用 `$DK_ROOT/bin/dk-msg <對象> "[類型] 內文"`（下文簡寫 dk-msg；`DK_ROOT` 是你 pane 的環境變數）。腳本補寄件人、時間，寫進 messages.log，並等對方閒置才送。內文一到三句、≤200 字元，細節寫在你的 state 檔並指路，不貼程式碼。對象可寫 `leader`，腳本會解析成本任務的領導。
 
 ## 類型
 | 類型 | 方向 | 何時 |
@@ -840,24 +863,26 @@ notes:
 ## 重要決策
 ## 給下次的話（≤3 行）
 ```
-`templates/chore.md`:
+`templates/chore.md` (`workspace`/`pane` are machine fields for `dk-chore-close`; `-` when not applicable):
 ```markdown
 交代：{{SOURCE}}
 成員：{{AGENT}} ({{KIND}} / {{TIER}})
 branch: {{BRANCH}}
+workspace: {{WORKSPACE}}
+pane: {{PANE}}
 status: working
 touched:
 結果：
 ```
-`templates/task.env`:
+`templates/task.env` (values quoted: the file is sourced by bash and the display name may contain spaces):
 ```
-DK_SHORT={{SHORT}}
-DK_DISPLAY={{DISPLAY}}
-DK_BRANCH={{BRANCH}}
-DK_WORKTREE={{WORKTREE}}
-DK_WORKSPACE={{WORKSPACE}}
-DK_ROOT_PANE={{ROOT_PANE}}
-DK_WATCH_PID=
+DK_SHORT="{{SHORT}}"
+DK_DISPLAY="{{DISPLAY}}"
+DK_BRANCH="{{BRANCH}}"
+DK_WORKTREE="{{WORKTREE}}"
+DK_WORKSPACE="{{WORKSPACE}}"
+DK_ROOT_PANE="{{ROOT_PANE}}"
+DK_WATCH_PID=""
 ```
 
 - [ ] **Step 8: Run** → `3 tests, 0 failures`
@@ -873,15 +898,16 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Task 5: `dk-task-new`
+### Task 5: `dk-task-new` and `dk-process`
 
 **Files:**
-- Create: `dkboai/bin/dk-task-new`
+- Create: `dkboai/bin/dk-task-new`, `dkboai/bin/dk-process`
 - Test: `tests/unit/05_task_new.bats`
 
 **Interfaces:**
 - Consumes: `lib/common.sh`, templates, stub responses `worktree_create`, `agent_get`, `agent_rename`.
 - Produces: `dk-task-new <short> "<display>" [--from <plan>] [--no-worktree] [--gate1]`. Creates `tasks/<date>-<short>/{brief.md,process.md,messages.log,.task.env,state/}`, worktree via `herdr worktree create --branch dk/<short> --base <current branch> --cwd $DK_PROJECT_ROOT --no-focus` (unless `--no-worktree`), binds `.sessions/$HERDR_PANE_ID`, renames current agent to `leader-<short>` if unnamed, adds INDEX row `planning`, starts `dk-watch` in background (Task 9; here it only records the pid if the binary exists). `--gate1` on an existing task sets INDEX status `running` and appends `gate1 approved` to process. Prints the task dir.
+- `dk-process "<line>"`: the leader's CLI to append one timestamped line to the bound task's `process.md` (decisions, wave-table amendments). Employees never call it.
 
 - [ ] **Step 1: Failing test**
 
@@ -896,7 +922,7 @@ teardown() { teardown_project; }
   d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-login"; [ "$output" = "$d" ]
   [ -f "$d/brief.md" ]; [ -f "$d/process.md" ]; [ -f "$d/messages.log" ]; [ -d "$d/state" ]; [ -f "$d/.panes" ]
   grep -q '^# 使用者登入$' "$d/brief.md"; grep -q 'docs/plan.md' "$d/brief.md"; grep -q 'dk/login' "$d/brief.md"
-  grep -q '^DK_SHORT=login$' "$d/.task.env"; grep -q "^DK_WORKTREE=$WORKTREE_PATH$" "$d/.task.env"; grep -q '^DK_WORKSPACE=wC$' "$d/.task.env"
+  grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q "^DK_WORKTREE=\"$WORKTREE_PATH\"$" "$d/.task.env"; grep -q '^DK_WORKSPACE="wC"$' "$d/.task.env"
   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]
   grep -q '| 使用者登入 | task | planning |' "$DK_ROOT/tasks/INDEX.md"
   grep -q '^worktree create --branch dk/login --base main --cwd .* --no-focus$' "$HERDR_STUB_LOG"
@@ -906,6 +932,8 @@ teardown() { teardown_project; }
 @test "task-new rejects bad short names and duplicates" {
   run dk-task-new Login x; [ "$status" -eq 1 ]
   run dk-task-new averyveryverylongname x; [ "$status" -eq 1 ]
+  run dk-task-new login 'bad "quote'; [ "$status" -eq 1 ]
+  run dk-task-new login "with space & hash #1"; [ "$status" -eq 0 ]; grep -q '^DK_DISPLAY="with space & hash #1"$' "$output/.task.env"
   dk-task-new login x >/dev/null
   run dk-task-new login x; [ "$status" -eq 1 ]
 }
@@ -913,6 +941,10 @@ teardown() { teardown_project; }
   echo '{"result":{"agent":{"name":"leader-login","agent_status":"idle","pane_id":"wB:p1"}}}' > "$HERDR_STUB_RESPONSES/agent_get.json"
   dk-task-new login x >/dev/null
   ! grep -q '^agent rename' "$HERDR_STUB_LOG"
+}
+@test "dk-process appends to the bound task" {
+  dk-task-new login x >/dev/null; dk-process "decision: 用現有 users 表"
+  grep -Eq '^[0-9T:-]+ decision: 用現有 users 表$' "$DK_ROOT/tasks/$(date +%Y-%m-%d)-login/process.md"
 }
 @test "task-new --gate1 flips index to running" {
   dk-task-new login "使用者登入" >/dev/null
@@ -930,6 +962,7 @@ teardown() { teardown_project; }
 #!/usr/bin/env bash
 # dk-task-new <short> "<display>" [--from <plan>] [--no-worktree]
 # dk-task-new <short> --gate1
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dk_require_herdr
 short="${1:-}"; shift || true
@@ -945,6 +978,7 @@ if [ "$gate1" = 1 ]; then
   dk_process "gate1 approved"; dk_index_set "$DK_DISPLAY" running "—"; exit 0
 fi
 [ -n "$display" ] || dk_die "display name required"
+[[ "$display" != *[\"\$\`]* ]] || dk_die "display name must not contain \" \$ or backtick"
 date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"*"-$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
@@ -962,10 +996,10 @@ else
 fi
 
 mkdir -p "$dir/state"; : > "$dir/.panes"   # dk-watch exits when this file disappears (dk-task-close removes it)
-subst() { sed -e "s#{{DISPLAY}}#$display#g; s#{{SHORT}}#$short#g; s#{{BRANCH}}#$branch#g; s#{{WORKTREE}}#$wt_path#g; s#{{SOURCE}}#$from#g; s#{{DATE}}#$(dk_now)#g; s#{{WORKSPACE}}#$ws#g; s#{{ROOT_PANE}}#$root_pane#g"; }
-subst < "$DK_ROOT/templates/brief.md"   > "$dir/brief.md"
-subst < "$DK_ROOT/templates/process.md" > "$dir/process.md"
-subst < "$DK_ROOT/templates/task.env"   > "$dir/.task.env"
+vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=$wt_path" "SOURCE=$from" "DATE=$(dk_now)" "WORKSPACE=$ws" "ROOT_PANE=$root_pane")
+dk_render "$DK_ROOT/templates/brief.md"   "${vars[@]}" > "$dir/brief.md"
+dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"
+dk_render "$DK_ROOT/templates/task.env"   "${vars[@]}" > "$dir/.task.env"
 : > "$dir/messages.log"
 mkdir -p "$DK_ROOT/.sessions"; echo "$name" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
 
@@ -976,17 +1010,27 @@ dk_index_add "$date" "$display" task planning "—"
 if [ -x "$DK_ROOT/bin/dk-watch" ] && [ -z "${DK_NO_WATCH:-}" ]; then
   # close fd 3 and stdin so bats/herdr never wait on the detached watcher
   DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" </dev/null >/dev/null 2>&1 3>&- &
-  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=$!/" "$dir/.task.env"
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$!\"/" "$dir/.task.env"
 fi
 echo "$dir"
 ```
 
-- [ ] **Step 4: Run** → `4 tests, 0 failures`
+`dkboai/bin/dk-process`:
+```bash
+#!/usr/bin/env bash
+# dk-process "<line>" — leader appends one event line to process.md
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+[ $# -gt 0 ] || dk_die "usage: dk-process \"<line>\""
+dk_process "$*"
+```
+
+- [ ] **Step 4: Run** → `6 tests, 0 failures`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add dkboai/bin/dk-task-new tests/unit/05_task_new.bats
+git add dkboai/bin/dk-task-new dkboai/bin/dk-process tests/unit/05_task_new.bats
 git commit -m "feat: dk-task-new creates task folder, worktree and leader binding
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
@@ -1050,6 +1094,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-msg <target|leader> "[TYPE] body"   |   dk-msg --ack
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
@@ -1140,6 +1185,10 @@ teardown() { teardown_project; }
   run dk-spawn designer; [ "$status" -eq 1 ]
   run dk-spawn reviewer --tier S; [ "$status" -eq 1 ]
 }
+@test "worktree:false role splits beside the leader in the main tree" {
+  run dk-spawn pm; [ "$status" -eq 0 ]
+  grep -q -- "^pane split --pane wB:p1 --direction right --cwd $PROJECT --no-focus" "$HERDR_STUB_LOG"
+}
 ```
 
 - [ ] **Step 2: Run** → FAIL
@@ -1159,6 +1208,7 @@ dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME
 ```bash
 #!/usr/bin/env bash
 # dk-spawn <role> [alias] [--tier S|M|L] [--kind K] [--isolated] [--resume]
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"
 dk_require_herdr
@@ -1176,8 +1226,10 @@ if [ "$kind" != "$(dk_fm "$rf" kind)" ]; then dk_kind_load "$kind"; spec=$(echo 
 args=$(dk_kind_args "$kind" "$spec")
 direction=$(dk_fm "$rf" split); direction="${direction:-right}"
 agent=$(dk_agent_name "$role" "$alias"); state="$dir/state/$(dk_state_name "$role" "$alias").md"
+from_pane="$DK_ROOT_PANE"; cwd="$DK_WORKTREE"
+if [ "$(dk_fm "$rf" worktree)" = false ]; then from_pane="${HERDR_PANE_ID:?}"; cwd="$DK_PROJECT_ROOT"; fi   # e.g. pm works in the main tree beside the leader
 
-pane=$(herdr pane split --pane "$DK_ROOT_PANE" --direction "$direction" --cwd "$DK_WORKTREE" --no-focus \
+pane=$(herdr pane split --pane "$from_pane" --direction "$direction" --cwd "$cwd" --no-focus \
   --env "DK_ROOT=$DK_ROOT" --env "DK_TASK_DIR=$dir" --env "DK_ROLE=$role" --env "DK_AGENT=$agent" \
   --env "DK_LEADER=$(dk_leader_name)" --env "DK_ISOLATED=$isolated" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
@@ -1194,7 +1246,7 @@ dk_process "spawn $agent ($kind $tier)$notes"
 echo "$agent $pane"
 ```
 
-- [ ] **Step 5: Run** → `4 tests, 0 failures`
+- [ ] **Step 5: Run** → `5 tests, 0 failures`
 
 - [ ] **Step 6: Commit**
 
@@ -1282,6 +1334,7 @@ dk_touched() { awk '/^touched:/{t=1;next} t && /^  - /{sub(/^  - /,""); print; n
 ```bash
 #!/usr/bin/env bash
 # dk-wave-close [--force]
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
@@ -1303,7 +1356,7 @@ while read -r agent pane; do
       dk_owned "$dir/brief.md" "$sname" "$p" || { echo "dk-wave-close: violation $agent touched $p"; dk_process "violation $agent: $p"; }
     done < <(dk_touched "$sf")
   fi
-  herdr pane close "$pane" >/dev/null && n=$((n+1))
+  herdr pane close "$pane" >/dev/null </dev/null && n=$((n+1))
 done < "$dir/.panes"
 : > "$dir/.panes"
 dk_process "wave-close: $n agents closed"
@@ -1368,6 +1421,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-watch [--once] [--interval SEC]  — background blocked-agent detector for one task.
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
 once=0; interval=30
@@ -1384,8 +1438,8 @@ tick() {
       if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
       since=$(head -1 "$m"); [ "$(wc -l < "$m")" -ge 2 ] && continue   # already notified
       if [ $((now - since)) -ge "$thr" ]; then
-        herdr notification show "dkboai: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 || true
-        herdr agent prompt "$(dk_leader_name)" "[BLOCKED] from dk-watch: $agent 卡在審批" >/dev/null 2>&1 || true
+        herdr notification show "dkboai: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 </dev/null || true
+        herdr agent prompt "$(dk_leader_name)" "[BLOCKED] from dk-watch: $agent 卡在審批" >/dev/null 2>&1 </dev/null || true
         dk_process "blocked $agent"; echo notified >> "$m"
       fi
     else rm -f "$m"; fi
@@ -1471,6 +1525,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-resume [<task-folder|short>] — print a ≤150-line recovery pack for the leader.
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 if [ -n "${1:-}" ]; then
   t="$1"; [ -d "$DK_ROOT/tasks/$t" ] || t=$(ls -d "$DK_ROOT/tasks/"*"-$1" 2>/dev/null | xargs -n1 basename | tail -1)
@@ -1509,15 +1564,15 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-### Task 11: `dk-chore`
+### Task 11: `dk-chore` and `dk-chore-close`
 
 **Files:**
-- Create: `dkboai/bin/dk-chore`
+- Create: `dkboai/bin/dk-chore`, `dkboai/bin/dk-chore-close`
 - Test: `tests/unit/11_chore.bats`
 
 **Interfaces:**
 - Consumes: role file, `dk_kind_args`, `dk_first_prompt`-like bootstrap (own text), stub `pane_split`, `agent_start`, `agent_prompt`, `worktree_create`.
-- Produces: `dk-chore <role> "<instruction>" [--kind K] [--tier S|M|L] [--code] [--cwd PATH]`. Agent name `chore-<role>-<n>` where n = count of existing `tasks/_chores/*` + 1. Chore file `tasks/_chores/<date>-<slug>.md` from `templates/chore.md` (slug = `dk_slug` of first 24 chars of instruction). Without `--code`: split from current pane (`--current`), cwd = `--cwd` or `$DK_PROJECT_ROOT`, `DK_CHORE_CODE=0`. With `--code`: `herdr worktree create --branch chore/<slug> --base <head> --cwd $DK_PROJECT_ROOT --no-focus`, split from its root pane, cwd = worktree path, branch recorded in chore file. Env injected: `DK_ROOT`, `DK_ROLE`, `DK_AGENT`, `DK_CHORE_FILE`, `DK_LEADER` (current agent name, or `leader` unresolved → uses `herdr agent get $HERDR_PANE_ID` name, else `HERDR_PANE_ID`), `DK_CHORE_CODE`. First prompt: read role, PROJECT.md, PROTOCOL.md; instruction; write status/touched/結果 to chore file; `dk-msg` not usable without a task, so chores report with `herdr agent prompt "$DK_LEADER" "[DONE] from <agent>: ..."` (prompt says so). INDEX row `chore working`; leader flips it manually via `dk_index_set` when done (documented in LEADER.md).
+- Produces: `dk-chore <role> "<instruction>" [--kind K] [--tier S|M|L] [--code] [--cwd PATH]`. Agent name `chore-<role>-<n>` where n = count of existing `tasks/_chores/*` + 1. Chore file `tasks/_chores/<date>-<slug>.md` from `templates/chore.md` (slug = `dk_slug` of first 24 chars of instruction). Without `--code`: split from current pane (`--current`), cwd = `--cwd` or `$DK_PROJECT_ROOT`, `DK_CHORE_CODE=0`. With `--code`: `herdr worktree create --branch chore/<slug> --base <head> --cwd $DK_PROJECT_ROOT --no-focus`, split from its root pane, cwd = worktree path, branch recorded in chore file. Env injected: `DK_ROOT`, `DK_ROLE`, `DK_AGENT`, `DK_CHORE_FILE`, `DK_LEADER` (current agent name, or `leader` unresolved → uses `herdr agent get $HERDR_PANE_ID` name, else `HERDR_PANE_ID`), `DK_CHORE_CODE`. First prompt: read role, PROJECT.md, PROTOCOL.md; instruction; write status/touched/結果 to chore file; `dk-msg` not usable without a task, so chores report with `herdr agent prompt "$DK_LEADER" "[DONE] from <agent>: ..."` (prompt says so). INDEX row `chore working`. `dk-chore-close <agent> [--abandon]` finishes it: finds the chore file by its `成員：` line, requires `status: done` (unless `--abandon`), closes the recorded pane, and when `branch` is not `-` merges it into the current branch of the main tree (`--no-ff`, exit 3 and `merge --abort` on conflict), removes the worktree workspace and (on abandon) deletes the branch; writes `結果：merged <sha>` and sets INDEX to `done`/`abandoned`.
 
 - [ ] **Step 1: Failing test**
 
@@ -1543,7 +1598,7 @@ teardown() { teardown_project; }
   [ "$status" -eq 0 ]
   grep -q '^worktree create --branch chore/.* --base main --cwd .* --no-focus$' "$HERDR_STUB_LOG"
   grep -q '^agent start chore-frontend-2 ' "$HERDR_STUB_LOG"
-  f=$(ls -t "$DK_ROOT/tasks/_chores/"*.md | head -1); grep -q '^branch: chore/' "$f"
+  f=$(grep -l 'chore-frontend-2' "$DK_ROOT/tasks/_chores/"*.md); grep -q '^branch: chore/' "$f"; grep -q '^workspace: wC$' "$f"; grep -q '^pane: wC:p2$' "$f"
 }
 ```
 
@@ -1554,6 +1609,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-chore <role> "<instruction>" [--kind K] [--tier S|M|L] [--code] [--cwd PATH]
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/kinds.sh"
 dk_require_herdr
@@ -1571,19 +1627,22 @@ args=$(dk_kind_args "$kind" "$spec")
 n=$(( $(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null | wc -l) + 1 ))
 agent="chore-$role-$n"; slug=$(dk_slug "${instr:0:24}"); slug="${slug:-chore$n}"
 cf="$DK_ROOT/tasks/_chores/$(dk_today)-$slug.md"; [ ! -e "$cf" ] || cf="${cf%.md}-$n.md"
-branch="-"; split_from=(--current)
+branch="-"; ws="-"; split_from=(--current)
 if [ "$code" = 1 ]; then
   branch="chore/$slug"; base=$(git -C "$DK_PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
   out=$(herdr worktree create --branch "$branch" --base "$base" --cwd "$DK_PROJECT_ROOT" --no-focus)
   cwd=$(echo "$out" | dk_json '.result.path // empty'); root=$(echo "$out" | dk_json '.result.root_pane.pane_id')
+  ws=$(echo "$out" | dk_json '.result.workspace.workspace_id')
   [ -n "$cwd" ] || cwd=$(git -C "$DK_PROJECT_ROOT" worktree list --porcelain | awk -v b="refs/heads/$branch" '$1=="worktree"{p=$2} $1=="branch"&&$2==b{print p}')
   split_from=(--pane "$root")
 fi
-sed -e "s#{{SOURCE}}#$instr#; s#{{AGENT}}#$agent#; s#{{KIND}}#$kind#; s#{{TIER}}#$tier#; s#{{BRANCH}}#$branch#" "$DK_ROOT/templates/chore.md" > "$cf"
+direction=$(dk_fm "$rf" split); direction="${direction:-right}"
 leader=$(herdr agent get "${HERDR_PANE_ID:?}" 2>/dev/null | dk_json '.result.agent.name // empty' || true); leader="${leader:-$HERDR_PANE_ID}"
-pane=$(herdr pane split "${split_from[@]}" --direction "$(dk_fm "$rf" split)" --cwd "$cwd" --no-focus \
+pane=$(herdr pane split "${split_from[@]}" --direction "$direction" --cwd "$cwd" --no-focus \
   --env "DK_ROOT=$DK_ROOT" --env "DK_ROLE=$role" --env "DK_AGENT=$agent" --env "DK_CHORE_FILE=$cf" \
   --env "DK_LEADER=$leader" --env "DK_CHORE_CODE=$code" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
+[ -n "$pane" ] || dk_die "pane split returned no pane_id"
+dk_render "$DK_ROOT/templates/chore.md" "SOURCE=$instr" "AGENT=$agent" "KIND=$kind" "TIER=$tier" "BRANCH=$branch" "WORKSPACE=$ws" "PANE=$pane" > "$cf"
 # shellcheck disable=SC2086
 herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null
 prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/roles/$role.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md。交代：$instr。進度與結果寫在 $cf（status、touched、結果）。禁止使用 subagent。"
@@ -1596,11 +1655,68 @@ echo "$agent $pane $cf"
 
 - [ ] **Step 4: Run** → `2 tests, 0 failures`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Failing tests for `dk-chore-close`** (append to `tests/unit/11_chore.bats`)
 
 ```bash
-git add dkboai/bin/dk-chore tests/unit/11_chore.bats
-git commit -m "feat: dk-chore lightweight one-agent errands, optional code worktree
+@test "chore-close without code: closes pane, marks index done" {
+  dk-chore frontend "翻譯 README" >/dev/null
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/; s#^結果：$#結果：docs/README.en.md#' "$f"
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
+  grep -q '| 翻譯 README | chore | done | docs/README.en.md |' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "chore-close --code: merges branch, removes worktree" {
+  git -C "$PROJECT" branch chore/fix; git -C "$PROJECT" checkout -q chore/fix; echo x > "$PROJECT/x.txt"
+  git -C "$PROJECT" add x.txt; git -C "$PROJECT" commit -q -m fix; git -C "$PROJECT" checkout -q main
+  dk-chore frontend "fix" --code >/dev/null
+  f=$(grep -l 'chore-frontend-1' "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/' "$f"
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+  [ -f "$PROJECT/x.txt" ]; grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
+  grep -Eq '\| fix \| chore \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "chore-close refuses when not done; --abandon skips merge and deletes branch" {
+  dk-chore frontend "fix" --code >/dev/null; git -C "$PROJECT" branch chore/fix
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]
+  run dk-chore-close chore-frontend-1 --abandon; [ "$status" -eq 0 ]
+  ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
+}
+```
+
+- [ ] **Step 6: Implement `dkboai/bin/dk-chore-close`**
+
+```bash
+#!/usr/bin/env bash
+# dk-chore-close <agent> [--abandon] — finish a chore: close pane, merge chore branch (if --code), update INDEX.
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+dk_require_herdr
+agent="${1:-}"; [ -n "$agent" ] || dk_die "usage: dk-chore-close <agent> [--abandon]"
+abandon=0; [ "${2:-}" = --abandon ] && abandon=1
+cf=$(grep -l "^成員：$agent " "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null | head -1); [ -n "$cf" ] || dk_die "no chore file for $agent"
+field() { sed -n "s/^$1: *//p" "$cf" | head -1; }
+instr=$(sed -n 's/^交代：//p' "$cf" | head -1); branch=$(field branch); ws=$(field workspace); pane=$(field pane); result=$(sed -n 's/^結果：//p' "$cf" | head -1)
+if [ "$abandon" = 0 ] && ! grep -q '^status: done' "$cf"; then echo "dk-chore-close: $agent is not done (status in $cf)"; exit 1; fi
+herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+if [ "$branch" != "-" ]; then
+  if [ "$abandon" = 0 ]; then
+    git -C "$DK_PROJECT_ROOT" merge --no-ff "$branch" -m "chore: $instr" >/dev/null 2>&1 || { git -C "$DK_PROJECT_ROOT" merge --abort 2>/dev/null || true; echo "dk-chore-close: merge conflict on $branch; ask the human"; exit 3; }
+    result="merged $(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD)"
+  fi
+  [ "$ws" != "-" ] && herdr worktree remove --workspace "$ws" --force >/dev/null 2>&1 </dev/null || true
+  [ "$abandon" = 1 ] && git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+fi
+if [ "$abandon" = 1 ]; then sed -i 's/^status: .*/status: abandoned/' "$cf"; dk_index_set "$instr" abandoned "—"
+else sed -i "s#^結果：.*#結果：$result#" "$cf"; dk_index_set "$instr" done "${result:-—}"; fi
+echo "${result:-closed}"
+```
+
+- [ ] **Step 7: Run** → `5 tests, 0 failures`
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add dkboai/bin/dk-chore dkboai/bin/dk-chore-close tests/unit/11_chore.bats
+git commit -m "feat: dk-chore and dk-chore-close for one-agent errands, optional code worktree
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
@@ -1669,6 +1785,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-task-close [--abandon "<reason>"]
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
@@ -1687,6 +1804,10 @@ if [ "$abandon" = 1 ]; then
   printf '# %s 結案\n結果：abandoned   分支：%s\n## 原因\n%s\n' "$DK_DISPLAY" "$DK_BRANCH" "$reason" > "$dir/report.md"
   cleanup; git -C "$DK_PROJECT_ROOT" branch -D "$DK_BRANCH" >/dev/null 2>&1 || true
   dk_index_set "$DK_DISPLAY" abandoned "$reason"; dk_process "task-close abandoned: $reason"; echo abandoned; exit 0
+fi
+if [ "$DK_WORKTREE" = "$DK_PROJECT_ROOT" ]; then   # --no-worktree task: work already on the current branch, nothing to merge
+  sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD); cleanup
+  dk_index_set "$DK_DISPLAY" done "in-tree $sha"; dk_process "task-close in-tree $sha"; echo "closed $sha"; exit 0
 fi
 if ! git -C "$DK_PROJECT_ROOT" merge --no-ff "$DK_BRANCH" -m "task $DK_SHORT: $DK_DISPLAY" >/dev/null 2>&1; then
   git -C "$DK_PROJECT_ROOT" merge --abort 2>/dev/null || true
@@ -1743,6 +1864,7 @@ teardown() { teardown_project; }
 ```bash
 #!/usr/bin/env bash
 # dk-leader <short> "<display>" [--kind claude] [--model M] [--effort E]  — open a second leader pane.
+set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dk_require_herdr
 short="${1:-}"; display="${2:-}"; shift 2 || true
@@ -2199,8 +2321,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 | 2 目錄結構、目標專案側 | 0, 4, 14 |
 | 3 角色、tiers、LEADER.md、命名 | 1, 4, 7 |
 | 4 通訊協定、dk-msg、dk-spawn 首段提示、dk-watch | 4, 6, 7, 9 |
-| 5 生命週期：task-new、gate1、wave-close、resume、task-close、dk-leader、故障 | 5, 8, 10, 12, 13 |
-| 6 雜務 dk-chore（含 --code） | 11 |
+| 5 生命週期：task-new、gate1、dk-process、wave-close、resume、task-close、dk-leader、故障 | 5, 8, 10, 12, 13 |
+| 6 雜務 dk-chore / dk-chore-close（含 --code 合併） | 11 |
 | 7 記憶格式（templates、INDEX、BACKLOG、decisions、.sessions） | 0, 4, 5 |
 | 8 kinds 對應表 | 3, 16 |
 | 9 skills init / add-role | 14 |
