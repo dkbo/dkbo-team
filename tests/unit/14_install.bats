@@ -34,3 +34,16 @@ teardown() { teardown_project; }
     grep -q "^name: dkboai-$s$" ".dkboai/skills/$s/SKILL.md"; grep -q '^description: ' ".dkboai/skills/$s/SKILL.md"
   done
 }
+@test "install appends cleanly to files without a trailing newline" {
+  printf 'node_modules' > .gitignore; printf '# my project' > CLAUDE.md; printf '# rules' > AGENTS.md
+  .dkboai/install.sh >/dev/null
+  grep -qx 'node_modules' .gitignore; grep -qx '.dkboai/.sessions/\*' .gitignore
+  grep -qx '# my project' CLAUDE.md; grep -qx '@AGENTS.md' CLAUDE.md
+  grep -qx '# rules' AGENTS.md; grep -q '^讀 .dkboai/ENTRY.md' AGENTS.md
+}
+@test "install leaves a pre-existing real directory alone" {
+  mkdir -p .claude/skills/dkboai-init; touch .claude/skills/dkboai-init/keep
+  run .dkboai/install.sh; [ "$status" -eq 0 ]; [[ "$output" == *"not a symlink"* ]]
+  [ ! -L .claude/skills/dkboai-init ]; [ -f .claude/skills/dkboai-init/keep ]; [ ! -e .claude/skills/dkboai-init/init ]
+  [ "$(readlink .agents/skills/dkboai-init)" = "../../.dkboai/skills/init" ]
+}

@@ -4,17 +4,29 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$(dirname "$here")"; [ "${1:-}" = --target ] && target="$(cd "$2" && pwd)"
 cd "$target"
+append_line() { # FILE LINE — append LINE, first making sure FILE ends with a newline
+  [ ! -s "$1" ] || [ -z "$(tail -c1 "$1")" ] || echo >> "$1"
+  echo "$2" >> "$1"
+}
 for s in init add-role; do
   for d in .claude/skills .agents/skills; do
-    mkdir -p "$d"; ln -sfn "../../.dkboai/skills/$s" "$d/dkboai-$s"
+    mkdir -p "$d"
+    if [ -e "$d/dkboai-$s" ] && [ ! -L "$d/dkboai-$s" ]; then
+      echo "install.sh: $d/dkboai-$s exists and is not a symlink; left untouched" >&2
+    else
+      ln -sfn "../../.dkboai/skills/$s" "$d/dkboai-$s"
+    fi
   done
 done
-grep -qs '^讀 .dkboai/ENTRY.md' AGENTS.md || echo '讀 .dkboai/ENTRY.md 並依其行事。' >> AGENTS.md
+grep -qs '^讀 .dkboai/ENTRY.md' AGENTS.md || append_line AGENTS.md '讀 .dkboai/ENTRY.md 並依其行事。'
 if [ -L CLAUDE.md ] && [ "$(readlink CLAUDE.md)" = AGENTS.md ]; then
   echo "CLAUDE.md is a symlink to AGENTS.md; nothing to add"
 else
-  grep -qs '^@AGENTS.md$' CLAUDE.md || echo '@AGENTS.md' >> CLAUDE.md
+  grep -qs '^@AGENTS.md$' CLAUDE.md || append_line CLAUDE.md '@AGENTS.md'
 fi
-grep -qs '.dkboai/.sessions' .gitignore || printf '.dkboai/.sessions/*\n!.dkboai/.sessions/.gitkeep\n' >> .gitignore
+if ! grep -qs '.dkboai/.sessions' .gitignore; then
+  append_line .gitignore '.dkboai/.sessions/*'
+  append_line .gitignore '!.dkboai/.sessions/.gitkeep'
+fi
 chmod +x .dkboai/bin/* .dkboai/install.sh
 echo "dkboai installed into $target"
