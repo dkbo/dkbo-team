@@ -6,6 +6,7 @@ ok(){ echo "OK   $*"; }; fail(){ echo "FAIL $*"; rc=1; }; rc=0
 tmp=$(mktemp -d); git -C "$tmp" init -q; git -C "$tmp" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 H="herdr --session dktest"
 ws=$($H workspace create --cwd "$tmp" --no-focus 2>&1) || { echo "$ws"; fail "workspace create"; exit 1; }
+ws0=$(echo "$ws" | jq -r '.result.workspace.workspace_id')
 root=$(echo "$ws" | jq -r '.result.root_pane.pane_id'); [ -n "$root" ] && ok "workspace create root_pane=$root" || fail "workspace create shape: $ws"
 sp=$($H pane split --pane "$root" --direction right --cwd "$tmp" --no-focus --env DK_TEST=42 2>&1)
 p=$(echo "$sp" | jq -r '.result.pane.pane_id // empty'); [ -n "$p" ] && ok "pane split pane_id=$p" || fail "pane split shape: $sp"
@@ -20,7 +21,8 @@ echo "$wt" | jq -e '.result.workspace.workspace_id and .result.root_pane.pane_id
 echo "$wt" | jq -e '.result.path' >/dev/null 2>&1 && ok "worktree create has .result.path" || echo "NOTE worktree create has no .result.path; dk-task-new falls back to git worktree list"
 $H notification show "dkboai layer2" --body ok >/dev/null 2>&1 && ok "notification show" || fail "notification show"
 $H pane close "$p" >/dev/null 2>&1 && ok "pane close" || fail "pane close"
-wsid=$(echo "$wt" | jq -r '.result.workspace.workspace_id // empty'); [ -n "$wsid" ] && $H worktree remove --workspace "$wsid" --force >/dev/null 2>&1
-$H workspace close "$(echo "$ws" | jq -r '.result.workspace.workspace_id')" >/dev/null 2>&1
+wsid=$(echo "$wt" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null); [ -n "$wsid" ] && $H worktree remove --workspace "$wsid" --force >/dev/null 2>&1
+[ -n "$wsid" ] && [ "$wsid" != "$ws0" ] && $H workspace close "$wsid" >/dev/null 2>&1
+$H workspace close "$ws0" >/dev/null 2>&1
 echo "raw responses saved to $tmp/*.json for stub updates"; printf '%s' "$sp" > "$tmp/pane_split.json"; printf '%s' "$wt" > "$tmp/worktree_create.json"
 exit $rc
