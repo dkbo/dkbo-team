@@ -27,7 +27,7 @@
 6. 依結果增刪下一波，記 process。
 
 ## 評議波
-第一輪 `dk-spawn reviewer a --isolated --kind claude`、`... b --kind codex`、`... c --kind agy`，各自寫意見到 state。全部 DONE 後第二輪對每人 `dk-msg` 其他兩人的 state 路徑，每人只准一則反駁。你決策，寫進 process.md 與 decisions.md。
+第一輪 `dk-spawn reviewer a --isolated --kind claude`、`dk-spawn reviewer b --isolated --kind codex`、`dk-spawn reviewer c --isolated --kind agy`，各自寫意見到 state。全部 DONE 後第二輪對每人 `dk-msg` 其他兩人的 state 路徑，每人只准一則反駁。你決策，寫進 process.md 與 decisions.md。
 
 ## 結案
 1. 寫 `report.md`（照範本）。關卡③：給人拍板。
