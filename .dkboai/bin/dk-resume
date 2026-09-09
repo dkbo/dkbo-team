@@ -14,7 +14,7 @@ render() { # $1=process lines $2=state lines
   echo "## brief"; cat "$dir/brief.md"
   echo "## process（最後 $1 行）"; tail -n "$1" "$dir/process.md"
   echo "## 未處理訊息（最後一則 ACK 之後，寄給 leader）"
-  awk -v me="$(dk_leader_name)" '/\[ACK\]$/{buf=""; next} index($0, "-> " me " ")>0 {buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/messages.log"
+  awk -v me="$(dk_leader_name)" '$2==me && $3=="[ACK]" {buf=""; next} index($0, "-> " me " ")>0 {buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/messages.log"
   echo "## state 摘要（每檔前 $2 行）"
   for f in "$dir"/state/*.md; do [ -f "$f" ] || continue; n=$(basename "$f" .md); head -n "$2" "$f" | sed "s/^/$n: /"; done
   echo "## 在線員工"

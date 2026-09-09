@@ -28,3 +28,16 @@ teardown() { teardown_project; }
   run dk-resume login; [ "$status" -eq 0 ]
   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]
 }
+@test "employee ACK does not cut the leader's unprocessed messages" {
+  printf '2026-09-10T10:04 login-frontend [ACK]\n' >> "$d/messages.log"
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"[ESCALATE] 修一次未好"* ]]
+}
+@test "resume trims state and process to stay under 150 lines" {
+  for a in a b c d e f g h i j k l m n o p q r s t; do
+    for i in $(seq 1 8); do echo "line $i" >> "$d/state/dev-$a.md"; done
+  done
+  run dk-resume; [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -le 150 ]
+  [[ "$output" == *"dev-a: line 3"* ]]; [[ "$output" != *"dev-a: line 4"* ]]
+}
