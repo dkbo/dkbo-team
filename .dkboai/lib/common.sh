@@ -8,6 +8,7 @@ export DK_ROOT DK_PROJECT_ROOT
 dk_die() { echo "dk: $*" >&2; exit 1; }
 dk_now() { date +%Y-%m-%dT%H:%M; }
 dk_today() { date +%Y-%m-%d; }
+# May return empty when the input has no a-z characters; callers must supply a fallback name.
 dk_slug() {
   local s
   s=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^[^a-z]+//; s/-{2,}/-/g; s/-$//')
@@ -23,11 +24,11 @@ dk_task_dir() {
   echo "$DK_ROOT/tasks/$(cat "$f")"
 }
 dk_task_env() {
-  local d; d=$(dk_task_dir)
+  local d; d=$(dk_task_dir) || return 1
   # shellcheck disable=SC1091
   set -a; . "$d/.task.env"; set +a
 }
-dk_process() { echo "$(dk_now) $*" >> "$(dk_task_dir)/process.md"; }
+dk_process() { local d; d=$(dk_task_dir) || return 1; echo "$(dk_now) $*" >> "$d/process.md"; }
 dk_leader_name() { echo "leader-${DK_SHORT:?}"; }
 dk_agent_name() { local n="${DK_SHORT:?}-$1"; [ -n "${2:-}" ] && n="$n-$2"; echo "$n"; }
 dk_state_name() { local n="$1"; [ -n "${2:-}" ] && n="$n-$2"; echo "$n"; }

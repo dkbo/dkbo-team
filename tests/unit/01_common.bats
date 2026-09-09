@@ -13,6 +13,11 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
 }
 
+@test "dk_process and dk_task_env fail cleanly when unbound" {
+  run dk_process "x"; [ "$status" -ne 0 ]; [[ "$output" == *"no task bound"* ]]; [ ! -e /process.md ]
+  run dk_task_env;   [ "$status" -ne 0 ]; [[ "$output" == *"no task bound"* ]]
+}
+
 @test "dk_task_dir resolves .sessions binding and env" {
   d=$(fixture_task login 使用者登入)
   [ "$(dk_task_dir)" = "$d" ]
