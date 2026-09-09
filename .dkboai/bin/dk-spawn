@@ -18,15 +18,29 @@ if [ "$kind" != "$(dk_fm "$rf" kind)" ]; then dk_kind_load "$kind"; spec=$(echo 
 args=$(dk_kind_args "$kind" "$spec")
 direction=$(dk_fm "$rf" split); direction="${direction:-right}"
 agent=$(dk_agent_name "$role" "$alias"); state="$dir/state/$(dk_state_name "$role" "$alias").md"
+[[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || dk_die "agent name '$agent' must match [a-z][a-z0-9_-]{0,31} (shorten the alias)"
 from_pane="$DK_ROOT_PANE"; cwd="$DK_WORKTREE"
 if [ "$(dk_fm "$rf" worktree)" = false ]; then from_pane="${HERDR_PANE_ID:?}"; cwd="$DK_PROJECT_ROOT"; fi   # e.g. pm works in the main tree beside the leader
+
+if [ "$resume" = 1 ]; then
+  old=$(awk -v a="$agent" '$1==a{print $2}' "$dir/.panes" | tail -1 || true)
+  if [ -n "$old" ]; then
+    herdr pane close "$old" >/dev/null 2>&1 </dev/null || true
+    grep -v "^$agent " "$dir/.panes" > "$dir/.panes.tmp" || true
+    mv "$dir/.panes.tmp" "$dir/.panes"
+    dk_process "resume $agent: closed old pane $old"
+  fi
+fi
 
 pane=$(herdr pane split --pane "$from_pane" --direction "$direction" --cwd "$cwd" --no-focus \
   --env "DK_ROOT=$DK_ROOT" --env "DK_TASK_DIR=$dir" --env "DK_ROLE=$role" --env "DK_AGENT=$agent" \
   --env "DK_LEADER=$(dk_leader_name)" --env "DK_ISOLATED=$isolated" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
 # shellcheck disable=SC2086
-herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null
+if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
+  herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+  dk_die "agent start failed for $agent (pane $pane closed)"
+fi
 echo "$agent $pane" >> "$dir/.panes"
 
 dk_kind_load "$kind"; have=$(kind_mcp_list || true); missing=""

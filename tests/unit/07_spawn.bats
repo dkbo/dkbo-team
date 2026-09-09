@@ -43,3 +43,22 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
   grep -q '^login-qa wC:p2$' "$d/.panes"; grep -q 'spawn login-qa (claude M) prompt-failed' "$d/process.md"
 }
+@test "spawn validates agent name before touching herdr" {
+  run dk-spawn frontend 'Big Cart!'
+  [ "$status" -eq 1 ]
+  ! grep -q '^pane split' "$HERDR_STUB_LOG"
+}
+@test "spawn closes the pane and dies when agent start fails" {
+  HERDR_STUB_FAIL="agent start" run dk-spawn qa
+  [ "$status" -eq 1 ]
+  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+  ! grep -q '^login-qa ' "$d/.panes"
+}
+@test "spawn --resume closes and dedupes the old pane entry" {
+  echo "login-qa wC:p9" >> "$d/.panes"
+  run dk-spawn qa --resume
+  [ "$status" -eq 0 ]
+  grep -q '^pane close wC:p9$' "$HERDR_STUB_LOG"
+  [ "$(grep -c '^login-qa ' "$d/.panes")" -eq 1 ]
+  grep -q '^login-qa wC:p2$' "$d/.panes"
+}

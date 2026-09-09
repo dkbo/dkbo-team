@@ -17,6 +17,7 @@ if [ "$kind" != "$(dk_fm "$rf" kind)" ]; then dk_kind_load "$kind"; spec=$(echo 
 args=$(dk_kind_args "$kind" "$spec")
 n=$(( $(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null | wc -l || true) + 1 ))
 agent="chore-$role-$n"; slug=$(dk_slug "${instr:0:24}"); slug="${slug:-chore$n}"
+[[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || dk_die "agent name '$agent' must match [a-z][a-z0-9_-]{0,31} (shorten the role)"
 cf="$DK_ROOT/tasks/_chores/$(dk_today)-$slug.md"; [ ! -e "$cf" ] || cf="${cf%.md}-$n.md"
 branch="-"; ws="-"; split_from=(--current)
 if [ "$code" = 1 ]; then
@@ -35,7 +36,11 @@ pane=$(herdr pane split "${split_from[@]}" --direction "$direction" --cwd "$cwd"
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
 dk_render "$DK_ROOT/templates/chore.md" "SOURCE=$instr" "AGENT=$agent" "KIND=$kind" "TIER=$tier" "BRANCH=$branch" "WORKSPACE=$ws" "PANE=$pane" > "$cf"
 # shellcheck disable=SC2086
-herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null
+if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
+  herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+  rm -f "$cf"
+  dk_die "agent start failed for $agent (pane $pane closed)"
+fi
 prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/roles/$role.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md。交代：$instr。進度與結果寫在 $cf（status、touched、結果）。禁止使用 subagent。"
 [ "$code" = 1 ] && prompt="$prompt 你在分支 $branch 的 worktree 中，完成後自己跑測試並 commit。範圍比想的大就停下回報。" || prompt="$prompt 不得修改程式碼。"
 prompt="$prompt 完成後執行：herdr agent prompt $leader \"[DONE] from $agent: <一句結果>\"。"

@@ -50,3 +50,23 @@ teardown() { teardown_project; }
   grep -q '| 翻譯 a／b 文件 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
   [ "$(grep -c '翻譯 a' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
 }
+@test "chore closes the pane and removes the chore file when agent start fails" {
+  HERDR_STUB_FAIL="agent start" run dk-chore frontend "x"
+  [ "$status" -eq 1 ]
+  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
+}
+@test "chore-close dies cleanly when no chore file matches" {
+  run dk-chore-close chore-frontend-9
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"no chore file"* ]]
+}
+@test "chore-close leaves a non-code 結果 line containing & untouched" {
+  dk-chore frontend "fix" >/dev/null
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md)
+  sed -i 's/^status: working/status: done/; s#^結果：$#結果：docs/a \& b.md#' "$f"
+  run dk-chore-close chore-frontend-1
+  [ "$status" -eq 0 ]
+  grep -q '^結果：docs/a & b.md$' "$f"
+  grep -q '| fix | chore | done | docs/a & b.md |' "$DK_ROOT/tasks/INDEX.md"
+}
