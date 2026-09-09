@@ -434,7 +434,7 @@ fi
 執行 `dkboai/bin/dk-whoami`。
 
 - 輸出 `leader` → 讀 `dkboai/LEADER.md`，照它行事。
-- 輸出 `employee <角色> <名字> <任務目錄>` → 讀 `dkboai/roles/<角色>.md` 與 `dkboai/PROTOCOL.md`，照它們行事。你不是領導。
+- 輸出 `employee <角色> <名字> <任務目錄>` → 讀 `$DK_ROOT/roles/<角色>.md` 與 `$DK_ROOT/PROTOCOL.md`（`DK_ROOT` 是你 pane 的環境變數，指向主工作樹的 dkboai/），照它們行事。你不是領導。
 
 不要同時讀兩者。
 ```
@@ -719,8 +719,9 @@ DONE 前 `touched` 必須完整，領導會拿它比對所有權。
 
 ## 安裝到目標專案
 1. 把 `dkboai/` 複製到專案根目錄。
-2. 在專案根目錄執行 `dkboai/install.sh`：建 `.claude/skills/` 與 `.agents/skills/` 的 symlink、寫 `AGENTS.md`（一行指向 `dkboai/ENTRY.md`）與 `CLAUDE.md`（`@AGENTS.md`）。
-3. 在 herdr 內開 Claude Code，執行 `/dkboai-init`。
+2. 在專案根目錄執行 `dkboai/install.sh`：建 `.claude/skills/` 與 `.agents/skills/` 的 symlink、在 `AGENTS.md` 尾端追加一行指向 `dkboai/ENTRY.md`、在 `CLAUDE.md` 尾端追加 `@AGENTS.md`。既有內容不動。
+3. `git add -A && git commit`。員工在 worktree 裡工作，只看得到已 commit 的 dkboai/ 與入口檔。
+4. 在 herdr 內開 Claude Code，執行 `/dkboai-init`。
 
 ## 日常
 - 開任務：跟領導說「開任務 X」。
@@ -1133,7 +1134,7 @@ teardown() { teardown_project; }
   [[ "$split" == *"--env DK_ISOLATED=0"* ]]
   grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode acceptEdits$' "$HERDR_STUB_LOG"
   p=$(grep '^agent prompt login-frontend-cart' "$HERDR_STUB_LOG")
-  [[ "$p" == *"dkboai/roles/frontend.md"* ]]; [[ "$p" == *"$d/brief.md"* ]]
+  [[ "$p" == *"$DK_ROOT/roles/frontend.md"* ]]; [[ "$p" == *"$d/brief.md"* ]]
   [[ "$p" == *"$d/state/frontend-cart.md"* ]]; [[ "$p" == *"禁止使用 subagent"* ]]; [[ "$p" == *"--wait --timeout 60000" ]]
   grep -q '^login-frontend-cart wC:p2$' "$d/.panes"
   grep -q 'spawn login-frontend-cart (claude L)' "$d/process.md"
@@ -1165,7 +1166,7 @@ teardown() { teardown_project; }
 # shellcheck shell=bash
 dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME
   local resume=""; [ "${5:-0}" = 1 ] && resume="你是重新啟動的員工：先讀 $4，從 state 檔續作，不要重做已完成的項目。"
-  printf '%s' "你是 $1，角色 $2。先讀：dkboai/roles/$2.md、dkboai/PROTOCOL.md、dkboai/PROJECT.md、$3/brief.md。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 dkboai/bin/dk-msg。讀完後建立 state 檔並開始做波次表分給你的項目；完成後 dk-msg 交接對象與 leader 送 [DONE]。$resume"
+  printf '%s' "你是 $1，角色 $2。先讀：$DK_ROOT/roles/$2.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md、$3/brief.md。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 $DK_ROOT/bin/dk-msg。讀完後建立 state 檔並開始做波次表分給你的項目；完成後 dk-msg 交接對象與 leader 送 [DONE]。$resume"
 }
 ```
 
@@ -1601,7 +1602,7 @@ pane=$(herdr pane split "${split_from[@]}" --direction "$(dk_fm "$rf" split)" --
   --env "DK_LEADER=$leader" --env "DK_CHORE_CODE=$code" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
 # shellcheck disable=SC2086
 herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null
-prompt="你是 $agent，角色 $role，這是一件雜務。先讀 dkboai/roles/$role.md、dkboai/PROTOCOL.md、dkboai/PROJECT.md。交代：$instr。進度與結果寫在 $cf（status、touched、結果）。禁止使用 subagent。"
+prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/roles/$role.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md。交代：$instr。進度與結果寫在 $cf（status、touched、結果）。禁止使用 subagent。"
 [ "$code" = 1 ] && prompt="$prompt 你在分支 $branch 的 worktree 中，完成後自己跑測試並 commit。範圍比想的大就停下回報。" || prompt="$prompt 不得修改程式碼。"
 prompt="$prompt 完成後執行：herdr agent prompt $leader \"[DONE] from $agent: <一句結果>\"。"
 herdr agent prompt "$agent" "$prompt" --wait --timeout 60000 >/dev/null
@@ -1791,7 +1792,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Test: `tests/unit/14_install.bats`
 
 **Interfaces:**
-- Produces: `dkboai/install.sh` (run from target project root or with `--target DIR`): creates `.claude/skills/dkboai-init`, `.claude/skills/dkboai-add-role`, `.agents/skills/dkboai-init`, `.agents/skills/dkboai-add-role` relative symlinks into `dkboai/skills/*`; writes `AGENTS.md` line `讀 dkboai/ENTRY.md 並依其行事。` if absent; writes `CLAUDE.md` line `@AGENTS.md` if absent (appends if file exists without it); `chmod +x dkboai/bin/*`; appends `dkboai/.sessions/*` to `.gitignore` if missing. Idempotent.
+- Produces: `dkboai/install.sh` (run from target project root or with `--target DIR`): never overwrites existing files, only appends; skips the CLAUDE.md line when CLAUDE.md is a symlink to AGENTS.md; creates `.claude/skills/dkboai-init`, `.claude/skills/dkboai-add-role`, `.agents/skills/dkboai-init`, `.agents/skills/dkboai-add-role` relative symlinks into `dkboai/skills/*`; writes `AGENTS.md` line `讀 dkboai/ENTRY.md 並依其行事。` if absent; writes `CLAUDE.md` line `@AGENTS.md` if absent (appends if file exists without it); `chmod +x dkboai/bin/*`; appends `dkboai/.sessions/*` to `.gitignore` if missing. Idempotent.
 - Skills are markdown only; their frontmatter `name` and `description` follow the Agent Skills format so all three CLIs list them.
 
 - [ ] **Step 1: Failing test**
@@ -1812,9 +1813,14 @@ teardown() { teardown_project; }
   run dkboai/install.sh; [ "$status" -eq 0 ]
   [ "$(grep -c '^@AGENTS.md$' CLAUDE.md)" -eq 1 ]
 }
-@test "install appends to an existing CLAUDE.md" {
-  echo '# my project' > CLAUDE.md; dkboai/install.sh >/dev/null
+@test "install appends to an existing CLAUDE.md and AGENTS.md" {
+  echo '# my project' > CLAUDE.md; echo '# agents rules' > AGENTS.md; dkboai/install.sh >/dev/null
   head -1 CLAUDE.md | grep -q '# my project'; grep -q '^@AGENTS.md$' CLAUDE.md
+  head -1 AGENTS.md | grep -q '# agents rules'; grep -q '^讀 dkboai/ENTRY.md' AGENTS.md
+}
+@test "install skips CLAUDE.md line when it symlinks AGENTS.md" {
+  echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; dkboai/install.sh >/dev/null
+  ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 dkboai/ENTRY.md' AGENTS.md
 }
 @test "skills have agent-skills frontmatter" {
   for s in init add-role; do
@@ -1841,7 +1847,11 @@ for s in init add-role; do
   done
 done
 grep -qs '^讀 dkboai/ENTRY.md' AGENTS.md || echo '讀 dkboai/ENTRY.md 並依其行事。' >> AGENTS.md
-grep -qs '^@AGENTS.md$' CLAUDE.md || echo '@AGENTS.md' >> CLAUDE.md
+if [ -L CLAUDE.md ] && [ "$(readlink CLAUDE.md)" = AGENTS.md ]; then
+  echo "CLAUDE.md is a symlink to AGENTS.md; nothing to add"
+else
+  grep -qs '^@AGENTS.md$' CLAUDE.md || echo '@AGENTS.md' >> CLAUDE.md
+fi
 grep -qs 'dkboai/.sessions' .gitignore || printf 'dkboai/.sessions/*\n!dkboai/.sessions/.gitkeep\n' >> .gitignore
 chmod +x dkboai/bin/* dkboai/install.sh
 echo "dkboai installed into $target"
@@ -1860,10 +1870,12 @@ description: 第一次在專案啟用 dkboai 時執行。偵測已安裝的 AI C
 
 逐步做，每步用 AskUserQuestion 或等人回答，一次問一題。
 
+0. 前置檢查：`git status --porcelain dkboai AGENTS.md CLAUDE.md .claude .agents`。有輸出就停下，請人先 commit（員工的 worktree 只看得到已 commit 的檔案）。
 1. 偵測工具：執行 `bash -c '. dkboai/lib/common.sh; . dkboai/lib/kinds.sh; dk_kinds_available'`。對每個結果檢查登入狀態：`claude --version`、`codex login status`、`agy models | head -1`。列出可用者。
 2. 問主模型：預設 claude。若人選其他 kind，對 `dkboai/roles/*.md` 每一檔：把 `kind:` 改成該 kind，並用 `dkboai/kinds/<kind>.sh` 的 `KIND_DEFAULT_TIERS` 覆寫 `tiers:` 三檔（reviewer 沒有 S）。逐角色列出改後的值讓人確認或修改。同步更新 `dkboai/roles/README.md` 的表。
 3. 問第二、第三意見工具：只列可用且非主模型者。把結果寫進 `dkboai/LEADER.md` 的「評議波」段落，替換範例中的 `--kind codex` / `--kind agy`。沒裝的不列。
-4. 預填 `dkboai/PROJECT.md`：看專案根目錄有沒有 package.json / pyproject.toml / go.mod / Cargo.toml / Makefile，填技術棧、安裝啟動、測試指令、目錄慣例。保持 ≤40 行。給人確認後存檔。
+4. 預填 `dkboai/PROJECT.md`：先讀既有的 `CLAUDE.md`、`AGENTS.md`、`.claude/rules/*.md`（若存在），從中抽技術棧、測試指令、慣例；再看 package.json / pyproject.toml / go.mod / Cargo.toml / Makefile 補齊。保持 ≤40 行，不重複既有指令檔已寫的規則，只寫事實。給人確認後存檔。
+4b. 衝突掃描：比對既有指令檔與 `dkboai/PROTOCOL.md`、`dkboai/LEADER.md` 會打架的規則，至少查這幾類：要求使用 subagent 或平行 agent、要求直接 commit/push 到 main、禁止建分支或 worktree、要求每次改動都問人。逐條列出「既有規則 vs dkboai 規則」，讓人決定改哪一邊。不自動修改既有檔案。
 5. MCP 檢查：對每個已選 kind 執行 `bash -c '. dkboai/lib/common.sh; . dkboai/lib/kinds.sh; dk_kind_load <kind>; kind_mcp_list'`，比對所有角色檔 `mcp:` 清單。缺的列出，並印出對應指令範本（`claude mcp add <name> -- <cmd>` / `codex mcp add <name> -- <cmd>` / `agy mcp add <name> <cmd>`）讓人自己執行。不要代寫含認證的設定。
 6. 結束時列出：可用工具、主模型、評議成員、PROJECT.md 行數、缺少的 MCP。
 ```
@@ -1889,7 +1901,7 @@ description: 為 dkboai 團隊新增一個角色（例如 translator、designer�
 8. 用 `bash -c '. dkboai/lib/common.sh; . dkboai/lib/frontmatter.sh; . dkboai/lib/kinds.sh; for t in S M L; do v=$(dk_fm_tier dkboai/roles/<name>.md $t); [ -n "$v" ] && dk_kind_args <kind> "$v"; done'` 驗證三檔都能轉成旗標。
 ```
 
-- [ ] **Step 6: Run** → `3 tests, 0 failures`
+- [ ] **Step 6: Run** → `4 tests, 0 failures`
 
 - [ ] **Step 7: Commit**
 
