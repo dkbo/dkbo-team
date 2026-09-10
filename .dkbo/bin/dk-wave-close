@@ -11,7 +11,7 @@ if [ "${1:-}" = --agent ]; then   # close one employee (e.g. a timed-out reviewe
   herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
   grep -v "^$a " "$dir/.panes" > "$dir/.panes.tmp" || true; mv "$dir/.panes.tmp" "$dir/.panes"
   dk_process "pane-close $a"
-  [ -n "${tab:-}" ] && dk_layout_even "$tab"
+  if [ -n "${tab:-}" ]; then dk_layout_even "$tab" || true; fi
   echo "closed $a"; exit 0
 fi
 force=0; [ "${1:-}" = --force ] && force=1
@@ -67,6 +67,6 @@ done < "$dir/.panes"
 if [ "$legacy" = 1 ]; then dk_process "wave-close: $closed agents closed"
 else
   dk_env_set DK_WAVE ""; dk_process "wave-close $n tests $tests $closed agents closed"
-  for t in $tabs; do [ "$t" -ge 1 ] && dk_layout_even "$t"; done
+  for t in $tabs; do if [ "$t" -ge 1 ]; then dk_layout_even "$t" || true; fi; done
 fi
 echo "closed $closed"
