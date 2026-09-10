@@ -2,9 +2,10 @@
 # Employee pane grid (spec §6). `.panes` rows: <agent> <pane_id> <epoch> <group> <tab_no> <slot>.
 # Tab 1 is the leader's tab: the leader keeps a full-height left column; DK_TAB1_SLOTS cells fill the right half.
 # Tabs 2+ hold 6 cells (3 columns × 2 rows). Shares below are what the ANCHOR keeps after the split.
-# DK_RATIO_MEANS: what herdr's `pane split --ratio` denotes — "new" (the new pane's share; default) or "anchor".
-# tests/integration/herdr-real.sh prints a NOTE telling which one real herdr uses.
-DK_RATIO_MEANS="${DK_RATIO_MEANS:-new}"
+# DK_RATIO_MEANS: what herdr's `pane split --ratio` denotes — "new" (the new pane's share) or "anchor" (default).
+# tests/integration/herdr-real.sh confirmed against real herdr 0.9.0 that --ratio is the ANCHOR's share
+# (see tests/integration/README.md "Last run"), so the default is "anchor".
+DK_RATIO_MEANS="${DK_RATIO_MEANS:-anchor}"
 dk_layout_ratio_arg() { # ANCHOR_SHARE → value for --ratio
   if [ "$DK_RATIO_MEANS" = anchor ]; then awk -v r="$1" 'BEGIN{printf "%.3f", r}'; else awk -v r="$1" 'BEGIN{printf "%.3f", 1-r}'; fi
 }

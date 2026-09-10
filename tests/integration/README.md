@@ -78,3 +78,65 @@ themselves; one bug found and fixed in this script (real herdr rejects `--worksp
 `--cwd` together on `worktree create` — production code only ever passes `--cwd`, so it
 was unaffected). Unit suite (`tests/run.sh`) re-checked at 73/73 passing since no stub or
 `.dkbo/` script changes were needed.
+
+### 2026-09-10, layer 2 §10 follow-up: tab create / `--ratio` / resize / read shapes
+
+Second block added to `herdr-real.sh` (before `notification show`) per
+spec 2026-09-10 §10. Bootstrapped a throwaway `dktest` session server (see "Running from
+inside a herdr pane" above) since this run was itself inside a herdr pane; torn down
+afterward (`herdr session stop/delete dktest`, `herdr session list` back to only
+`default`).
+
+Result: 8 `OK`, 1 `FAIL`, two `NOTE` lines printed by the script plus one shape finding
+from the `FAIL`:
+
+```
+NOTE --ratio 0.3 made the ANCHOR narrower → --ratio is the anchor's share: set DK_RATIO_MEANS=anchor in .dkbo/lib/layout.sh
+NOTE resize --amount 0.1 changed width by 12 cells of area 120 (a fraction would give ≈12); if the unit is cells, change dk__layout_amount to print whole cells
+FAIL pane read shape: <plain terminal text, not JSON>
+```
+
+What changed, and why:
+
+- **`--ratio` semantics — anchor.** `pane split --pane <troot> --direction right --ratio 0.3`
+  left the anchor (`troot`) at width 36 of a 120-wide area (36/120 = 0.3) and gave the new
+  pane the remaining 84 (0.7). So `--ratio` is the **anchor's** retained share, not the new
+  pane's. Changed `.dkbo/lib/layout.sh`: `DK_RATIO_MEANS="${DK_RATIO_MEANS:-new}"` →
+  `${DK_RATIO_MEANS:-anchor}`. Left `tests/unit/07_spawn.bats`'s three `--ratio 0.500`
+  assertions unchanged, as the brief allows — all of them come from a 0.5 share, and
+  `dk_layout_ratio_arg` gives 0.500 under either `DK_RATIO_MEANS` value; `tests/unit/17_layout.bats`'s
+  `dk_layout_ratio_arg` test sets `DK_RATIO_MEANS` explicitly in every assertion, so the
+  default change doesn't affect it either. `tests/run.sh` confirmed 145/145 still passing.
+- **`--amount` unit — fraction, unchanged.** `pane resize --pane <troot> --direction right
+  --amount 0.1` changed width by exactly 12 cells on a 120-cell-wide area — precisely
+  `120 * 0.1`, i.e. a fraction of the tab area, not a literal cell count (which would have
+  changed width by ~0, not 12). This already matches `dk__layout_amount`'s existing
+  `awk -v d="$1" -v t="$2" 'BEGIN{printf "%.3f", d/t}'` (cells → fraction). No change made
+  to `dk__layout_amount`, `tests/unit/17_layout.bats`'s `--amount -0.050`/`0.050`
+  assertions, or `tests/stub/responses/pane_layout.json`.
+- **`pane read` / `agent read` shape — plain text on success, not `.result.read.text`
+  JSON.** `herdr api schema --json`'s socket-level `PaneReadResult` documents
+  `.result.read.text`, but the CLI (`herdr pane read <id> --lines N`, with or without
+  `--raw`/`--format`) prints the bare terminal text directly on success — no JSON envelope
+  at all (confirmed on a live pane: valid `jq` parse fails, `echo $?` = 5). `herdr agent
+  read` behaves identically on success (only its *error* responses — e.g.
+  `agent_not_found` — go through the JSON envelope, confirmed by reading a pane with no
+  reported agent). This is a real discrepancy from the schema/stub shape, not a stub
+  field-name or extra-field difference, so the "compare field names" rule in the brief's
+  Step 3 doesn't directly apply. Checked production code: `.dkbo/bin/dk-watch` already
+  parses defensively —
+  `txt=$(printf '%s' "$raw" | jq -r '.result.read.text // .result.text // empty' 2>/dev/null || true); txt="${txt:-$raw}"`
+  — so when `jq` fails on real herdr's plain-text output, `txt` falls back to the raw text
+  itself. No other production code parses `pane read`/`agent read` output. No changes made
+  to `.dkbo/`, `tests/stub/responses/agent_read.json`, or any bats test for this finding;
+  it is captured here for the record. `tests/integration/herdr-real.sh`'s hard `FAIL` on
+  this check is accurate and expected — it documents the real CLI shape, and was left as
+  the brief's exact block specifies.
+- `tab_create.json` and `pane_layout.json` real captures (`$tmp/tab_create.json`,
+  `$tmp/pane_layout.json`) matched the stub's field names exactly (the real payloads carry
+  extra fields — `cwd`, `revision`, `scroll`, `terminal_id`, etc. on `root_pane` — that the
+  stub omits); per the brief, extra-field-only differences don't warrant a stub change, so
+  `tests/stub/responses/tab_create.json` and `pane_layout.json` are unchanged.
+
+Unit suite (`tests/run.sh`) re-checked at 145/145 passing after the `DK_RATIO_MEANS`
+default change.
