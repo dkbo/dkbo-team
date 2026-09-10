@@ -44,3 +44,21 @@ dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column match
   awk -F'|' -v n="$name" -v s="$status" -v o="$note" 'BEGIN{OFS="|"}
     { if ($3 == " " n " ") { $5=" " s " "; $6=" " o " " } print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 }
+
+dk_settings() { # load .dkbo/settings.env over the defaults; warn once per process tree when the file is missing
+  DK_TEST_CMD=""; DK_REVIEW_KINDS="claude"; DK_REVIEW_MIN="1"; DK_REVIEW_TIMEOUT_MIN="20"; DK_TAB1_SLOTS="4"
+  if [ -f "$DK_ROOT/settings.env" ]; then
+    # shellcheck disable=SC1091
+    . "$DK_ROOT/settings.env"
+  elif [ -z "${DK_SETTINGS_WARNED:-}" ]; then
+    echo "dk: $DK_ROOT/settings.env missing; using defaults (run /dkboai-init)" >&2; DK_SETTINGS_WARNED=1
+  fi
+  export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_SETTINGS_WARNED
+}
+dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env (append when the key is missing)
+  local d f; d=$(dk_task_dir) || return 1; f="$d/.task.env"
+  if grep -q "^$1=" "$f"; then
+    awk -v k="$1" -v v="$2" 'index($0, k "=")==1 {print k "=\"" v "\""; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  else echo "$1=\"$2\"" >> "$f"; fi
+}
+dk_legacy_task() { ! grep -q '^DK_BASE=' "$(dk_task_dir)/.task.env"; }   # task folder created before the wave-review scripts

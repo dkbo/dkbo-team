@@ -65,3 +65,30 @@ R
   [ "$(dk_fm_list "$PROJECT/r.md" mcp | tr '\n' ' ')" = "playwright github " ]
   [ -z "$(dk_fm "$PROJECT/r.md" missing)" ]
 }
+@test "dk_settings: defaults, one warning when missing, file overrides" {
+  rm "$DK_ROOT/settings.env"
+  run dk_settings; [ "$status" -eq 0 ]; [[ "$output" == *"settings.env missing"* ]]
+  dk_settings 2>/dev/null
+  [ "$DK_TEST_CMD" = "" ]; [ "$DK_REVIEW_KINDS" = claude ]; [ "$DK_REVIEW_MIN" = 1 ]; [ "$DK_REVIEW_TIMEOUT_MIN" = 20 ]; [ "$DK_TAB1_SLOTS" = 4 ]
+  run dk_settings; [ -z "$output" ]   # warned already in this process tree
+  printf 'DK_TEST_CMD="npm test"\nDK_REVIEW_KINDS="claude codex"\nDK_TAB1_SLOTS="6"\n' > "$DK_ROOT/settings.env"
+  dk_settings; [ "$DK_TEST_CMD" = "npm test" ]; [ "$DK_REVIEW_KINDS" = "claude codex" ]; [ "$DK_TAB1_SLOTS" = 6 ]; [ "$DK_REVIEW_MIN" = 1 ]
+}
+@test "shipped settings.env has the five keys, all quoted" {
+  for k in DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS; do grep -Eq "^$k=\"[^\"]*\"" "$DK_ROOT/settings.env"; done
+  dk_settings; [ "$DK_REVIEW_KINDS" = claude ]
+}
+@test "dk_env_set rewrites or appends a .task.env key" {
+  d=$(fixture_task login x)
+  dk_env_set DK_WAVE 2; grep -q '^DK_WAVE="2"$' "$d/.task.env"; [ "$(grep -c '^DK_WAVE=' "$d/.task.env")" -eq 1 ]
+  dk_env_set DK_NEWKEY "a b"; grep -q '^DK_NEWKEY="a b"$' "$d/.task.env"
+  dk_env_set DK_WAVE ""; grep -q '^DK_WAVE=""$' "$d/.task.env"
+  dk_task_env; [ -z "$DK_WAVE" ]; [ "$DK_NEWKEY" = "a b" ]
+}
+@test "dk_legacy_task detects a task folder without DK_BASE" {
+  d=$(fixture_task login x); ! dk_legacy_task
+  sed -i '/^DK_BASE=/d' "$d/.task.env"; dk_legacy_task
+}
+@test "task.env template carries the new keys" {
+  for k in DK_BASE DK_WAVE DK_KIND_DOWN DK_TABS; do grep -q "^$k=" "$DK_ROOT/templates/task.env"; done
+}
