@@ -37,3 +37,19 @@ teardown() { teardown_project; }
   LC_ALL=C DK_AGENT=login-qa run dk-msg login-frontend "[TASK] $body"
   [ "$status" -eq 0 ]
 }
+@test "chore worker: dk-msg leader resolves DK_LEADER, waits for idle, logs under _chores" {
+  rm -f "$DK_ROOT/.sessions/"*   # a chore has no task binding
+  DK_AGENT=chore-it-1 DK_ROLE=it DK_CHORE_FILE="$DK_ROOT/tasks/_chores/x.md" DK_LEADER=wB:p1 \
+    run dk-msg leader "[DONE] 5 處文件已改，未 commit"
+  [ "$status" -eq 0 ]
+  grep -q '^agent wait wB:p1 --until idle --until done --timeout 300000$' "$HERDR_STUB_LOG"
+  grep -q '^agent prompt wB:p1 \[DONE\] from chore-it-1: 5 處文件已改，未 commit$' "$HERDR_STUB_LOG"
+  grep -Eq '^[0-9T:-]+ chore-it-1 -> wB:p1 \[DONE\] 5 處文件已改，未 commit$' "$DK_ROOT/tasks/_chores/messages.log"
+}
+@test "chore worker may only message the leader" {
+  rm -f "$DK_ROOT/.sessions/"*
+  DK_AGENT=chore-it-1 DK_ROLE=it DK_CHORE_FILE="$DK_ROOT/tasks/_chores/x.md" DK_LEADER=wB:p1 \
+    run dk-msg login-frontend "[QUESTION] x"
+  [ "$status" -eq 2 ]
+  ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
+}

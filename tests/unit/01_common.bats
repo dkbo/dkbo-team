@@ -33,11 +33,21 @@ teardown() { teardown_project; }
   grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2} wave1 start$' "$d/process.md"
 }
 
+@test "dk_slug never lets a newline into a file name" {
+  [ "$(dk_slug $'sync docs\nline two')" = "sync-docs-line-two" ]
+}
+
 @test "index add and set" {
   dk_index_add 2026-09-10 使用者登入 task planning —
   grep -q '| 2026-09-10 | 使用者登入 | task | planning | — |' "$DK_ROOT/tasks/INDEX.md"
   dk_index_set 使用者登入 done "merged abc123"
   grep -q '| 使用者登入 | task | done | merged abc123 |' "$DK_ROOT/tasks/INDEX.md"
+}
+
+@test "index add flattens newlines so a row never spans lines" {
+  dk_index_add 2026-09-10 $'第一行\n第二行' chore working —
+  grep -q '^| 2026-09-10 | 第一行 第二行 | chore | working | — |$' "$DK_ROOT/tasks/INDEX.md"
+  ! grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
 }
 
 @test "dk_render replaces tokens and tolerates sed metacharacters" {

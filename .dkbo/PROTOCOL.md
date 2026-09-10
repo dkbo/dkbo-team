@@ -56,4 +56,4 @@ DONE 前 `touched` 必須完整，領導會拿它比對所有權。
 - 意見只給領導（`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`），不直接對 dev 說；領導轉成 BUG 給 dev。收到領導 `[TASK] 複看` 時重讀差異包、更新 report、再 DONE。
 - 評議波（設計題）沿用：意見寫 state notes，第二輪只准一則反駁。
 
-雜務員工（`chore-*`）沒有任務綁定，不適用上面的 state 檔／dk-msg 流程；他們以 `herdr agent prompt "$DK_LEADER" "[DONE] from <agent>: ..."` 作為回報第一句。
+雜務員工（`chore-*`）沒有任務綁定，不寫 state 檔，進度寫在自己的 chore 檔；回報一律 `dk-msg leader "[DONE] <一句結果>"`（只能對 leader，腳本會等領導閒置再送、記到 `tasks/_chores/messages.log`）。不要直接用 `herdr agent prompt` 回報：領導忙碌時那樣送會被吃掉。

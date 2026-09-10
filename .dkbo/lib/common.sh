@@ -11,7 +11,7 @@ dk_today() { date +%Y-%m-%d; }
 # May return empty when the input has no a-z characters; callers must supply a fallback name.
 dk_slug() {
   local s
-  s=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^[^a-z]+//; s/-{2,}/-/g; s/-$//')
+  s=$(printf '%s' "$1" | tr '\n[:upper:]' ' [:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^[^a-z]+//; s/-{2,}/-/g; s/-$//')
   printf '%s' "${s:0:32}"
 }
 dk_require_herdr() { [ "${HERDR_ENV:-}" = 1 ] || dk_die "not running inside herdr (HERDR_ENV!=1)"; }
@@ -38,7 +38,7 @@ dk_render() { # TEMPLATE_FILE KEY=VALUE... → stdout with every {{KEY}} replace
   for kv in "$@"; do c=${c//"{{${kv%%=*}}}"/"${kv#*=}"}; done
   printf '%s\n' "$c"
 }
-dk_index_add() { local name="${2//|/／}"; printf '| %s | %s | %s | %s | %s |\n' "$1" "$name" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
+dk_index_add() { local name="${2//|/／}"; name="${name//$'\n'/ }"; printf '| %s | %s | %s | %s | %s |\n' "$1" "$name" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
 dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column matches ('|' in NAME is stored as '／')
   local name="${1//|/／}" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md"
   awk -F'|' -v n="$name" -v s="$status" -v o="$note" 'BEGIN{OFS="|"}

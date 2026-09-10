@@ -167,7 +167,7 @@ wave-close 2 tests skipped (no DK_TEST_CMD) 2 agents closed
 - 首段提示指向 `briefs/<agent>.md`；state ≤20 行、report 不限且必含 `## 測試`；DONE 前兩者都寫好。
 - reviewer 專節：只讀、不改碼、不跑寫入指令；report 格式 `## 規格合規`（✅/❌ 與缺漏）、`## Important`、`## Minor`，每條附 `file:line`；意見只給領導，不直接對 dev 說。
 - 停止條件：不 push、不改寫歷史、不刪分支、不動所有權外的檔、不裝依賴（it 除外）；遇到就 ESCALATE。
-- chore 員工無任務綁定，以 `herdr agent prompt "$DK_LEADER"` 回報（沿用）。
+- chore 員工無任務綁定，以 `dk-msg leader` 回報（dk-msg 依 `DK_CHORE_FILE` 切到雜務模式：目標解析成 `DK_LEADER`、等閒置再送、記 `tasks/_chores/messages.log`）。原本的裸 `herdr agent prompt` 在領導忙碌時會漏訊，已棄用。
 
 ### 5.3 其他
 - `roles/reviewer.md`：職責改「實作波審查與結案評議」，完成定義加 report 格式；`group: review`。

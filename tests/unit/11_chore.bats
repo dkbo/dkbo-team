@@ -70,3 +70,20 @@ teardown() { teardown_project; }
   grep -q '^結果：docs/a & b.md$' "$f"
   grep -q '| fix | chore | done | docs/a & b.md |' "$DK_ROOT/tasks/INDEX.md"
 }
+@test "chore prompt tells the worker to report through dk-msg, not a raw herdr prompt" {
+  dk-chore frontend "翻譯 README" >/dev/null
+  p=$(grep '^agent prompt chore-frontend-1 ' "$HERDR_STUB_LOG")
+  [[ "$p" == *'dk-msg leader "[DONE] '* ]]
+  [[ "$p" != *'herdr agent prompt'* ]]
+}
+@test "multi-line instruction keeps INDEX one row per chore and chore-close still finds it" {
+  dk-chore frontend $'同步四個文件位置\n(1) AGENTS.md 第 23 行\n(2) roles/frontend.md' >/dev/null
+  [ "$(grep -c '| chore | working |' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
+  grep -q '^| .* | 同步四個文件位置 | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+  ! grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^(2) roles/frontend.md$' "$f"   # the chore file keeps the full text
+  sed -i 's/^status: working/status: done/' "$f"
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+  grep -q '| 同步四個文件位置 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
+  ! grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
+}
