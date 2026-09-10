@@ -18,7 +18,7 @@ jobs:
     name: bats
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # tests/run.sh clones bats-core itself and uses tests/stub as a fake herdr,
       # so jq, flock, git and bash 5 from the runner image are all it needs.
       - run: tests/run.sh
@@ -26,7 +26,7 @@ jobs:
   shellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck --version
       - run: shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh
 
@@ -36,7 +36,7 @@ jobs:
     needs: [test, shellcheck]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: |
           tag="${GITHUB_REF_NAME#v}"
           ver=$(tr -d '[:space:]' < .dkbo/VERSION)
