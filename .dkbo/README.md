@@ -51,6 +51,7 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 - 開任務：對領導說「開任務 login，顯示名『使用者登入』，需求是…」。領導會寫 brief 給你確認（關卡①）、分波派工、員工升報時問你（關卡②）、結案時給你 report 拍板（關卡③）。
 - 雜務：對領導說「翻譯 README 成英文」「先修登入頁那個 bug」。領導評估後派一位員工，不自己動手。
 - 領導失憶：在領導 pane `/clear`，然後說「執行 .dkbo/bin/dk-resume 然後繼續」。
+- 想知道現在做到哪：隨時跑 `dk-resume`，它印的本波、裁定、未處理訊息、各員工 state 與在線員工就是狀態總覽，不必等失憶才用。
 - 第二位領導：在任何 herdr shell 執行 `.dkbo/bin/dk-leader pay "金流"`。
 - 新角色：`/dkbo-add-role`。
 - 每波自動附審查：dev DONE 後領導派 1–3 位 reviewer（kind 依 `.dkbo/settings.env`）與 qa 並行；wave-close 會檢查裁定、每位 dev 的 report 與 `DK_TEST_CMD`。純文件波在 brief 審查欄寫 `skip: <理由>`。
