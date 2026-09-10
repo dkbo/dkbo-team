@@ -1,0 +1,27 @@
+#!/usr/bin/env bats
+load ../helpers
+setup() { setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"; }
+teardown() { teardown_project; }
+
+@test "wave-open sets DK_WAVE, records base, renders one slice per member" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  grep -q '^DK_WAVE="1"$' "$d/.task.env"
+  sha=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+  grep -q " wave-open 1 base $sha members backend(M) qa(S)$" "$d/process.md"
+  [ -f "$d/briefs/backend.md" ]; [ -f "$d/briefs/qa.md" ]; [ ! -f "$d/briefs/frontend-cart.md" ]
+  grep -q '^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$' "$d/briefs/backend.md"
+  ! grep -q 'frontend-cart |' "$d/briefs/backend.md"
+  grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; ! grep -q '^| qa |' "$d/briefs/backend.md"
+  grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^無$' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
+  grep -q "$d/brief.md" "$d/briefs/backend.md"; grep -q '登入 API 與表單' "$d/briefs/qa.md"
+}
+@test "refuses a second open, an open with live panes, and a wave without members" {
+  dk-wave-open 1 >/dev/null
+  run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"wave 1 is open"* ]]
+  sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+  run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]
+  echo "login-qa wC:p3 0 review 1 1" > "$d/.panes"
+  run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"live panes"* ]]
+  : > "$d/.panes"; run dk-wave-open 9; [ "$status" -eq 1 ]; [[ "$output" == *"no members"* ]]
+  run dk-wave-open x; [ "$status" -eq 1 ]
+}
