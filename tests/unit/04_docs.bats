@@ -11,8 +11,10 @@ teardown() { teardown_project; }
       v=$(dk_fm_tier "$f" $t); [[ "$v" =~ ^(opus|sonnet)/(low|medium|high)$ ]]
     done
     [[ "$(dk_fm "$f" worktree)" =~ ^(true|false)$ ]]
+    [[ "$(dk_fm "$f" group)" =~ ^(dev|review)$ ]]
   done
   [ -z "$(dk_fm_tier "$DK_ROOT/roles/reviewer.md" S)" ]
+  [ "$(dk_fm "$DK_ROOT/roles/qa.md" group)" = review ]; [ "$(dk_fm "$DK_ROOT/roles/reviewer.md" group)" = review ]; [ "$(dk_fm "$DK_ROOT/roles/backend.md" group)" = dev ]
 }
 @test "docs exist and are short" {
   for f in LEADER.md PROTOCOL.md PROJECT.md ENTRY.md README.md roles/README.md; do [ -f "$DK_ROOT/$f" ]; done

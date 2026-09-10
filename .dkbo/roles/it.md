@@ -6,7 +6,7 @@ tiers:
   M: sonnet/low
   L: sonnet/medium
 worktree: true
-split: down
+group: dev
 mcp: []
 ---
 ## 職責

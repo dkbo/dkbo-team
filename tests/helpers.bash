@@ -48,3 +48,36 @@ E
   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
   echo "$d"
 }
+fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
+  cat > "$1/brief.md" <<'B'
+# 使用者登入
+來源：test
+分支：dk/login   worktree：/tmp/x
+
+## 目標（≤3 行）
+登入 API 與表單。
+
+## 驗收標準
+- [ ] POST /login 空密碼回 400
+- [ ] renderLogin 產出 user/pass 欄位
+
+## 檔案所有權
+| 成員 | 可改 | 只讀 |
+|---|---|---|
+| （範例）backend | src/api/**, db/** | src/web/** |
+| backend | src/api/** | src/web/** |
+| frontend-cart | src/web/** | src/api/types.ts |
+| qa | tests/** | — |
+
+## 共用契約
+無
+
+## 波次表
+| 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |
+|---|---|---|---|---|---|---|
+| （範例）1 | 實作 | backend | API | M | 測試過 | 預設 |
+| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |
+| 1 | 實作 | qa | 驗 API | S | 全過 | |
+| 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |
+B
+}

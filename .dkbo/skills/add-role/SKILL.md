@@ -11,6 +11,6 @@ description: 為 dkboai 團隊新增一個角色（例如 translator、designer�
 3. 讓人選 kind，預設推薦 claude。
 4. 讀 `.dkbo/kinds/<kind>.sh` 的 `KIND_MODELS`、`KIND_EFFORTS`。依職責難度建議三檔（S 小改照做、M 一般、L 需設計判斷），每檔一個 `model/effort`，說明理由。純產出型角色（翻譯、整理）L 檔也不必用最高 model。
 5. 逐檔讓人確認或改。
-6. 寫 `.dkbo/roles/<name>.md`，frontmatter 依序：`name kind tiers(S M L) worktree split mcp`，正文三段：`## 職責`（3–5 行）、`## 完成定義`、`## 交接對象`。`worktree` 對不碰程式碼的角色設 false。`split` 預設 right。
+6. 寫 `.dkbo/roles/<name>.md`，frontmatter 依序：`name kind tiers(S M L) worktree group mcp`，正文三段：`## 職責`（3–5 行）、`## 完成定義`、`## 交接對象`。`worktree` 對不碰程式碼的角色設 false。`group` 填 `dev`（會改碼、要交報告）或 `review`（qa、reviewer 類，只驗不改）。
 7. 在 `.dkbo/roles/README.md` 表尾加一行。
 8. 用 `bash -c '. .dkbo/lib/common.sh; . .dkbo/lib/frontmatter.sh; . .dkbo/lib/kinds.sh; for t in S M L; do v=$(dk_fm_tier .dkbo/roles/<name>.md $t); [ -n "$v" ] && dk_kind_args <kind> "$v"; done'` 驗證三檔都能轉成旗標。
