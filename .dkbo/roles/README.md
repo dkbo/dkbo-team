@@ -6,4 +6,4 @@
 | backend | claude | sonnet/low | sonnet/medium | opus/high | API、資料層 |
 | qa | claude | sonnet/low | sonnet/medium | sonnet/high | 依驗收標準驗證、送 BUG，自己不修 |
 | it | claude | sonnet/low | sonnet/low | sonnet/medium | 環境、依賴、CI、合併衝突修復 |
-| reviewer | claude | — | sonnet/medium | opus/high | 評議波用，只出意見不改碼 |
+| reviewer | claude | — | sonnet/medium | opus/high | 實作波審查與結案評議，只出意見不改碼 |

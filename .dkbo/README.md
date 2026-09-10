@@ -51,6 +51,8 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 - 領導失憶：在領導 pane `/clear`，然後說「執行 .dkbo/bin/dk-resume 然後繼續」。
 - 第二位領導：在任何 herdr shell 執行 `.dkbo/bin/dk-leader pay "金流"`。
 - 新角色：`/dkboai-add-role`。
+- 每波自動附審查：dev DONE 後領導派 1–3 位 reviewer（kind 依 `.dkbo/settings.env`）與 qa 並行；wave-close 會檢查裁定、每位 dev 的 report 與 `DK_TEST_CMD`。純文件波在 brief 審查欄寫 `skip: <理由>`。
+- 人多時的版面：領導在 tab 1 左欄，員工填右側 2×2（或 3×2）；第 5 位起自動開 `<short>-2` 等 tab，每 tab 6 位。
 
 ## 目錄
 | 路徑 | 用途 |
@@ -67,7 +69,7 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 只更新核心，保留你的 `tasks/`、`PROJECT.md`、`decisions.md` 與自訂角色：
 ```bash
 tmp=$(mktemp -d) && git clone -q --depth 1 https://github.com/dkbo/dkboai.git "$tmp"
-rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=LEADER.md "$tmp/.dkbo/" ./.dkbo/   # LEADER.md 略過，因為 /dkboai-init 已依你的專案客製過
+rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=settings.env --exclude=LEADER.md "$tmp/.dkbo/" ./.dkbo/   # LEADER.md 略過，因為 /dkboai-init 已依你的專案客製過
 rsync -a --ignore-existing "$tmp/.dkbo/roles/" ./.dkbo/roles/   # 只補新角色，不覆蓋既有
 rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update dkboai"
 ```
@@ -80,3 +82,5 @@ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update 
 | 員工卡住不動 | 卡在審批對話框。dk-watch 會通知；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
 | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
 | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md`；必要時 `/clear` 後 `dk-resume`。 |
+| 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 LEADER.md 補位。 |
+| `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |

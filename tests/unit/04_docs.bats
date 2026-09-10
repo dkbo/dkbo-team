@@ -28,3 +28,12 @@ teardown() { teardown_project; }
   grep -q 'DK_SHORT="{{SHORT}}"' "$DK_ROOT/templates/task.env"
   grep -q '^status:' "$DK_ROOT/templates/state.md"
 }
+
+@test "LEADER.md covers brief-check, wave-open, review, ruling, timeout; PROTOCOL covers report and reviewer rules" {
+  for w in dk-brief-check dk-wave-open dk-review-pack dk-review 'ruling:' '\[TIMEOUT\]' 'dk-wave-close --agent' 'review N skipped' 'settings.env' '--task'; do grep -q -- "$w" "$DK_ROOT/LEADER.md"; done
+  for w in '## 測試' 'report.md' 'briefs/' '## 規格合規' '## Important' '## Minor' 'file:line' '不 push' 'ESCALATE'; do grep -q -- "$w" "$DK_ROOT/PROTOCOL.md"; done
+  grep -q '^group: review' "$DK_ROOT/roles/reviewer.md"; grep -q '結案評議' "$DK_ROOT/roles/reviewer.md"
+  grep -q 'settings.env' "$DK_ROOT/skills/init/SKILL.md"; grep -q 'DK_REVIEW_KINDS' "$DK_ROOT/skills/init/SKILL.md"
+  grep -q -- '--exclude=settings.env' "$DK_ROOT/README.md"; grep -q '每波自動附審查' "$DK_ROOT/README.md"
+  grep -q '^11\. ' "$REPO_ROOT/tests/e2e/RUNBOOK.md"; grep -q 'TIMEOUT' "$REPO_ROOT/tests/e2e/RUNBOOK.md"
+}
