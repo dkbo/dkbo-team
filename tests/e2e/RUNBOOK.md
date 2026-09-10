@@ -11,7 +11,7 @@
 7. 在領導 pane 執行 `/clear`，再說「執行 .dkbo/bin/dk-resume 然後繼續」。預期：領導讀回恢復包，正確開 wave2（frontend + qa）。
 8. wave2 DONE、wave-close 後，領導寫 report.md 給你看（關卡③）。回「合併」。預期 `dk-task-close` 合併回 main、worktree 移除、INDEX 為 done。
 9. 雜務：對領導說「請翻譯 README.md 成英文」。預期領導發現沒有 translator 角色 → 跑 add-role → `dk-chore translator "..."`；完成後 INDEX 多一行 chore。
-11. 逾時與熔斷：在 wave2 用一個未登入（或已到用量上限）的 kind 當 reviewer（`settings.env` 的 `DK_REVIEW_KINDS` 加上它，或 brief 審查欄 `kinds: claude <那個 kind>`），`DK_REVIEW_TIMEOUT_MIN` 先調成 2。預期：約 2 分鐘後領導 pane 收到 `[TIMEOUT] from dk-watch: … 逾時 (quota?)`、桌面通知一次、`.task.env` 的 `DK_KIND_DOWN` 出現該 kind、process 有 `timeout … → kind <k> down`；領導 `dk-wave-close --agent <reviewer>` 後 tab 版面重新均分。把該 CLI 實際印出的用量訊息字樣抄一行進 `.dkbo/README.md` 疑難排解表。
-12. 記錄：把每步實際發生與預期的差異寫到 `tests/e2e/RESULTS-<日期>.md`。
+10. 逾時與熔斷：在 wave2 用一個未登入（或已到用量上限）的 kind 當 reviewer（`settings.env` 的 `DK_REVIEW_KINDS` 加上它，或 brief 審查欄 `kinds: claude <那個 kind>`），`DK_REVIEW_TIMEOUT_MIN` 先調成 2。預期：約 2 分鐘後領導 pane 收到 `[TIMEOUT] from dk-watch: … 逾時 (quota?)`、桌面通知一次、`.task.env` 的 `DK_KIND_DOWN` 出現該 kind、process 有 `timeout … → kind <k> down`；領導 `dk-wave-close --agent <reviewer>` 後 tab 版面重新均分。把該 CLI 實際印出的用量訊息字樣抄一行進 `.dkbo/README.md` 疑難排解表。
+11. 記錄：把每步實際發生與預期的差異寫到 `tests/e2e/RESULTS-<日期>.md`。
 
 驗收：process.md 有 task-new / gate1 / wave1 / escalate / wave-close / wave2 / task-close 各一行以上；messages.log 有 BUG、FIXED、ESCALATE、DECISION、DONE；report.md 存在；`git log` 有兩個 wave commit 與一個 merge commit；dk-resume 輸出 ≤150 行。process.md 另有 wave-open / review … spawned / review … verdict / ruling: / wave-close … tests / timeout 各一行以上；每位 dev 有 state/<成員>.report.md。
