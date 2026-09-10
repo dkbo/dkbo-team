@@ -14,7 +14,7 @@
 
 - 套件目錄是 `.dkbo/`（不是 `dkboai/`）。每個 `bin/dk-*` 以 `set -euo pipefail` 開頭再 source lib；`lib/*.sh` 不設 shell 選項（bats 也會 source）。不引入 node/python 依賴。
 - `.dkbo/settings.env` 五個鍵、全部加引號、缺檔用預設值並警告一次：`DK_TEST_CMD=""`、`DK_REVIEW_KINDS="claude"`、`DK_REVIEW_MIN="1"`、`DK_REVIEW_TIMEOUT_MIN="20"`、`DK_TAB1_SLOTS="4"`。
-- `.task.env` 新增欄：`DK_BASE`（任務建立時的基底 sha）、`DK_WAVE`（目前波號，空＝沒開波）、`DK_KIND_DOWN`（熔斷 kind，空白分隔）、`DK_TABS`。**DK_TABS 格式定為 `"<tab_no>=<tab_id> …"`（例 `2=wB:t2 3=wB:t3`）**，不用規格寫的 `<tab_id>:<root_pane>`：tab id 本身含 `:`，且 root pane 已記在 `.panes`。
+- `.task.env` 新增欄：`DK_BASE`（任務建立時的基底 sha）、`DK_WAVE`（目前波號，空＝沒開波）、`DK_KIND_DOWN`（熔斷 kind，空白分隔）、`DK_TABS`。**DK_TABS 格式定為 `"<tab_no>=<tab_id> …"`（例 `2=wB:t2 3=wB:t3`）**，不用規格寫的 `<tab_id>:<root_pane>`：tab id 本身含 `:`，且 root pane 已記在 `.panes`。例外：`dk-spawn --resume` 會先刪掉該員工的 `.panes` 列，若他是溢出 tab 的唯一佔用者，`dk_layout_slot` 會再回 `NEWTAB`；dk-spawn 的 NEWTAB 分支因此必須先關掉 `DK_TABS` 裡同號的舊 tab 並**取代**條目，絕不追加重複的 `N=`（最終審查發現）。
 - `.panes` 行格式：`<agent> <pane_id> <epoch> <group> <tab_no> <slot>`。`group` 是 `dev|review`。`worktree: false` 的角色（pm）記 `tab_no=0 slot=0`。舊的兩欄行視為 legacy：只關不重排、閘門跳過並警告一次。
 - 命名：員工 agent `<short>-<role>[-<alias>]`；state 名 `<role>[-<alias>]`。**切片與報告都用 state 名**：`tasks/<t>/briefs/<state>.md`、`tasks/<t>/state/<state>.report.md`（規格寫 `<agent>` 之處一律指這個）。reviewer 別名固定 a、b、c → state 名 `reviewer-a` 等。
 - process.md 事件詞彙（只追加，格式照抄）：`wave-open N base <sha7> members backend(M) qa(S)`、`review N spawned <agent>(<kind>) …`、`review N verdict …`、`review N skipped: <理由>`、`ruling: <決定> — <原因> — <若錯代價>`、`timeout <agent> (quota?) → kind <k> down`、`wave-close N tests ok (<cmd>) K agents closed`、`wave-close N tests skipped (no DK_TEST_CMD) K agents closed`、`tab N <tab_id> opened|closed`、`pane-close <agent>`。
