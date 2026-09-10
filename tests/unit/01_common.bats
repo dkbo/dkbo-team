@@ -8,6 +8,18 @@ teardown() { teardown_project; }
   [ "$(dk_slug "$(printf 'a%.0s' {1..40})")" = "$(printf 'a%.0s' {1..32})" ]
 }
 
+@test "dk_ver_ge compares versions numerically, without sort -V" {
+  dk_ver_ge 0.10.0 0.9.0        # the trap: lexically "0.10.0" < "0.9.0"
+  ! dk_ver_ge 0.9.0 0.10.0
+  dk_ver_ge 0.9.0 0.9.0
+  dk_ver_ge 1.0 0.9.9
+  ! dk_ver_ge 0.8.9 0.9.0
+  dk_ver_ge 0.9 0.9.0           # a missing component counts as 0
+  ! dk_ver_ge 0.9 0.9.1
+  dk_ver_ge 0.9.10 0.9.9
+  dk_ver_ge 1.2.0-rc1 1.2.0     # a suffix is ignored, not treated as older
+  dk_ver_ge 0.09.0 0.9.0        # a leading zero is decimal, not octal
+}
 @test "dk_require_herdr passes in silence on the verified herdr series" {
   run dk_require_herdr; [ "$status" -eq 0 ]; [ -z "$output" ]
 }

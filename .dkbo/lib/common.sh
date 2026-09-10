@@ -19,12 +19,24 @@ dk_slug() {
 # layout or a watcher that silently never fires. These two say what has actually been verified.
 DK_HERDR_MIN="0.9.0"        # below this dkbo refuses to run
 DK_HERDR_VERIFIED="0.9"     # the series tests/integration/herdr-real.sh confirmed the JSON shapes of
+dk_ver_ge() { # A B → 0 when version A >= B. Pure bash: `sort -V` is a GNU extension macOS's sort may lack,
+  # and a lexical compare would call 0.10.0 older than 0.9.0. Deliberately unlike sort -V, 0.9 equals
+  # 0.9.0 here: for a version floor a short version is not an older one.
+  local a b i x y
+  IFS=. read -ra a <<< "${1%%[!0-9.]*}"   # drop any -rc1 / +build suffix
+  IFS=. read -ra b <<< "${2%%[!0-9.]*}"
+  for ((i = 0; i < ${#a[@]} || i < ${#b[@]}; i++)); do
+    x=$((10#0${a[i]:-0})) ; y=$((10#0${b[i]:-0}))   # 10# so a leading zero is decimal, not octal
+    if ((x > y)); then return 0; fi
+    if ((x < y)); then return 1; fi
+  done
+  return 0
+}
 dk_herdr_check() { # version floor + a one-shot warning above the verified series; no HERDR_ENV requirement
   local v
   v=$(herdr --version 2>/dev/null | awk 'NR==1{print $2}')
   [[ "$v" =~ ^[0-9]+\.[0-9]+ ]] || dk_die "cannot read 'herdr --version' (got '${v:-nothing}'); dkbo drives herdr for every command"
-  [ "$(printf '%s\n%s\n' "$DK_HERDR_MIN" "$v" | sort -V | head -1)" = "$DK_HERDR_MIN" ] \
-    || dk_die "herdr $v is older than the $DK_HERDR_MIN dkbo needs"
+  dk_ver_ge "$v" "$DK_HERDR_MIN" || dk_die "herdr $v is older than the $DK_HERDR_MIN dkbo needs"
   case "$v" in
     "$DK_HERDR_VERIFIED"|"$DK_HERDR_VERIFIED".*) ;;
     *) if [ -z "${DK_HERDR_WARNED:-}" ]; then
