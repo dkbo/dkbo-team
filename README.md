@@ -1,8 +1,131 @@
 # dkbo
 
-多模型 AI 開發團隊套件，可攜目錄在 `.dkbo/`。安裝、使用、更新與疑難排解全部在 **[.dkbo/README.md](.dkbo/README.md)**；把那份 README 的「給 AI 的一鍵安裝」段落貼給 Claude Code 即可安裝。
+**繁體中文** · [English](README.en.md)
 
-- 設計文件在 `docs/design/`：第一版 `2026-09-09-dkboai-ai-team-design.md`（當時套件目錄寫作 `dkboai/`，實際為 `.dkbo/`）、第二版 `2026-09-10-dkbo-wave-review-design.md`（每波審查閘、多人版面）。
+以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
+
+- 目前版本：`.dkbo/VERSION`（0.1.1），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
-- 版本：`.dkbo/VERSION`（目前 0.1.1）；變更紀錄見 `CHANGELOG.md`；安裝時以 tag 釘版（見 `.dkbo/README.md`）。
-- 測試：`tests/run.sh`（單元）、`tests/integration/`（真 herdr）、`tests/smoke/`（真 agent）、`tests/e2e/RUNBOOK.md`
+- 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
+
+## 為什麼需要它
+
+單一 agent 做中型以上的功能會撞到三個牆：上下文吃緊就開始忘事、沒有第二意見就會自我確認、改到別人的檔就會互相踩。dkbo 用三個機制回應：
+
+- **記憶外置**：任務的全部狀態（brief、process、每位員工的 state 與 report、訊息紀錄）都是檔案。領導 `/clear` 之後執行 `dk-resume` 就能接續，員工掛掉用 `--resume` 重派。
+- **多模型審查閘**：每一波實作完成，領導派 1 到 3 位不同 kind 的 reviewer 只讀差異包出意見；wave-close 會檢查裁定、每位 dev 的測試段與專案測試指令，缺一不放行。
+- **檔案所有權**：brief 裡每個成員可改的檔案 glob 不得重疊，`dk-brief-check` 事前擋、`dk-wave-close` 事後比對 touched 清單。
+
+## 運作方式
+
+```
+你 ──對話──▶ 領導（Claude Code，tab 1 左欄）
+                │  dk-task-new / dk-spawn / dk-review / dk-wave-close / dk-task-close
+                ▼
+        員工 pane（herdr 分割，各自在任務 worktree 內）
+        backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
+                │  dk-msg：[DONE] [BUG] [FIXED] [QUESTION] [ESCALATE] …
+                ▼
+        .dkbo/tasks/<日期-短名>/  brief.md · process.md · state/ · messages.log · report.md
+```
+
+**一個任務的生命週期**
+
+1. 你對領導說「開任務 login，顯示名『使用者登入』，需求是…」。
+2. 領導寫 `brief.md`：目標、驗收標準、檔案所有權、共用契約、波次表（每列一位成員，標 S/M/L 難度）。`dk-brief-check` 過了才給你確認。這是**關卡①**。
+3. 每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔，做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
+4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
+5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；不能判的問你。這是**關卡②**。
+6. qa DONE 且審查裁定完成，`dk-wave-close`：檢查裁定行、每位 dev 的 `## 測試`、跑 `DK_TEST_CMD`、比對越界，然後在 worktree 內 commit。
+7. 所有波結束，領導先做整分支評議，再寫 `report.md` 給你拍板。這是**關卡③**。`dk-task-close` 合併回主分支、移除 worktree、INDEX 記 done。
+
+**雜務**：「翻譯 README 成英文」「先修登入頁那個 bug」這類不屬於任務的小事，領導用 `dk-chore` 派一位員工，`--code` 的會在獨立 worktree 分支工作並於 `dk-chore-close` 時合併回來。雜務員工用 `dk-msg leader` 回報，腳本會等領導閒置再送，不會漏訊。
+
+**版面**：領導佔 tab 1 左欄，員工填右側 2×2 或 3×2；第 5 位起自動開新 tab，關 pane 後自動均分。
+
+## 快速開始
+
+前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`）、git、jq、bash 5、`claude` CLI（領導必要），可選 `codex`、`agy` 當第二三意見。目標專案要是乾淨的 git repo。
+
+把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code：
+
+```bash
+test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
+git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
+VER=v0.1.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+  && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+.dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+.dkbo/bin/dk-whoami   # 預期印出 leader
+```
+
+然後執行 `/dkbo-init`：它偵測已裝的 AI CLI、選主模型與第二三意見、寫 `settings.env`、預填 `PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突。細節、手動安裝與更新方式見 [.dkbo/README.md](.dkbo/README.md)。
+
+## 角色與 kind
+
+角色檔在 `.dkbo/roles/<角色>.md`，frontmatter 定義 kind 與 S/M/L 三檔（模型／effort），正文是職責與完成定義。`/dkbo-add-role` 可加新角色。
+
+| 角色 | 一句職責 |
+|---|---|
+| pm | 需求釐成可驗證的驗收標準，不寫碼 |
+| frontend / backend | 介面 / API 與資料層實作，只改自己所有權內的檔 |
+| qa | 依驗收標準驗證、送 BUG，自己不修 |
+| it | 環境、依賴、CI、合併衝突修復 |
+| reviewer | 只讀差異包出意見（規格合規 / Important / Minor），不改碼 |
+
+kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet）、`codex`（gpt-5.5）、`agy`（gemini）。reviewer 可指定不同 kind 取得真正的第二意見。
+
+## 指令一覽
+
+全部在 `.dkbo/bin/`，全部封裝 herdr，只有領導會用到；員工只用 `dk-msg`。
+
+| 指令 | 做什麼 |
+|---|---|
+| `dk-whoami` | 這個 pane 是領導還是員工 |
+| `dk-task-new` / `dk-brief-check` | 開任務目錄與 worktree；brief 的機械檢查 |
+| `dk-wave-open N` / `dk-spawn <角色>` | 開一波、切成員切片；開員工 pane 並下提示 |
+| `dk-msg <對象> "[類型] 內文"` | 等對方閒置再送訊息，記進 messages.log |
+| `dk-review-pack N` / `dk-review` | 打包差異；派 1 到 3 位 reviewer |
+| `dk-wave-close` | 三道檢查後關 pane、在 worktree 內準備 commit |
+| `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息） |
+| `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
+| `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
+| `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind |
+| `dk-leader` / `dk-version` | 開第二位領導；印版本 |
+
+## 目錄
+
+```
+.dkbo/
+  ENTRY.md            唯一入口：dk-whoami 決定讀 LEADER.md 還是角色檔
+  LEADER.md           領導規範（三個關卡、跑一波、裁定、故障處理）
+  PROTOCOL.md         通訊協定：訊息類型、升報規則、停止條件、state / report 格式
+  PROJECT.md          專案事實，≤40 行，init 預填
+  settings.env        DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS
+  roles/  kinds/      角色檔；各 AI CLI 的旗標對應
+  bin/  lib/          dk-* 腳本與共用函式
+  templates/          brief、切片、state、report、chore 範本
+  skills/             dkbo-init、dkbo-add-role（install.sh 會 symlink 進 .claude/skills 與 .agents/skills）
+  tasks/<日期-短名>/  一個任務的全部記憶
+  tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   跨任務記憶
+docs/design/          設計文件（第一版整體設計、第二版每波審查閘與多人版面）
+tests/                單元（bats，假 herdr）、整合（真 herdr）、smoke（真 agent）、e2e RUNBOOK
+example/              給 e2e RUNBOOK 用的最小 Node 專案
+```
+
+## 開發與測試
+
+```bash
+tests/run.sh                          # 單元測試，bats-core 會自動 clone 進 tests/lib；用 tests/stub 的假 herdr
+tests/integration/herdr-real.sh       # 對真 herdr 0.9.0 驗證 stub 假設的 JSON 形狀，零 token
+tests/smoke/kind-smoke.sh             # 對真 AI CLI 驗證各 kind 的旗標與提示行為
+shellcheck .dkbo/bin/* .dkbo/lib/*.sh # 目標零警告
+```
+
+`tests/e2e/RUNBOOK.md` 是人工走一次完整任務的腳本，用 `example/` 當目標專案。所有腳本改動都先寫失敗的 bats 測試再實作。
+
+## 文件
+
+- [.dkbo/README.md](.dkbo/README.md)：安裝、驗證、日常使用、更新、疑難排解
+- [.dkbo/LEADER.md](.dkbo/LEADER.md)、[.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md)：領導與員工實際照著做的規範
+- [docs/design/2026-09-09-dkboai-ai-team-design.md](docs/design/2026-09-09-dkboai-ai-team-design.md)：第一版整體設計（當時套件目錄寫作 `dkboai/`，實際為 `.dkbo/`）
+- [docs/design/2026-09-10-dkbo-wave-review-design.md](docs/design/2026-09-10-dkbo-wave-review-design.md)：第二版，每波審查閘與多人版面

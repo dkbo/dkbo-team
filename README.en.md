@@ -1,0 +1,131 @@
+# dkbo
+
+[繁體中文](README.md) · **English**
+
+A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
+
+- Current version: `.dkbo/VERSION` (0.1.1); history in [CHANGELOG.md](CHANGELOG.md)
+- Repo: https://github.com/dkbo/dkbo-team
+- Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
+
+## Why
+
+A single agent working on a medium-sized feature hits three walls: it forgets things once its context fills up, it confirms its own mistakes without a second opinion, and it steps on files that belong to someone else. dkbo answers with three mechanisms:
+
+- **Memory lives on disk.** Everything about a task (brief, process log, each worker's state and report, the message log) is a file. After `/clear` the leader runs `dk-resume` and carries on. A dead worker is re-spawned with `--resume`.
+- **A multi-model review gate on every wave.** When a wave's implementation is done the leader dispatches one to three read-only reviewers, optionally of different kinds. `dk-wave-close` refuses until a verdict is recorded, every dev report has a filled test section, and the project's test command passes.
+- **File ownership.** Each member's writable globs are declared in the brief and may not overlap. `dk-brief-check` blocks overlaps up front and `dk-wave-close` compares each worker's touched list afterwards.
+
+## How it works
+
+```
+you ──chat──▶ leader (Claude Code, left column of tab 1)
+                │  dk-task-new / dk-spawn / dk-review / dk-wave-close / dk-task-close
+                ▼
+        worker panes (herdr splits, each inside the task worktree)
+        backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
+                │  dk-msg: [DONE] [BUG] [FIXED] [QUESTION] [ESCALATE] …
+                ▼
+        .dkbo/tasks/<date-short>/  brief.md · process.md · state/ · messages.log · report.md
+```
+
+**Life of a task**
+
+1. You tell the leader: "open task login, display name 'User login', requirements are…".
+2. The leader writes `brief.md`: goal, acceptance criteria, file ownership, shared contracts, and a wave table with one row per member tagged S/M/L. It runs `dk-brief-check` and only then asks you to confirm. This is **gate 1**.
+3. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own. When done they write their state and report and send `dk-msg leader "[DONE] …"`.
+4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
+5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
+6. Once qa is done and the review has a verdict, `dk-wave-close` checks the verdict line, every dev's `## 測試` section, runs `DK_TEST_CMD`, flags out-of-ownership edits, and the wave is committed inside the worktree.
+7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
+
+**Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
+
+**Layout.** The leader owns the left column of tab 1; workers fill a 2×2 or 3×2 grid on the right. From the fifth worker a new tab is opened automatically, and closed panes trigger a re-balance.
+
+## Quick start
+
+Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`), git, jq, bash 5, the `claude` CLI (required for the leader), optionally `codex` and `agy` for second and third opinions. The target project must be a clean git repo.
+
+Paste this into a Claude Code session running inside herdr at the project root:
+
+```bash
+test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
+git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
+VER=v0.1.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+  && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+.dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+.dkbo/bin/dk-whoami   # expected: leader
+```
+
+Then run `/dkbo-init`. It detects installed AI CLIs, lets you pick the primary model and the second/third-opinion kinds, writes `settings.env`, pre-fills `PROJECT.md`, and scans your existing CLAUDE.md / AGENTS.md for rules that conflict with dkbo's. Manual install and upgrade steps are in [.dkbo/README.md](.dkbo/README.md).
+
+## Roles and kinds
+
+Role files live in `.dkbo/roles/<role>.md`. The frontmatter declares the kind and the S/M/L tiers (model and effort); the body is the job description and the definition of done. `/dkbo-add-role` adds a new one.
+
+| Role | In one line |
+|---|---|
+| pm | Turns requirements into verifiable acceptance criteria; writes no code |
+| frontend / backend | UI / API and data layer; edits only owned files |
+| qa | Verifies against the acceptance criteria and files BUGs; never fixes |
+| it | Environment, dependencies, CI, merge-conflict repair |
+| reviewer | Read-only review of the diff pack (spec compliance / Important / Minor); never edits |
+
+A kind maps an AI CLI to its flags, in `.dkbo/kinds/`: `claude` (opus / sonnet), `codex` (gpt-5.5), `agy` (gemini). Reviewers can be given a different kind from the implementers to get a genuine second opinion.
+
+## Commands
+
+All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use `dk-msg` and nothing else.
+
+| Command | What it does |
+|---|---|
+| `dk-whoami` | Is this pane the leader or a worker |
+| `dk-task-new` / `dk-brief-check` | Create the task directory and worktree; mechanical brief check |
+| `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices; open a worker pane and prompt it |
+| `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
+| `dk-review-pack N` / `dk-review` | Build the diff pack; dispatch one to three reviewers |
+| `dk-wave-close` | Three gates, then close panes and stage the wave for commit |
+| `dk-process` / `dk-resume` | Append an event; print the recovery pack (brief, current wave, rulings, unread messages) |
+| `dk-task-close` | Merge into the main branch, remove the worktree, mark INDEX done |
+| `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |
+| `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind |
+| `dk-leader` / `dk-version` | Start a second leader; print the version |
+
+## Layout of the repo
+
+```
+.dkbo/
+  ENTRY.md            the only entry point: dk-whoami decides between LEADER.md and a role file
+  LEADER.md           leader rules (three gates, running a wave, rulings, failure handling)
+  PROTOCOL.md         messaging protocol: types, escalation rules, stop conditions, state / report formats
+  PROJECT.md          project facts, ≤40 lines, pre-filled by init
+  settings.env        DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS
+  roles/  kinds/      role files; flag mappings per AI CLI
+  bin/  lib/          dk-* scripts and shared functions
+  templates/          brief, slice, state, report and chore templates
+  skills/             dkbo-init and dkbo-add-role (install.sh symlinks them into .claude/skills and .agents/skills)
+  tasks/<date-short>/ all memory for one task
+  tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   cross-task memory
+docs/design/          design documents (v1 overall design, v2 per-wave review gate and multi-pane layout)
+tests/                unit (bats, fake herdr), integration (real herdr), smoke (real agents), e2e RUNBOOK
+example/              minimal Node project used by the e2e RUNBOOK
+```
+
+## Development and testing
+
+```bash
+tests/run.sh                          # unit tests; clones bats-core into tests/lib on first run; uses the fake herdr in tests/stub
+tests/integration/herdr-real.sh       # verifies the JSON shapes the stub assumes against a real herdr 0.9.0; zero tokens
+tests/smoke/kind-smoke.sh             # verifies each kind's flags and prompt behaviour against real AI CLIs
+shellcheck .dkbo/bin/* .dkbo/lib/*.sh # target: zero warnings
+```
+
+`tests/e2e/RUNBOOK.md` walks a full task by hand with `example/` as the target project. Every script change starts with a failing bats test.
+
+## Documents
+
+- [.dkbo/README.md](.dkbo/README.md): install, verify, daily use, upgrade, troubleshooting (Traditional Chinese)
+- [.dkbo/LEADER.md](.dkbo/LEADER.md), [.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md): the rules the leader and workers actually follow
+- [docs/design/2026-09-09-dkboai-ai-team-design.md](docs/design/2026-09-09-dkboai-ai-team-design.md): v1 overall design (the package directory was called `dkboai/` at the time; it is `.dkbo/` now)
+- [docs/design/2026-09-10-dkbo-wave-review-design.md](docs/design/2026-09-10-dkbo-wave-review-design.md): v2, per-wave review gate and multi-pane layout
