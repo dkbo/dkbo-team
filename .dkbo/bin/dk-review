@@ -30,15 +30,22 @@ done
 use=$(printf '%s\n' $use | head -3 | tr '\n' ' ')
 [ -n "${use// /}" ] || { echo "dk-review: no reviewer kind available; record: dk-process \"review $n skipped: all kinds down\"" >&2; exit 1; }
 members=$(dk_brief_wave_members "$dir/brief.md" "$n" | tr '\n' ' ' | sed 's/ $//')
-aliases=(a b c); i=0; spawned=""
+aliases=(a b c); i=0; spawned=""; failed=""
 mkdir -p "$dir/briefs"
 for k in $use; do
   alias="${aliases[$i]}"; i=$((i+1)); sname="reviewer-$alias"
   dk_render "$DK_ROOT/templates/brief-reviewer.md" "DISPLAY=$DK_DISPLAY" "WAVE=$n" "DIFF=$diff" "BRIEF=$dir/brief.md" \
     "MEMBERS=$members" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
-  out=$("$DK_ROOT/bin/dk-spawn" reviewer "$alias" --isolated --kind "$k" --tier "$tier") || true   # prompt failure still leaves a live pane; dk-spawn logged it
-  if [ -n "$out" ]; then spawned="$spawned ${out%% *}($k)"; else echo "dk-review: could not spawn reviewer $alias ($k)" >&2; fi
+  if out=$("$DK_ROOT/bin/dk-spawn" reviewer "$alias" --isolated --kind "$k" --tier "$tier"); then rc=0; else rc=$?; fi
+  if [ -n "$out" ] && [ "$rc" = 0 ]; then
+    spawned="$spawned ${out%% *}($k)"
+  elif [ -n "$out" ]; then
+    spawned="$spawned ${out%% *}($k,prompt-failed)"
+    echo "dk-review: first prompt to ${out%% *} failed; herdr agent read it, then re-prompt" >&2
+  else
+    echo "dk-review: could not spawn reviewer $alias ($k)" >&2; failed="$failed $k"
+  fi
 done
-[ -n "$spawned" ] || { dk_process "review $n spawn-failed"; dk_die "no reviewer spawned; record: dk-process \"review $n skipped: all kinds down\""; }
+[ -n "$spawned" ] || dk_die "no reviewer spawned (dk-spawn failed for:$failed); check herdr, then retry dk-review or record: dk-process \"review $n skipped: <理由>\""
 dk_process "review $n spawned$spawned"
 echo "review $n:$spawned"

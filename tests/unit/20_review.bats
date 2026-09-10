@@ -36,3 +36,14 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
   run dk-review; [ "$status" -eq 1 ]; [[ "$output" == *"skip: 純文件"* ]]; [[ "$output" == *"dk-process"* ]]
   run dk-review --tier S; [ "$status" -eq 1 ]
 }
+@test "a reviewer whose first prompt failed is counted but tagged prompt-failed" {
+  open_wave 1
+  HERDR_STUB_FAIL="agent prompt" run dk-review; [ "$status" -eq 0 ]
+  [[ "$output" == *"review 1: login-reviewer-a(claude,prompt-failed)" ]]; [[ "$output" == *"re-prompt"* ]]
+  grep -q ' review 1 spawned login-reviewer-a(claude,prompt-failed)$' "$d/process.md"
+}
+@test "every spawn failing exits 1 without a spawn-failed process line" {
+  open_wave 1
+  HERDR_STUB_FAIL="agent start" run dk-review; [ "$status" -eq 1 ]
+  [[ "$output" == *"no reviewer spawned (dk-spawn failed for: claude)"* ]]; ! grep -q 'spawn-failed' "$d/process.md"; ! grep -q ' review 1 spawned' "$d/process.md"
+}
