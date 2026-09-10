@@ -32,3 +32,44 @@ dk_layout_slot() { # GROUP [PANES_FILE] → "<tab_no> <slot> <anchor> <direction
   fi
   echo "$tab $slot $anchor $dir $share"
 }
+dk__layout_amount() { awk -v d="$1" -v t="$2" 'BEGIN{printf "%.3f", d/t}'; }   # cells → fraction of the tab area (herdr --amount unit; see herdr-real.sh NOTE)
+dk_layout_even() { # TAB_NO [PANES_FILE] — equalise the tab's live employee cells; close an emptied tab ≥2. Never fails.
+  local tab="$1" panes="${2:-$(dk_task_dir)/.panes}" ids probe snap tid
+  ids=$(awk -v t="$tab" 'NF>=6 && $5==t {print $2}' "$panes")
+  if [ -z "$ids" ]; then
+    if [ "$tab" -ge 2 ]; then
+      tid=$(printf '%s\n' ${DK_TABS:-} | awk -F= -v t="$tab" '$1==t{print $2}')
+      if [ -n "$tid" ]; then
+        herdr tab close "$tid" >/dev/null 2>&1 </dev/null || true
+        dk_env_set DK_TABS "$(printf '%s\n' ${DK_TABS:-} | grep -v "^$tab=" | tr '\n' ' ' | sed 's/ $//')"
+        dk_process "tab $tab $tid closed"
+      fi
+    fi
+    return 0
+  fi
+  if [ "$tab" -eq 1 ]; then probe="${DK_ROOT_PANE:?}"; else probe=$(echo "$ids" | head -1); fi
+  snap=$(herdr pane layout --pane "$probe" 2>/dev/null </dev/null) || return 0
+  printf '%s\n' "$snap" | jq -r '.result.layout as $l | ($l.area | "AREA \(.x) \(.y) \(.width) \(.height)"), ($l.panes[] | "PANE \(.pane_id) \(.rect.x) \(.rect.y) \(.rect.width) \(.rect.height)")' 2>/dev/null \
+  | awk -v ids=" $(echo "$ids" | tr '\n' ' ')" -v leader="${DK_ROOT_PANE:-}" -v tab="$tab" '
+    $1=="AREA" {ax=$2; ay=$3; aw=$4; ah=$5; next}
+    $1=="PANE" && tab==1 && $2==leader {rx=$3+$5; next}                    # employee region starts right of the leader column
+    $1=="PANE" && index(ids, " " $2 " ") {n++; id[n]=$2; x[n]=$3; y[n]=$4; w[n]=$5; h[n]=$6}
+    END {
+      if (n==0 || aw==0 || ah==0) exit
+      if (tab==1 && rx>0) rw=ax+aw-rx; else {rx=ax; rw=aw}
+      ry=ay; rh=ah
+      for (i=1;i<=n;i++) {
+        split("", cx); split("", cy); nc=0; nr=0
+        for (j=1;j<=n;j++) {
+          if (y[j] < y[i]+h[i] && y[i] < y[j]+h[j] && !(x[j] in cx)) {cx[x[j]]=1; nc++}   # same row: distinct columns
+          if (x[j] < x[i]+w[i] && x[i] < x[j]+w[j] && !(y[j] in cy)) {cy[y[j]]=1; nr++}   # same column: distinct rows
+        }
+        dw=int(rw/nc)-w[i]; dh=int(rh/nr)-h[i]
+        if (dw>1 || dw<-1) printf "%s %s %.3f\n", id[i], (x[i]+w[i] < rx+rw ? "right" : "left"), dw/aw
+        if (dh>1 || dh<-1) printf "%s %s %.3f\n", id[i], (y[i]+h[i] < ry+rh ? "down" : "up"), dh/ah
+      }
+    }' | while read -r pid direction amount; do
+      herdr pane resize --pane "$pid" --direction "$direction" --amount "$amount" >/dev/null 2>&1 </dev/null || true
+    done
+  return 0
+}

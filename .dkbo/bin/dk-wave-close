@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 # dk-wave-close [--force]
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"; . "$DK_ROOT/lib/layout.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+if [ "${1:-}" = --agent ]; then   # close one employee (e.g. a timed-out reviewer) and re-balance its tab
+  a="${2:-}"; [ -n "$a" ] || dk_die "usage: dk-wave-close --agent <agent>"
+  line=$(awk -v a="$a" '$1==a' "$dir/.panes" | tail -1); [ -n "$line" ] || dk_die "no live pane for $a"
+  read -r _ pane _ _ tab _ <<< "$line"
+  herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+  grep -v "^$a " "$dir/.panes" > "$dir/.panes.tmp" || true; mv "$dir/.panes.tmp" "$dir/.panes"
+  dk_process "pane-close $a"
+  [ -n "${tab:-}" ] && dk_layout_even "$tab"
+  echo "closed $a"; exit 0
+fi
 force=0; [ "${1:-}" = --force ] && force=1
 [ -s "$dir/.panes" ] || dk_die "no live panes recorded in $dir/.panes"
 notdone=""

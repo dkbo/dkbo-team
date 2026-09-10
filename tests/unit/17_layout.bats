@@ -35,3 +35,24 @@ expect() { [ "$(dk_layout_slot dev "$p")" = "$1" ] || { echo "got: $(dk_layout_s
   [ "$(DK_RATIO_MEANS=new dk_layout_ratio_arg 0.5)" = "0.500" ]
   [ "$(DK_RATIO_MEANS=anchor dk_layout_ratio_arg 0.333)" = "0.333" ]
 }
+@test "dk_layout_even: equalises widths in a row, leaves spanning panes and heights alone" {
+  d=$(fixture_task login x); export DK_TASK_DIR="$d"; dk_task_env
+  printf 'a wB:p2 0 dev 1 1\nb wB:p3 0 dev 1 2\nc wB:p4 0 dev 1 3\n' > "$d/.panes"
+  dk_layout_even 1
+  grep -q '^pane layout --pane wB:p1$' "$HERDR_STUB_LOG"
+  grep -q '^pane resize --pane wB:p2 --direction right --amount -0.050$' "$HERDR_STUB_LOG"
+  grep -q '^pane resize --pane wB:p4 --direction left --amount 0.050$' "$HERDR_STUB_LOG"
+  [ "$(grep -c '^pane resize' "$HERDR_STUB_LOG")" -eq 2 ]
+}
+@test "dk_layout_even: an emptied tab ≥2 is closed and dropped from DK_TABS" {
+  d=$(fixture_task login x); export DK_TASK_DIR="$d"; sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t2 3=wB:t3"/' "$d/.task.env"; dk_task_env
+  printf 'a wB:p2 0 dev 1 1\nz wB:p20 0 review 3 1\n' > "$d/.panes"
+  dk_layout_even 2
+  grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; grep -q '^DK_TABS="3=wB:t3"$' "$d/.task.env"; grep -q 'tab 2 wB:t2 closed' "$d/process.md"
+  ! grep -q '^pane layout' "$HERDR_STUB_LOG"
+}
+@test "dk_layout_even: herdr failure is swallowed; legacy rows are ignored" {
+  d=$(fixture_task login x); export DK_TASK_DIR="$d"; dk_task_env
+  printf 'a wB:p2\nb wB:p3 0 dev 1 2\n' > "$d/.panes"
+  HERDR_STUB_FAIL="pane layout" dk_layout_even 1; ! grep -q '^pane resize' "$HERDR_STUB_LOG"
+}

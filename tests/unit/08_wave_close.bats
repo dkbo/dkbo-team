@@ -36,3 +36,10 @@ teardown() { teardown_project; }
   ! dk_owned "$d/brief.md" qa docs/x.md
   dk_owned "$d/brief.md" qa-a docs/x.md
 }
+@test "--agent closes one pane, drops its row, re-balances its tab" {
+  printf 'login-frontend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
+  run dk-wave-close --agent login-qa; [ "$status" -eq 0 ]; [ "$output" = "closed login-qa" ]
+  grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"; ! grep -q '^login-qa ' "$d/.panes"; grep -q '^login-frontend ' "$d/.panes"
+  grep -q 'pane-close login-qa' "$d/process.md"; grep -q '^pane layout --pane wB:p1$' "$HERDR_STUB_LOG"
+  run dk-wave-close --agent nobody; [ "$status" -eq 1 ]
+}
