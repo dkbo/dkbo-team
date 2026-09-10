@@ -26,14 +26,14 @@ tick() {
   done < "$dir/.panes"
   dk_task_env   # pick up DK_KIND_DOWN changes made since the watcher started (settings.env is read once at start)
   while read -r agent _pane epoch group _; do   # reviewer timeout (spec §3.2)
-    [ "${group:-}" = review ] && [[ "$agent" == *-reviewer-* ]] && [[ "${epoch:-}" =~ ^[0-9]+$ ]] || continue
+    [ "${group:-}" = review ] && [[ "$agent" == *-reviewer-* || "$agent" == *-reviewer ]] && [[ "${epoch:-}" =~ ^[0-9]+$ ]] || continue
     m="$dir/.blocked/$agent.timeout"; [ ! -f "$m" ] || continue
     sf="$dir/state/${agent#"$DK_SHORT"-}.md"; if [ -f "$sf" ] && grep -q '^status: done' "$sf"; then continue; fi
     [ $((now - epoch)) -gt $((DK_REVIEW_TIMEOUT_MIN * 60)) ] || continue
     raw=$(herdr agent read "$agent" --lines 30 2>/dev/null </dev/null || true)
     txt=$(printf '%s' "$raw" | jq -r '.result.read.text // .result.text // empty' 2>/dev/null || true); txt="${txt:-$raw}"
     tag=""; printf '%s' "$txt" | grep -qiE 'rate limit|quota|429|usage limit' && tag=" (quota?)"
-    kind=$(sed -n "s/^[^ ]* spawn $agent (\([a-z0-9_-]*\) .*/\1/p" "$dir/process.md" | tail -1)
+    kind=$(sed -n "s/^[^ ]* spawn $agent (\([a-z0-9_-]*\) .*/\1/p" "$dir/process.md" 2>/dev/null | tail -1 || true)
     herdr notification show "dkboai: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
     herdr agent prompt "$(dk_leader_name)" "[TIMEOUT] from dk-watch: $agent 逾時${tag}" >/dev/null 2>&1 </dev/null || true
     if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then

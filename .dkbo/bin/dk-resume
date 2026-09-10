@@ -16,7 +16,7 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   if [ -n "${DK_WAVE:-}" ]; then
     echo "wave: $DK_WAVE  base: $(sed -n "s/^[^ ]* wave-open $DK_WAVE base \([0-9a-f]*\).*/\1/p" "$dir/process.md" | tail -1)  kinds down: ${DK_KIND_DOWN:-無}"
     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
-      NF>=6 && $4=="review" && index($1, "-reviewer-") {
+      NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"
         while ((getline l < sf) > 0) if (l ~ /^status: /) st=substr(l, 9); close(sf)
         printf "%s %s %d min%s\n", $1, st, (now-$3)/60, ((now-$3) > t*60 && st!="done") ? " TIMEOUT?" : "" }' "$dir/.panes"

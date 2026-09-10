@@ -55,12 +55,16 @@ dk_settings() { # load .dkbo/settings.env over the defaults; warn once per proce
   fi
   export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_SETTINGS_WARNED
 }
-dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env (append when the key is missing)
-  local d f; d=$(dk_task_dir) || return 1; f="$d/.task.env"
+dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env (append when missing). flock-serialised: dk-watch (background) and the leader's scripts both write this file.
+  local d f lock; d=$(dk_task_dir) || return 1; f="$d/.task.env"; lock="$DK_ROOT/.sessions/$(basename "$d").lock"
   case "$2" in *[\"\\\$\`]*) dk_die "dk_env_set $1: value must not contain \" \\ \$ or backtick";; esac
-  if grep -q "^$1=" "$f"; then
-    awk -v k="$1" -v v="$2" 'index($0, k "=")==1 {print k "=\"" v "\""; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-  else echo "$1=\"$2\"" >> "$f"; fi
+  mkdir -p "$DK_ROOT/.sessions"
+  (
+    flock -w 5 9 || echo "dk_env_set: lock timeout on $lock; writing anyway" >&2
+    if grep -q "^$1=" "$f"; then
+      awk -v k="$1" -v v="$2" 'index($0, k "=")==1 {print k "=\"" v "\""; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+    else echo "$1=\"$2\"" >> "$f"; fi
+  ) 9>"$lock"
 }
 dk_legacy_task() { # task folder created before the wave-review scripts
   local d; d=$(dk_task_dir) || return 1; ! grep -q '^DK_BASE=' "$d/.task.env"

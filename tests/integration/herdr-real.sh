@@ -36,7 +36,7 @@ else echo "NOTE --ratio 0.3 made the ANCHOR narrower → --ratio is the anchor's
 rz=$($H pane resize --pane "$troot" --direction right --amount 0.1 2>&1)
 w_after=$(echo "$rz" | jq -r --arg p "$troot" '.result.resize.layout.panes[] | select(.pane_id==$p) | .rect.width' 2>/dev/null)
 [ -n "$w_after" ] && ok "pane resize returns .result.resize.layout" || fail "pane resize shape: $(echo "$rz" | head -c 300)"
-[ -n "$w_after" ] && echo "NOTE resize --amount 0.1 changed width by $((w_after - w_root)) cells of area $aw (a fraction would give ≈$((aw/10))); if the unit is cells, change dk__layout_amount to print whole cells"
+[ -n "$w_after" ] && echo "NOTE resize --amount 0.1 changed width by $(( ${w_after:-0} - ${w_root:-0} )) cells of area $aw (a fraction would give ≈$(( ${aw:-0} / 10 ))); if the unit is cells, change dk__layout_amount to print whole cells"
 # 4 cells, close 1, layout still parseable (dk_layout_even reads exactly these fields)
 s3=$($H pane split --pane "$troot" --direction down --ratio 0.5 --cwd "$tmp" --no-focus 2>&1); p3=$(echo "$s3" | jq -r '.result.pane.pane_id // empty')
 s4=$($H pane split --pane "$p2" --direction down --ratio 0.5 --cwd "$tmp" --no-focus 2>&1); p4=$(echo "$s4" | jq -r '.result.pane.pane_id // empty')

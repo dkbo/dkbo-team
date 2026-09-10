@@ -94,3 +94,9 @@ R
 @test "task.env template carries the new keys" {
   for k in DK_BASE DK_WAVE DK_KIND_DOWN DK_TABS; do grep -q "^$k=" "$DK_ROOT/templates/task.env"; done
 }
+@test "dk_env_set survives 20 concurrent writers without losing a key" {
+  d=$(fixture_task login x)
+  for i in $(seq 1 20); do ( dk_env_set "DK_K$i" "$i" ) & done; wait
+  for i in $(seq 1 20); do grep -q "^DK_K$i=\"$i\"$" "$d/.task.env"; done
+  [ -f "$DK_ROOT/.sessions/$(basename "$d").lock" ]
+}

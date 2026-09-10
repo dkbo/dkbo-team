@@ -31,3 +31,7 @@ teardown() { teardown_project; }
   grep -q '^## 測試' "$DK_ROOT/templates/report-employee.md"; grep -q '{{AGENT}}' "$DK_ROOT/templates/report-employee.md"
   grep -q '^report:' "$DK_ROOT/templates/state.md"
 }
+@test "readers fail loudly on a missing brief" {
+  run dk_brief_owners /nonexistent/brief.md; [ "$status" -eq 1 ]; [[ "$output" == *"no brief at"* ]]
+  run dk_brief_acceptance /nonexistent/brief.md; [ "$status" -eq 1 ]
+}

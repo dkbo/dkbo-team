@@ -4,7 +4,8 @@ set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
 n="${1:-}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-wave-open <N>"
-[ ! -s "$dir/.panes" ] || dk_die "live panes remain; run dk-wave-close first"
+live=$(awk 'NF>=6 && $5==0 {next} NF>0 {n++} END{print n+0}' "$dir/.panes")   # worktree:false advisors (tab 0) are not wave members
+[ "$live" -eq 0 ] || dk_die "live panes remain ($live); run dk-wave-close first"
 [ -z "${DK_WAVE:-}" ] || dk_die "wave $DK_WAVE is open; run dk-wave-close first"
 ! grep -q " wave-open $n " "$dir/process.md" || dk_die "wave $n was already opened (see process.md)"
 brief="$dir/brief.md"
