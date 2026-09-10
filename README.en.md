@@ -45,7 +45,7 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 
 ## Quick start
 
-Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`), git, jq, bash 5, the `claude` CLI (required for the leader), optionally `codex` and `agy` for second and third opinions. The target project must be a clean git repo.
+Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git, jq, bash 5, the `claude` CLI (required for the leader), optionally `codex` and `agy` for second and third opinions. The target project must be a clean git repo.
 
 Paste this into a Claude Code session running inside herdr at the project root:
 

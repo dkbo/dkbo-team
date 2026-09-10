@@ -14,7 +14,26 @@ dk_slug() {
   s=$(printf '%s' "$1" | tr '\n[:upper:]' ' [:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^[^a-z]+//; s/-{2,}/-/g; s/-$//')
   printf '%s' "${s:0:32}"
 }
-dk_require_herdr() { [ "${HERDR_ENV:-}" = 1 ] || dk_die "not running inside herdr (HERDR_ENV!=1)"; }
+# dkbo drives herdr for everything and its herdr failures are deliberately swallowed
+# (dk_layout_even || true, agent list || return 0), so a wrong herdr shows up as a crooked
+# layout or a watcher that silently never fires. These two say what has actually been verified.
+DK_HERDR_MIN="0.9.0"        # below this dkbo refuses to run
+DK_HERDR_VERIFIED="0.9"     # the series tests/integration/herdr-real.sh confirmed the JSON shapes of
+dk_herdr_check() { # version floor + a one-shot warning above the verified series; no HERDR_ENV requirement
+  local v
+  v=$(herdr --version 2>/dev/null | awk 'NR==1{print $2}')
+  [[ "$v" =~ ^[0-9]+\.[0-9]+ ]] || dk_die "cannot read 'herdr --version' (got '${v:-nothing}'); dkbo drives herdr for every command"
+  [ "$(printf '%s\n%s\n' "$DK_HERDR_MIN" "$v" | sort -V | head -1)" = "$DK_HERDR_MIN" ] \
+    || dk_die "herdr $v is older than the $DK_HERDR_MIN dkbo needs"
+  case "$v" in
+    "$DK_HERDR_VERIFIED"|"$DK_HERDR_VERIFIED".*) ;;
+    *) if [ -z "${DK_HERDR_WARNED:-}" ]; then
+         echo "dk: herdr $v is newer than the $DK_HERDR_VERIFIED.x series dkbo verified; run tests/integration/herdr-real.sh (zero tokens) to confirm the JSON shapes" >&2
+         DK_HERDR_WARNED=1; export DK_HERDR_WARNED
+       fi;;
+  esac
+}
+dk_require_herdr() { [ "${HERDR_ENV:-}" = 1 ] || dk_die "not running inside herdr (HERDR_ENV!=1)"; dk_herdr_check; }
 dk_json() { jq -r "$1"; }
 
 dk_task_dir() {

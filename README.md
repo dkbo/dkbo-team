@@ -45,7 +45,7 @@
 
 ## 快速開始
 
-前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`）、git、jq、bash 5、`claude` CLI（領導必要），可選 `codex`、`agy` 當第二三意見。目標專案要是乾淨的 git repo。
+前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git、jq、bash 5、`claude` CLI（領導必要），可選 `codex`、`agy` 當第二三意見。目標專案要是乾淨的 git repo。
 
 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code：
 

@@ -8,6 +8,30 @@ teardown() { teardown_project; }
   [ "$(dk_slug "$(printf 'a%.0s' {1..40})")" = "$(printf 'a%.0s' {1..32})" ]
 }
 
+@test "dk_require_herdr passes in silence on the verified herdr series" {
+  run dk_require_herdr; [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+@test "dk_require_herdr still dies outside a herdr pane" {
+  HERDR_ENV=0 run dk_require_herdr; [ "$status" -eq 1 ]; [[ "$output" == *HERDR_ENV* ]]
+}
+@test "dk_require_herdr dies when herdr's version cannot be read" {
+  HERDR_STUB_VERSION= run dk_require_herdr; [ "$status" -eq 1 ]; [[ "$output" == *"herdr --version"* ]]
+  HERDR_STUB_VERSION=garbage run dk_require_herdr; [ "$status" -eq 1 ]; [[ "$output" == *"herdr --version"* ]]
+}
+@test "dk_require_herdr dies below the floor, passes at exactly the floor" {
+  HERDR_STUB_VERSION=0.8.9 run dk_require_herdr
+  [ "$status" -eq 1 ]; [[ "$output" == *"older than"* ]]; [[ "$output" == *0.8.9* ]]
+  HERDR_STUB_VERSION="$DK_HERDR_MIN" run dk_require_herdr; [ "$status" -eq 0 ]
+  HERDR_STUB_VERSION=0.10.0 run dk_require_herdr; [ "$status" -eq 0 ]   # 0.10 > 0.9 numerically, not lexically
+}
+@test "dk_require_herdr warns once when herdr is newer than the verified series" {
+  HERDR_STUB_VERSION=1.2.0 run dk_require_herdr
+  [ "$status" -eq 0 ]; [[ "$output" == *"newer than"* ]]; [[ "$output" == *herdr-real.sh* ]]
+  export HERDR_STUB_VERSION=1.2.0
+  dk_require_herdr 2>/dev/null            # marks this process tree as warned
+  run dk_require_herdr; [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+
 @test "dk_task_dir dies when unbound" {
   run dk_task_dir
   [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]

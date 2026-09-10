@@ -3,6 +3,13 @@
 set -uo pipefail
 [ "${HERDR_ENV:-}" = 1 ] || { echo "run inside herdr"; exit 2; }
 ok(){ echo "OK   $*"; }; fail(){ echo "FAIL $*"; rc=1; }; rc=0
+# shellcheck disable=SC1091
+. "$(dirname "$0")/../../.dkbo/lib/common.sh"
+hv=$(herdr --version 2>/dev/null | awk 'NR==1{print $2}')
+case "$hv" in
+  "$DK_HERDR_VERIFIED"|"$DK_HERDR_VERIFIED".*) ok "herdr $hv is the series dkbo declares verified";;
+  *) echo "NOTE herdr $hv is outside the verified $DK_HERDR_VERIFIED.x series; if everything below passes, bump DK_HERDR_VERIFIED in .dkbo/lib/common.sh";;
+esac
 tmp=$(mktemp -d); git -C "$tmp" init -q; git -C "$tmp" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
 H="herdr --session dktest"
 ws=$($H workspace create --cwd "$tmp" --no-focus 2>&1) || { echo "$ws"; fail "workspace create"; exit 1; }

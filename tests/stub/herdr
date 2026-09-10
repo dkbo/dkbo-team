@@ -4,6 +4,8 @@ set -uo pipefail
 log="${HERDR_STUB_LOG:?}"
 printf '%s\n' "$*" >> "$log"
 cmd="${1:-}"; sub="${2:-}"
+# HERDR_STUB_VERSION lets a test pretend to be any herdr; unset means the version dkbo verified.
+if [ "$cmd" = --version ]; then echo "herdr ${HERDR_STUB_VERSION-0.9.0}"; exit 0; fi
 key="${cmd}_${sub}"
 if [ "${HERDR_STUB_FAIL:-}" = "$cmd $sub" ]; then
   echo '{"error":{"code":"stubbed_failure"}}' >&2; exit 1

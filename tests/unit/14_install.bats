@@ -13,6 +13,11 @@ teardown() { teardown_project; }
   run .dkbo/install.sh; [ "$status" -eq 0 ]
   [ "$(grep -c '^@AGENTS.md$' CLAUDE.md)" -eq 1 ]
 }
+@test "install refuses an herdr below the floor and does not require a herdr pane" {
+  HERDR_STUB_VERSION=0.8.0 run .dkbo/install.sh
+  [ "$status" -ne 0 ]; [[ "$output" == *"older than"* ]]; [ ! -e .claude/skills/dkbo-init ]
+  HERDR_ENV=0 run .dkbo/install.sh; [ "$status" -eq 0 ]   # installing from a plain shell stays allowed
+}
 @test "install appends to an existing CLAUDE.md and AGENTS.md" {
   echo '# my project' > CLAUDE.md; echo '# agents rules' > AGENTS.md; .dkbo/install.sh >/dev/null
   head -1 CLAUDE.md | grep -q '# my project'; grep -q '^@AGENTS.md$' CLAUDE.md
