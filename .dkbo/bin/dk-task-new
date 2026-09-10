@@ -29,6 +29,12 @@ if [ "$worktree" = 1 ]; then
   [ ! -e "$wt_path" ] || dk_die "worktree path exists: $wt_path"
   mkdir -p "$(dirname "$wt_path")"
   git -C "$DK_PROJECT_ROOT" worktree add -q -b "$branch" "$wt_path" "$base_sha" >/dev/null 2>&1 || dk_die "git worktree add failed (branch $branch exists? run: git branch -D $branch)"
+  rollback() { # any later step dying must not leave a worktree, branch or half-written task folder behind
+    git -C "$DK_PROJECT_ROOT" worktree remove --force "$wt_path" >/dev/null 2>&1 || true
+    git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+    rm -rf "$dir"; [ -z "${HERDR_PANE_ID:-}" ] || rm -f "$DK_ROOT/.sessions/$HERDR_PANE_ID"
+  }
+  trap rollback EXIT
 else
   wt_path="$DK_PROJECT_ROOT"
 fi
@@ -47,6 +53,7 @@ if [ -z "$current" ] && ! herdr agent rename "$HERDR_PANE_ID" "leader-$short" >/
   dk_process "rename failed (pane without agent?)"
 fi
 dk_index_add "$date" "$display" task planning "—"
+trap - EXIT   # task fully recorded; keep the worktree
 
 if [ -x "$DK_ROOT/bin/dk-watch" ] && [ -z "${DK_NO_WATCH:-}" ]; then
   # close fd 3 and stdin so bats/herdr never wait on the detached watcher

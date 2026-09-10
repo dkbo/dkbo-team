@@ -66,3 +66,13 @@ teardown() { teardown_project; }
 @test "task-new --no-worktree still records DK_BASE" {
   run dk-task-new login x --no-worktree; [ "$status" -eq 0 ]; grep -q "^DK_WORKTREE=\"$PROJECT\"$" "$output/.task.env"; grep -Eq '^DK_BASE="[0-9a-f]{40}"$' "$output/.task.env"
 }
+@test "task-new removes its worktree and branch when a later step fails" {
+  rm "$DK_ROOT/templates/process.md"
+  run dk-task-new login x; [ "$status" -ne 0 ]
+  [ ! -d "$WORKTREE_PATH" ]
+  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+  ! git -C "$PROJECT" rev-parse --verify -q dk/login
+  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]; [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+  cp "$REPO_ROOT/.dkbo/templates/process.md" "$DK_ROOT/templates/process.md"
+  run dk-task-new login x; [ "$status" -eq 0 ]   # same short name works again afterwards
+}

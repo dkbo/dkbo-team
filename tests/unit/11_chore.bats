@@ -13,13 +13,24 @@ teardown() { teardown_project; }
   grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
   ! grep -q '^worktree create' "$HERDR_STUB_LOG"
 }
-@test "chore --code makes a worktree branch and numbers agents" {
+@test "chore --code makes a native git worktree branch and numbers agents" {
   dk-chore frontend "first" >/dev/null
   run dk-chore frontend "修登入頁 Safari 版面" --code
   [ "$status" -eq 0 ]
-  grep -q '^worktree create --branch chore/.* --base main --cwd .* --no-focus$' "$HERDR_STUB_LOG"
+  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
+  wt="$PROJECT/.worktrees/chore-safari"
+  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+  [ "$(git -C "$wt" rev-parse --abbrev-ref HEAD)" = chore/safari ]
+  split=$(grep '^pane split' "$HERDR_STUB_LOG" | tail -1); [[ "$split" == *"--current --direction right --cwd $wt --no-focus"* ]]
   grep -q '^agent start chore-frontend-2 ' "$HERDR_STUB_LOG"
-  f=$(grep -l 'chore-frontend-2' "$DK_ROOT/tasks/_chores/"*.md); grep -q '^branch: chore/' "$f"; grep -q '^workspace: wC$' "$f"; grep -q '^pane: wC:p2$' "$f"
+  f=$(grep -l 'chore-frontend-2' "$DK_ROOT/tasks/_chores/"*.md); grep -q '^branch: chore/safari$' "$f"; grep -q '^workspace: -$' "$f"; grep -q '^pane: wC:p2$' "$f"
+}
+@test "chore --code honours DK_WORKTREE_DIR and refuses a live duplicate slug" {
+  DK_WORKTREE_DIR="$PROJECT/wt" run dk-chore frontend "fix" --code; [ "$status" -eq 0 ]
+  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $PROJECT/wt/chore-fix"
+  run dk-chore frontend "fix" --code; [ "$status" -eq 1 ]; [[ "$output" == *"chore/fix"* ]]
+  [ "$(ls "$DK_ROOT/tasks/_chores/"*.md | wc -l)" -eq 1 ]   # no second chore file, no second pane
+  [ "$(grep -c '^pane split' "$HERDR_STUB_LOG")" -eq 1 ]
 }
 @test "chore-close without code: closes pane, marks index done" {
   dk-chore frontend "翻譯 README" >/dev/null
@@ -28,20 +39,37 @@ teardown() { teardown_project; }
   grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
   grep -q '| 翻譯 README | chore | done | docs/README.en.md |' "$DK_ROOT/tasks/INDEX.md"
 }
-@test "chore-close --code: merges branch, removes worktree" {
-  git -C "$PROJECT" branch chore/fix; git -C "$PROJECT" checkout -q chore/fix; echo x > "$PROJECT/x.txt"
-  git -C "$PROJECT" add x.txt; git -C "$PROJECT" commit -q -m fix; git -C "$PROJECT" checkout -q main
-  dk-chore frontend "fix" --code >/dev/null
+@test "chore-close --code: merges branch, removes worktree, deletes branch" {
+  dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
+  echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
   f=$(grep -l 'chore-frontend-1' "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/' "$f"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
-  [ -f "$PROJECT/x.txt" ]; grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
+  [ -f "$PROJECT/x.txt" ]; git -C "$PROJECT" log --oneline -1 | grep -q 'chore: fix'
+  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
+  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
   grep -Eq '\| fix \| chore \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
 }
-@test "chore-close refuses when not done; --abandon skips merge and deletes branch" {
-  dk-chore frontend "fix" --code >/dev/null; git -C "$PROJECT" branch chore/fix
+@test "chore-close --code refuses when the worktree has uncommitted changes" {
+  dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"; echo dirty > "$wt/y.txt"
+  f=$(grep -l 'chore-frontend-1' "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/' "$f"
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
+  [ -f "$wt/y.txt" ]; git -C "$PROJECT" rev-parse --verify -q chore/fix; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  grep -q '^status: done' "$f"; grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "chore-close refuses when not done; --abandon skips merge, removes worktree and branch" {
+  dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]
   run dk-chore-close chore-frontend-1 --abandon; [ "$status" -eq 0 ]
-  ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
+  [ ! -d "$wt" ]; ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "legacy chore with a herdr workspace is still removed through herdr and pruned" {
+  dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
+  f=$(grep -l 'chore-frontend-1' "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/; s/^workspace: -$/workspace: wC/' "$f"
+  rm -rf "$wt"   # herdr (stub) owns the directory in the legacy flow; simulate it having removed it
+  run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+  grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
+  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"   # pruned
 }
 @test "instruction containing a pipe still round-trips through INDEX" {
   dk-chore frontend "翻譯 a|b 文件" >/dev/null

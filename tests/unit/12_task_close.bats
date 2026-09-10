@@ -57,3 +57,15 @@ teardown() { teardown_project; }
   echo '# r' > "$d/report.md"; sed -i '/^DK_BASE=/d; s/^DK_WORKSPACE=.*/DK_WORKSPACE="wC"/' "$d/.task.env"
   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"legacy"* ]]; grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
 }
+@test "task-close deletes the merged task branch" {
+  echo '# r' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  ! git -C "$PROJECT" rev-parse --verify -q dk/login
+}
+@test "task-close refuses when the worktree has uncommitted changes" {
+  echo '# r' > "$d/report.md"; echo dirty > "$WORKTREE_PATH/g.txt"
+  run dk-task-close; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
+  [ -d "$WORKTREE_PATH" ]; [ -f "$WORKTREE_PATH/g.txt" ]   # nothing discarded
+  git -C "$PROJECT" rev-parse --verify -q dk/login; [ -f "$DK_ROOT/.sessions/wB:p1" ]
+  ! git -C "$PROJECT" log --oneline -1 | grep -q 'task login'
+}

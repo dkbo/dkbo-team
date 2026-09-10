@@ -25,6 +25,9 @@ if [ "$abandon" = 1 ]; then
   cleanup; git -C "$DK_PROJECT_ROOT" branch -D "$DK_BRANCH" >/dev/null 2>&1 || true
   dk_index_set "$DK_DISPLAY" abandoned "$reason"; dk_process "task-close abandoned: $reason"; echo abandoned; exit 0
 fi
+if [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ] && [ -d "$DK_WORKTREE" ] && [ -n "$(git -C "$DK_WORKTREE" status --porcelain 2>/dev/null)" ]; then
+  echo "dk-task-close: $DK_WORKTREE has uncommitted changes; commit them in the worktree first (or --abandon to discard)"; exit 1
+fi
 if [ "$DK_WORKTREE" = "$DK_PROJECT_ROOT" ]; then   # --no-worktree task: work already on the current branch, nothing to merge
   sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD); cleanup
   dk_index_set "$DK_DISPLAY" "done" "in-tree $sha"; dk_process "task-close in-tree $sha"; echo "closed $sha"; exit 0
@@ -34,5 +37,5 @@ if ! git -C "$DK_PROJECT_ROOT" merge --no-ff "$DK_BRANCH" -m "task $DK_SHORT: $D
   dk_process "merge-conflict $DK_BRANCH"; echo "dk-task-close: merge conflict on $DK_BRANCH; ask the human or run an it repair wave"; exit 3
 fi
 sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD)
-cleanup
+cleanup; git -C "$DK_PROJECT_ROOT" branch -d "$DK_BRANCH" >/dev/null 2>&1 || true   # merged above, so -d is safe
 dk_index_set "$DK_DISPLAY" "done" "merged $sha"; dk_process "task-close merged $sha"; echo "merged $sha"

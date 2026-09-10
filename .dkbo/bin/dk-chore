@@ -19,14 +19,19 @@ n=$(( $(compgen -G "$DK_ROOT/tasks/_chores/*.md" | wc -l || true) + 1 ))
 agent="chore-$role-$n"; slug=$(dk_slug "${instr:0:24}"); slug="${slug:-chore$n}"
 [[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || dk_die "agent name '$agent' must match [a-z][a-z0-9_-]{0,31} (shorten the role)"
 cf="$DK_ROOT/tasks/_chores/$(dk_today)-$slug.md"; [ ! -e "$cf" ] || cf="${cf%.md}-$n.md"
-branch="-"; ws="-"; split_from=(--current)
+branch="-"; ws="-"; split_from=(--current)   # ws stays "-": code chores use a plain git worktree, same as tasks (see dk-task-new)
 if [ "$code" = 1 ]; then
-  branch="chore/$slug"; base=$(git -C "$DK_PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
-  out=$(herdr worktree create --branch "$branch" --base "$base" --cwd "$DK_PROJECT_ROOT" --no-focus)
-  cwd=$(echo "$out" | dk_json '.result.path // empty'); root=$(echo "$out" | dk_json '.result.root_pane.pane_id')
-  ws=$(echo "$out" | dk_json '.result.workspace.workspace_id')
-  [ -n "$cwd" ] || cwd=$(git -C "$DK_PROJECT_ROOT" worktree list --porcelain | awk -v b="refs/heads/$branch" '$1=="worktree"{p=$2} $1=="branch"&&$2==b{print p}')
-  split_from=(--pane "$root")
+  branch="chore/$slug"; cwd="${DK_WORKTREE_DIR:-$DK_PROJECT_ROOT/.worktrees}/chore-$slug"
+  if [ -e "$cwd" ] || git -C "$DK_PROJECT_ROOT" rev-parse --verify -q "$branch" >/dev/null; then
+    dk_die "chore branch $branch or worktree $cwd already exists (an unclosed chore? run dk-chore-close, or: git worktree remove $cwd; git branch -D $branch)"
+  fi
+  mkdir -p "$(dirname "$cwd")"
+  git -C "$DK_PROJECT_ROOT" worktree add -q -b "$branch" "$cwd" HEAD >/dev/null 2>&1 || dk_die "git worktree add failed for $branch"
+  rollback() { # any later step dying must not leave the worktree or branch behind
+    git -C "$DK_PROJECT_ROOT" worktree remove --force "$cwd" >/dev/null 2>&1 || true
+    git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+  }
+  trap rollback EXIT
 fi
 direction=$(dk_fm "$rf" split); direction="${direction:-right}"
 leader=$(herdr agent get "${HERDR_PANE_ID:?}" 2>/dev/null | dk_json '.result.agent.name // empty' || true); leader="${leader:-$HERDR_PANE_ID}"
@@ -46,4 +51,5 @@ prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/role
 prompt="$prompt 完成後執行：$DK_ROOT/bin/dk-msg leader \"[DONE] <一句結果>\"（它會等領導閒置再送）。"
 herdr agent prompt "$agent" "$prompt" --wait --timeout 60000 >/dev/null
 dk_index_add "$(dk_today)" "${instr%%$'\n'*}" chore working "$cf"   # first line only; dk-chore-close matches the same
+trap - EXIT   # chore fully started; keep the worktree
 echo "$agent $pane $cf"
