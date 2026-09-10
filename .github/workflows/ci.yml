@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: bats
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # tests/run.sh clones bats-core itself and uses tests/stub as a fake herdr,
+      # so jq, flock, git and bash 5 from the runner image are all it needs.
+      - run: tests/run.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck --version
+      - run: shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh
+
+  release:
+    name: tag matches VERSION
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, shellcheck]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver=$(tr -d '[:space:]' < .dkbo/VERSION)
+          [ "$tag" = "$ver" ] || { echo "tag $GITHUB_REF_NAME does not match .dkbo/VERSION $ver"; exit 1; }
+          grep -q "^## $ver " CHANGELOG.md || { echo "CHANGELOG.md has no '## $ver' entry"; exit 1; }
+          echo "release $ver ok"

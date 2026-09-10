@@ -118,10 +118,12 @@ example/              minimal Node project used by the e2e RUNBOOK
 tests/run.sh                          # unit tests; clones bats-core into tests/lib on first run; uses the fake herdr in tests/stub
 tests/integration/herdr-real.sh       # verifies the JSON shapes the stub assumes against a real herdr 0.9.0; zero tokens
 tests/smoke/kind-smoke.sh             # verifies each kind's flags and prompt behaviour against real AI CLIs
-shellcheck .dkbo/bin/* .dkbo/lib/*.sh # target: zero warnings
+shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # target: zero warnings
 ```
 
 `tests/e2e/RUNBOOK.md` walks a full task by hand with `example/` as the target project. Every script change starts with a failing bats test.
+
+The unit tests and shellcheck run on every push and pull request via [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (version-string consistency is one of the bats tests). Pushing a `v*` tag additionally checks that the tag matches `.dkbo/VERSION` and that CHANGELOG.md has an entry for it.
 
 ## Documents
 

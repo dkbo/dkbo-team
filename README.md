@@ -118,10 +118,12 @@ example/              給 e2e RUNBOOK 用的最小 Node 專案
 tests/run.sh                          # 單元測試，bats-core 會自動 clone 進 tests/lib；用 tests/stub 的假 herdr
 tests/integration/herdr-real.sh       # 對真 herdr 0.9.0 驗證 stub 假設的 JSON 形狀，零 token
 tests/smoke/kind-smoke.sh             # 對真 AI CLI 驗證各 kind 的旗標與提示行為
-shellcheck .dkbo/bin/* .dkbo/lib/*.sh # 目標零警告
+shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # 目標零警告
 ```
 
 `tests/e2e/RUNBOOK.md` 是人工走一次完整任務的腳本，用 `example/` 當目標專案。所有腳本改動都先寫失敗的 bats 測試再實作。
+
+單元測試與 shellcheck 由 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在每次 push 與 PR 上跑（版本字串一致性是其中一個 bats 測試）；推 `v*` tag 時另驗 tag 等於 `.dkbo/VERSION` 且 CHANGELOG 有該版條目。
 
 ## 文件
 
