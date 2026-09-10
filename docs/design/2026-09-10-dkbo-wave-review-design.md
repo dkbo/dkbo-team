@@ -2,7 +2,7 @@
 
 日期：2026-09-10
 狀態：待審
-前置：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`（原設計；該文件寫 `dkboai/` 之處，實際目錄為 `.dkbo/`）
+前置：`docs/design/2026-09-09-dkboai-ai-team-design.md`（原設計；該文件寫 `dkboai/` 之處，實際目錄為 `.dkbo/`）
 
 ## 1. 目標與範圍
 

@@ -2,7 +2,9 @@
 
 多模型 AI 開發團隊套件，可攜目錄在 `.dkbo/`。安裝、使用、更新與疑難排解全部在 **[.dkbo/README.md](.dkbo/README.md)**；把那份 README 的「給 AI 的一鍵安裝」段落貼給 Claude Code 即可安裝。
 
-- 設計規格：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`
-- 實作計畫：`docs/superpowers/plans/2026-09-10-dkboai-ai-team.md`
+- 設計規格：`docs/design/2026-09-09-dkboai-ai-team-design.md`
+- 實作計畫：`docs/history/plans/2026-09-10-dkboai-ai-team.md`
+- 第二版設計（每波審查閘、多人版面）：`docs/design/2026-09-10-dkbo-wave-review-design.md`
 - Repo：https://github.com/dkbo/dkbo-team
+- 版本：`.dkbo/VERSION`（目前 0.1.0）；變更紀錄見 `CHANGELOG.md`；安裝時以 tag 釘版（見 `.dkbo/README.md`）。
 - 測試：`tests/run.sh`（單元）、`tests/integration/`（真 herdr）、`tests/smoke/`（真 agent）、`tests/e2e/RUNBOOK.md`

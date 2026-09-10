@@ -8,7 +8,7 @@
 
 **Tech Stack:** bash 5、jq 1.7、git 2.43、herdr 0.9.0 CLI、bats-core（`tests/lib/bats-core`）。
 
-**Spec:** `docs/superpowers/specs/2026-09-10-dkbo-wave-review-design.md`（前置：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`）
+**Spec:** `docs/design/2026-09-10-dkbo-wave-review-design.md`（前置：`docs/design/2026-09-09-dkboai-ai-team-design.md`）
 
 ## Global Constraints
 

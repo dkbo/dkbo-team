@@ -8,7 +8,7 @@
 
 **Tech Stack:** bash 5, jq 1.7, git 2.43, herdr 0.9.0 CLI, bats-core (vendored under `tests/lib/bats-core`), Claude Code / Codex CLI / Antigravity CLI (`agy`).
 
-**Spec:** `docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`
+**Spec:** `docs/design/2026-09-09-dkboai-ai-team-design.md`
 
 ## Global Constraints
 
@@ -2021,7 +2021,7 @@ description: 為 dkboai 團隊新增一個角色（例如 translator、designer�
 ```markdown
 # dkboai
 
-以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`。
+以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件：`docs/design/2026-09-09-dkboai-ai-team-design.md`。
 
 ## 前置需求
 - herdr ≥ 0.9.0（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。
@@ -2109,8 +2109,8 @@ Also write the repo-root `README.md`:
 
 多模型 AI 開發團隊套件，可攜目錄在 `dkboai/`。安裝、使用、更新與疑難排解全部在 **[dkboai/README.md](dkboai/README.md)**；把那份 README 的「給 AI 的一鍵安裝」段落貼給 Claude Code 即可安裝。
 
-- 設計規格：`docs/superpowers/specs/2026-09-09-dkboai-ai-team-design.md`
-- 實作計畫：`docs/superpowers/plans/2026-09-10-dkboai-ai-team.md`
+- 設計規格：`docs/design/2026-09-09-dkboai-ai-team-design.md`
+- 實作計畫：`docs/history/plans/2026-09-10-dkboai-ai-team.md`
 - 測試：`tests/run.sh`（單元）、`tests/integration/`（真 herdr）、`tests/smoke/`（真 agent）、`tests/e2e/RUNBOOK.md`
 ```
 
