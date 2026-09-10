@@ -44,7 +44,9 @@ $H pane close "$p4" >/dev/null 2>&1
 lay2=$($H pane layout --pane "$troot" 2>&1); n=$(echo "$lay2" | jq -r '.result.layout.panes | length' 2>/dev/null)
 [ "${n:-0}" -eq 3 ] && ok "after closing one of four cells layout lists 3 panes" || fail "layout after close: $(echo "$lay2" | head -c 300)"
 pr=$($H pane read "$troot" --lines 5 2>&1)
-echo "$pr" | jq -e '.result.read.text' >/dev/null 2>&1 && ok "pane read shape .result.read.text (agent read shares it)" || fail "pane read shape: $(echo "$pr" | head -c 200)"
+if echo "$pr" | jq -e '.result.read.text' >/dev/null 2>&1; then ok "pane read returns JSON .result.read.text"; echo "NOTE pane/agent read is JSON; dk-watch uses .result.read.text"
+elif [ -n "$pr" ]; then ok "pane read returns plain text"; echo "NOTE pane/agent read is PLAIN TEXT on herdr $(herdr --version | awk '{print $2}'); dk-watch falls back to the raw output — keep tests/stub/responses/agent_read.json as JSON only if dk-watch's jq fallback stays"
+else fail "pane read returned nothing"; fi
 printf '%s' "$tc" > "$tmp/tab_create.json"; printf '%s' "$lay" > "$tmp/pane_layout.json"; printf '%s' "$pr" > "$tmp/pane_read.json"
 $H tab close "$tid" >/dev/null 2>&1 && ok "tab close" || fail "tab close"
 $H notification show "dkboai layer2" --body ok >/dev/null 2>&1 && ok "notification show" || fail "notification show"

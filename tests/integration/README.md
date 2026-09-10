@@ -87,14 +87,20 @@ inside a herdr pane" above) since this run was itself inside a herdr pane; torn 
 afterward (`herdr session stop/delete dktest`, `herdr session list` back to only
 `default`).
 
-Result: 8 `OK`, 1 `FAIL`, two `NOTE` lines printed by the script plus one shape finding
-from the `FAIL`:
+Result: 8 `OK`, 0 `FAIL`, three `NOTE` lines:
 
 ```
 NOTE --ratio 0.3 made the ANCHOR narrower → --ratio is the anchor's share: set DK_RATIO_MEANS=anchor in .dkbo/lib/layout.sh
 NOTE resize --amount 0.1 changed width by 12 cells of area 120 (a fraction would give ≈12); if the unit is cells, change dk__layout_amount to print whole cells
-FAIL pane read shape: <plain terminal text, not JSON>
+NOTE pane/agent read is PLAIN TEXT on herdr 0.9.0; dk-watch falls back to the raw output — keep tests/stub/responses/agent_read.json as JSON only if dk-watch's jq fallback stays
 ```
+
+(Ruling from review: a layer-2 check that FAILs by design on a real, permanently-true
+shape is noise — `dk-watch` already tolerates both the JSON and plain-text shapes, so the
+script's `pane read` check was changed from a hard `jq -e '.result.read.text'` assertion
+to a branch that accepts either shape as `OK`, emitting a `NOTE` naming which one the
+running herdr actually returned. Re-ran against a freshly re-bootstrapped `dktest`
+session — see below.)
 
 What changed, and why:
 
@@ -115,23 +121,27 @@ What changed, and why:
   to `dk__layout_amount`, `tests/unit/17_layout.bats`'s `--amount -0.050`/`0.050`
   assertions, or `tests/stub/responses/pane_layout.json`.
 - **`pane read` / `agent read` shape — plain text on success, not `.result.read.text`
-  JSON.** `herdr api schema --json`'s socket-level `PaneReadResult` documents
-  `.result.read.text`, but the CLI (`herdr pane read <id> --lines N`, with or without
-  `--raw`/`--format`) prints the bare terminal text directly on success — no JSON envelope
-  at all (confirmed on a live pane: valid `jq` parse fails, `echo $?` = 5). `herdr agent
-  read` behaves identically on success (only its *error* responses — e.g.
-  `agent_not_found` — go through the JSON envelope, confirmed by reading a pane with no
-  reported agent). This is a real discrepancy from the schema/stub shape, not a stub
-  field-name or extra-field difference, so the "compare field names" rule in the brief's
-  Step 3 doesn't directly apply. Checked production code: `.dkbo/bin/dk-watch` already
-  parses defensively —
+  JSON; check softened to accept either shape.** `herdr api schema --json`'s
+  socket-level `PaneReadResult` documents `.result.read.text`, but the CLI (`herdr pane
+  read <id> --lines N`, with or without `--raw`/`--format`) prints the bare terminal text
+  directly on success — no JSON envelope at all (confirmed on a live pane: valid `jq`
+  parse fails, `echo $?` = 5). `herdr agent read` behaves identically on success (only its
+  *error* responses — e.g. `agent_not_found` — go through the JSON envelope, confirmed by
+  reading a pane with no reported agent). This is a real, permanent discrepancy from the
+  schema/stub shape (not a stub field-name/extra-field issue), and `.dkbo/bin/dk-watch`
+  (the only production consumer of `agent read` output) already parses defensively —
   `txt=$(printf '%s' "$raw" | jq -r '.result.read.text // .result.text // empty' 2>/dev/null || true); txt="${txt:-$raw}"`
-  — so when `jq` fails on real herdr's plain-text output, `txt` falls back to the raw text
-  itself. No other production code parses `pane read`/`agent read` output. No changes made
-  to `.dkbo/`, `tests/stub/responses/agent_read.json`, or any bats test for this finding;
-  it is captured here for the record. `tests/integration/herdr-real.sh`'s hard `FAIL` on
-  this check is accurate and expected — it documents the real CLI shape, and was left as
-  the brief's exact block specifies.
+  — falling back to the raw text when `jq` fails. Per review ruling, a layer-2 check that
+  `FAIL`s on this permanently-true real shape is noise, so
+  `tests/integration/herdr-real.sh`'s `pane read` check was changed from a hard
+  `jq -e '.result.read.text'` assertion to a three-way branch: JSON shape → `ok` + a NOTE
+  naming it; non-empty plain text → `ok` + a NOTE naming the herdr version and the
+  plain-text shape; empty → `fail`. Re-run against a freshly re-bootstrapped `dktest`
+  confirmed the plain-text branch: `OK pane read returns plain text` +
+  `NOTE pane/agent read is PLAIN TEXT on herdr 0.9.0; ...`. No changes made to
+  `.dkbo/bin/dk-watch` or `tests/stub/responses/agent_read.json` — the stub's JSON shape
+  stays valid for the unit suite (which fakes herdr and doesn't care what the real CLI
+  does), and `dk-watch`'s existing fallback already covers the real plain-text case.
 - `tab_create.json` and `pane_layout.json` real captures (`$tmp/tab_create.json`,
   `$tmp/pane_layout.json`) matched the stub's field names exactly (the real payloads carry
   extra fields — `cwd`, `revision`, `scroll`, `terminal_id`, etc. on `root_pane` — that the
