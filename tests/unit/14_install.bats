@@ -9,7 +9,7 @@ teardown() { teardown_project; }
     [ "$(readlink .agents/skills/dkboai-$s)" = "../../.dkbo/skills/$s" ]
     [ -f ".claude/skills/dkboai-$s/SKILL.md" ]
   done
-  grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md; grep -q '^@AGENTS.md$' CLAUDE.md; grep -q '.dkbo/.sessions' .gitignore
+  grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md; grep -q '^@AGENTS.md$' CLAUDE.md; grep -q '.dkbo/.sessions' .gitignore; grep -qx '.worktrees/' .gitignore
   run .dkbo/install.sh; [ "$status" -eq 0 ]
   [ "$(grep -c '^@AGENTS.md$' CLAUDE.md)" -eq 1 ]
 }

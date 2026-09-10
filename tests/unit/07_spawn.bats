@@ -6,7 +6,7 @@ teardown() { teardown_project; }
   run dk-spawn frontend cart --tier L
   [ "$status" -eq 0 ]
   split=$(grep '^pane split' "$HERDR_STUB_LOG")
-  [[ "$split" == *"--pane wC:p1 --direction right --cwd $WORKTREE_PATH --no-focus"* ]]
+  [[ "$split" == *"--pane wB:p1 --direction right --cwd $WORKTREE_PATH --no-focus"* ]]
   [[ "$split" == *"--env DK_TASK_DIR=$d"* ]]; [[ "$split" == *"--env DK_ROLE=frontend"* ]]
   [[ "$split" == *"--env DK_AGENT=login-frontend-cart"* ]]; [[ "$split" == *"--env DK_LEADER=leader-login"* ]]
   [[ "$split" == *"--env DK_ISOLATED=0"* ]]

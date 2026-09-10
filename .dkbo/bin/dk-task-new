@@ -22,20 +22,19 @@ date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
 
-branch="dk/$short"; wt_path=""; ws=""; root_pane=""
+branch="dk/$short"; base_sha=$(git -C "$DK_PROJECT_ROOT" rev-parse HEAD)
+ws="${HERDR_WORKSPACE_ID:-}"; root_pane="${HERDR_PANE_ID:-}"   # the leader's own workspace/pane; employees split from here (spec §6)
 if [ "$worktree" = 1 ]; then
-  base=$(git -C "$DK_PROJECT_ROOT" rev-parse --abbrev-ref HEAD)
-  out=$(herdr worktree create --branch "$branch" --base "$base" --cwd "$DK_PROJECT_ROOT" --no-focus)
-  wt_path=$(echo "$out" | dk_json '.result.path // empty')
-  ws=$(echo "$out" | dk_json '.result.workspace.workspace_id')
-  root_pane=$(echo "$out" | dk_json '.result.root_pane.pane_id')
-  [ -n "$wt_path" ] || wt_path=$(git -C "$DK_PROJECT_ROOT" worktree list --porcelain | awk -v b="refs/heads/$branch" '$1=="worktree"{p=$2} $1=="branch"&&$2==b{print p}')
+  wt_path="${DK_WORKTREE_DIR:-$DK_PROJECT_ROOT/.worktrees}/$short"
+  [ ! -e "$wt_path" ] || dk_die "worktree path exists: $wt_path"
+  mkdir -p "$(dirname "$wt_path")"
+  git -C "$DK_PROJECT_ROOT" worktree add -q -b "$branch" "$wt_path" "$base_sha" >/dev/null 2>&1 || dk_die "git worktree add failed (branch $branch exists? run: git branch -D $branch)"
 else
-  wt_path="$DK_PROJECT_ROOT"; ws="${HERDR_WORKSPACE_ID:-}"; root_pane="${HERDR_PANE_ID:-}"
+  wt_path="$DK_PROJECT_ROOT"
 fi
 
 mkdir -p "$dir/state"; : > "$dir/.panes"   # dk-watch exits when this file disappears (dk-task-close removes it)
-vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=$wt_path" "SOURCE=$from" "DATE=$(dk_now)" "WORKSPACE=$ws" "ROOT_PANE=$root_pane")
+vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=$wt_path" "SOURCE=$from" "DATE=$(dk_now)" "WORKSPACE=$ws" "ROOT_PANE=$root_pane" "BASE=$base_sha")
 dk_render "$DK_ROOT/templates/brief.md"   "${vars[@]}" > "$dir/brief.md"
 dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"
 dk_render "$DK_ROOT/templates/task.env"   "${vars[@]}" > "$dir/.task.env"

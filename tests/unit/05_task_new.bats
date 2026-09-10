@@ -8,10 +8,14 @@ teardown() { teardown_project; }
   d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-login"; [ "$output" = "$d" ]
   [ -f "$d/brief.md" ]; [ -f "$d/process.md" ]; [ -f "$d/messages.log" ]; [ -d "$d/state" ]; [ -f "$d/.panes" ]
   grep -q '^# 使用者登入$' "$d/brief.md"; grep -q 'docs/plan.md' "$d/brief.md"; grep -q 'dk/login' "$d/brief.md"
-  grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q "^DK_WORKTREE=\"$WORKTREE_PATH\"$" "$d/.task.env"; grep -q '^DK_WORKSPACE="wC"$' "$d/.task.env"
+  grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q "^DK_WORKTREE=\"$WORKTREE_PATH\"$" "$d/.task.env"
+  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"; grep -q '^DK_ROOT_PANE="wB:p1"$' "$d/.task.env"
+  grep -q "^DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"$" "$d/.task.env"; grep -q '^DK_WAVE=""$' "$d/.task.env"; grep -q '^DK_TABS=""$' "$d/.task.env"
   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]
   grep -q '| 使用者登入 | task | planning |' "$DK_ROOT/tasks/INDEX.md"
-  grep -q '^worktree create --branch dk/login --base main --cwd .* --no-focus$' "$HERDR_STUB_LOG"
+  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
+  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+  [ "$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)" = dk/login ]
   grep -q '^agent rename wB:p1 leader-login$' "$HERDR_STUB_LOG"
   grep -q 'task-new login' "$d/process.md"
 }
@@ -53,4 +57,12 @@ teardown() { teardown_project; }
   run dk-task-new new --gate1; [ "$status" -eq 0 ]
   grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-new/process.md"
   ! grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-brand-new/process.md"
+}
+@test "task-new honours DK_WORKTREE_DIR and refuses an existing branch without creating the folder" {
+  DK_WORKTREE_DIR="$PROJECT/wt" run dk-task-new login x; [ "$status" -eq 0 ]; grep -q "^DK_WORKTREE=\"$PROJECT/wt/login\"$" "$output/.task.env"
+  git -C "$PROJECT" branch dk/pay
+  run dk-task-new pay y; [ "$status" -eq 1 ]; [[ "$output" == *"worktree add failed"* ]]; [ ! -d "$DK_ROOT/tasks/$(date +%F)-pay" ]
+}
+@test "task-new --no-worktree still records DK_BASE" {
+  run dk-task-new login x --no-worktree; [ "$status" -eq 0 ]; grep -q "^DK_WORKTREE=\"$PROJECT\"$" "$output/.task.env"; grep -Eq '^DK_BASE="[0-9a-f]{40}"$' "$output/.task.env"
 }

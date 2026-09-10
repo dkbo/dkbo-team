@@ -28,5 +28,6 @@ if ! grep -qs '.dkbo/.sessions' .gitignore; then
   append_line .gitignore '.dkbo/.sessions/*'
   append_line .gitignore '!.dkbo/.sessions/.gitkeep'
 fi
+grep -qsx '.worktrees/' .gitignore || append_line .gitignore '.worktrees/'
 chmod +x .dkbo/bin/* .dkbo/install.sh
 echo "dkboai installed into $target"

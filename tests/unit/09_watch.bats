@@ -21,6 +21,7 @@ teardown() { teardown_project; }
 }
 @test "dk-task-new launches dk-watch and records its pid" {
   rm -rf "$DK_ROOT/tasks/"*-login "$DK_ROOT/.sessions/wB:p1"; unset DK_TASK_DIR
+  git -C "$PROJECT" worktree remove --force "$WORKTREE_PATH"; git -C "$PROJECT" branch -D dk/login >/dev/null
   DK_NO_WATCH= run dk-task-new login 使用者登入; [ "$status" -eq 0 ]
   pid=$(sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$output/.task.env"); [[ "$pid" =~ ^[0-9]+$ ]]
   kill "$pid" 2>/dev/null || true

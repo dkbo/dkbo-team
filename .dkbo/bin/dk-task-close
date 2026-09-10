@@ -9,9 +9,14 @@ abandon=0; reason=""
 if [ "$abandon" = 0 ]; then [ -f "$dir/report.md" ] || { echo "dk-task-close: write $dir/report.md first (gate 3)"; exit 1; }; fi
 [ ! -s "$dir/.panes" ] || { echo "dk-task-close: live panes remain; run dk-wave-close first"; exit 1; }
 
+legacy=0; if dk_legacy_task; then legacy=1; echo "dk-task-close: legacy task (no DK_BASE); removing the worktree via herdr" >&2; fi
 cleanup() {
   [ -n "${DK_WATCH_PID:-}" ] && kill "$DK_WATCH_PID" 2>/dev/null || true
-  [ -n "${DK_WORKSPACE:-}" ] && [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ] && herdr worktree remove --workspace "$DK_WORKSPACE" --force >/dev/null 2>&1 || true
+  if [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ]; then
+    if [ "$legacy" = 1 ]; then [ -n "${DK_WORKSPACE:-}" ] && herdr worktree remove --workspace "$DK_WORKSPACE" --force >/dev/null 2>&1 || true
+    else git -C "$DK_PROJECT_ROOT" worktree remove --force "$DK_WORKTREE" >/dev/null 2>&1 || true; fi
+  fi
+  for t in ${DK_TABS:-}; do herdr tab close "${t#*=}" >/dev/null 2>&1 </dev/null || true; done
   rm -rf "$dir/.panes" "$dir/.blocked" "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
   herdr agent rename "$HERDR_PANE_ID" --clear >/dev/null 2>&1 || true
 }
