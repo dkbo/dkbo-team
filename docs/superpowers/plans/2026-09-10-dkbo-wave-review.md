@@ -1913,7 +1913,7 @@ git commit -m "feat(resume): current wave, rulings, per-tab roster, extra degrad
   grep -q '^group: review' "$DK_ROOT/roles/reviewer.md"; grep -q '結案評議' "$DK_ROOT/roles/reviewer.md"
   grep -q 'settings.env' "$DK_ROOT/skills/init/SKILL.md"; grep -q 'DK_REVIEW_KINDS' "$DK_ROOT/skills/init/SKILL.md"
   grep -q -- '--exclude=settings.env' "$DK_ROOT/README.md"; grep -q '每波自動附審查' "$DK_ROOT/README.md"
-  grep -q '^11\. ' "$REPO_ROOT/tests/e2e/RUNBOOK.md"; grep -q 'TIMEOUT' "$REPO_ROOT/tests/e2e/RUNBOOK.md"
+  grep -q '^10\. ' "$REPO_ROOT/tests/e2e/RUNBOOK.md"; grep -q 'TIMEOUT' "$REPO_ROOT/tests/e2e/RUNBOOK.md"
 }
 ```
 
@@ -2080,14 +2080,14 @@ report 寫好（`## 規格合規` ✅/❌、`## Important`、`## Minor`，每條
 
 - [ ] **Step 8: `tests/e2e/RUNBOOK.md`**
 
-第 3 步結尾加「切到 tab 1 觀察：領導佔左欄、backend 與 qa 在右側上下兩格」。第 6 步改為「兩人 DONE 後：領導 `dk-review-pack 1`、`dk-review`；reviewer DONE 後領導記 verdict 與 ruling，才 `dk-wave-close` 並 commit `wave 1: ...`。檢查 process.md 有 `review 1 spawned`、`review 1 verdict`、`ruling:`、`wave-close 1 tests`。」。第 10 步之前插入：
+第 3 步結尾加「切到 tab 1 觀察：領導佔左欄、backend 與 qa 在右側上下兩格」。第 6 步改為「兩人 DONE 後：領導 `dk-review-pack 1`、`dk-review`；reviewer DONE 後領導記 verdict 與 ruling，才 `dk-wave-close` 並 commit `wave 1: ...`。檢查 process.md 有 `review 1 spawned`、`review 1 verdict`、`ruling:`、`wave-close 1 tests`。」。第 10 步之前插入（原第 10 步「記錄」順延為第 11 步）：
 
 ```markdown
-11. 逾時與熔斷：在 wave2 用一個未登入（或已到用量上限）的 kind 當 reviewer（`settings.env` 的 `DK_REVIEW_KINDS` 加上它，或 brief 審查欄 `kinds: claude <那個 kind>`），`DK_REVIEW_TIMEOUT_MIN` 先調成 2。預期：約 2 分鐘後領導 pane 收到 `[TIMEOUT] from dk-watch: … 逾時 (quota?)`、桌面通知一次、`.task.env` 的 `DK_KIND_DOWN` 出現該 kind、process 有 `timeout … → kind <k> down`；領導 `dk-wave-close --agent <reviewer>` 後 tab 版面重新均分。把該 CLI 實際印出的用量訊息字樣抄一行進 `.dkbo/README.md` 疑難排解表。
-12. 記錄：把每步實際發生與預期的差異寫到 `tests/e2e/RESULTS-<日期>.md`。
+10. 逾時與熔斷：在 wave2 用一個未登入（或已到用量上限）的 kind 當 reviewer（`settings.env` 的 `DK_REVIEW_KINDS` 加上它，或 brief 審查欄 `kinds: claude <那個 kind>`），`DK_REVIEW_TIMEOUT_MIN` 先調成 2。預期：約 2 分鐘後領導 pane 收到 `[TIMEOUT] from dk-watch: … 逾時 (quota?)`、桌面通知一次、`.task.env` 的 `DK_KIND_DOWN` 出現該 kind、process 有 `timeout … → kind <k> down`；領導 `dk-wave-close --agent <reviewer>` 後 tab 版面重新均分。把該 CLI 實際印出的用量訊息字樣抄一行進 `.dkbo/README.md` 疑難排解表。
+11. 記錄：把每步實際發生與預期的差異寫到 `tests/e2e/RESULTS-<日期>.md`。
 ```
 
-（原第 10 步「記錄」改成第 12 步。）驗收行補：`process.md 另有 wave-open / review … spawned / review … verdict / ruling: / wave-close … tests / timeout 各一行以上；每位 dev 有 state/<成員>.report.md`。
+（步驟編號維持 1–11 連續。）驗收行補：`process.md 另有 wave-open / review … spawned / review … verdict / ruling: / wave-close … tests / timeout 各一行以上；每位 dev 有 state/<成員>.report.md`。
 
 - [ ] **Step 9: 跑全部測試** — `tests/run.sh` → 全部通過（含行數 ≤120）。若 LEADER.md 或 PROTOCOL.md 超過 120 行，先刪空行再合併「分流」段的長句，不刪規則。
 
