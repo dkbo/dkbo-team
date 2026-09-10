@@ -31,3 +31,32 @@ teardown() { teardown_project; }
   run dk-watch --once; [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/login-qa" ]
 }
+
+old=$(( $(date +%s) - 1500 ))   # 25 minutes ago
+reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.panes"; echo "2026-09-10T10:00 spawn login-reviewer-b (codex M) override-kind isolated" >> "$d/process.md"; }
+
+@test "reviewer past DK_REVIEW_TIMEOUT_MIN is reported once with (quota?) and its kind goes down" {
+  reviewer_row "$old"
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^notification show dkboai: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
+  grep -q '^agent read login-reviewer-b --lines 30$' "$HERDR_STUB_LOG"
+  grep -q ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md"; grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+  [ -f "$d/.blocked/login-reviewer-b.timeout" ]
+}
+@test "no quota words → no (quota?) tag; kinds accumulate without duplicates" {
+  echo '{"result":{"read":{"text":"thinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+  sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="agy"/' "$d/.task.env"; reviewer_row "$old"
+  dk-watch --once
+  grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"; grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
+}
+@test "fresh reviewers, done reviewers, qa and legacy rows never time out" {
+  reviewer_row "$(date +%s)"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  printf 'login-qa wC:p3 %s review 1 2\nlogin-frontend wC:p2\n' "$old" > "$d/.panes"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+}
+@test "a shorter DK_REVIEW_TIMEOUT_MIN is honoured" {
+  echo 'DK_REVIEW_TIMEOUT_MIN="1"' >> "$DK_ROOT/settings.env"; reviewer_row "$(( $(date +%s) - 120 ))"
+  dk-watch --once; grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+}

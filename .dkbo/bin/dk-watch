@@ -3,6 +3,7 @@
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+dk_settings
 once=0; interval=30
 while [ $# -gt 0 ]; do case "$1" in --once) once=1; shift;; --interval) interval="$2"; shift 2;; *) dk_die "unknown flag $1";; esac; done
 thr="${DK_BLOCK_SEC:-60}"; mkdir -p "$dir/.blocked"
@@ -22,6 +23,23 @@ tick() {
         dk_process "blocked $agent"; echo notified >> "$m"
       fi
     else rm -f "$m"; fi
+  done < "$dir/.panes"
+  dk_task_env   # pick up DK_KIND_DOWN / DK_REVIEW_TIMEOUT_MIN changes made since the watcher started
+  while read -r agent _pane epoch group _; do   # reviewer timeout (spec §3.2)
+    [ "${group:-}" = review ] && [[ "$agent" == *-reviewer-* ]] && [[ "${epoch:-}" =~ ^[0-9]+$ ]] || continue
+    m="$dir/.blocked/$agent.timeout"; [ ! -f "$m" ] || continue
+    sf="$dir/state/${agent#"$DK_SHORT"-}.md"; if [ -f "$sf" ] && grep -q '^status: done' "$sf"; then continue; fi
+    [ $((now - epoch)) -gt $((DK_REVIEW_TIMEOUT_MIN * 60)) ] || continue
+    raw=$(herdr agent read "$agent" --lines 30 2>/dev/null </dev/null || true)
+    txt=$(printf '%s' "$raw" | jq -r '.result.read.text // .result.text // empty' 2>/dev/null || true); txt="${txt:-$raw}"
+    tag=""; printf '%s' "$txt" | grep -qiE 'rate limit|quota|429|usage limit' && tag=" (quota?)"
+    kind=$(sed -n "s/^[^ ]* spawn $agent (\([a-z0-9_-]*\) .*/\1/p" "$dir/process.md" | tail -1)
+    herdr notification show "dkboai: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
+    herdr agent prompt "$(dk_leader_name)" "[TIMEOUT] from dk-watch: $agent 逾時${tag}" >/dev/null 2>&1 </dev/null || true
+    if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
+      DK_KIND_DOWN="${DK_KIND_DOWN:+$DK_KIND_DOWN }$kind"; dk_env_set DK_KIND_DOWN "$DK_KIND_DOWN"
+    fi
+    dk_process "timeout $agent$tag → kind ${kind:-?} down"; echo notified > "$m"
   done < "$dir/.panes"
 }
 if [ "$once" = 1 ]; then tick; exit 0; fi
