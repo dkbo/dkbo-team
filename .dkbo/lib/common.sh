@@ -61,4 +61,6 @@ dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env
     awk -v k="$1" -v v="$2" 'index($0, k "=")==1 {print k "=\"" v "\""; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   else echo "$1=\"$2\"" >> "$f"; fi
 }
-dk_legacy_task() { ! grep -q '^DK_BASE=' "$(dk_task_dir)/.task.env"; }   # task folder created before the wave-review scripts
+dk_legacy_task() { # task folder created before the wave-review scripts
+  local d; d=$(dk_task_dir) || return 1; ! grep -q '^DK_BASE=' "$d/.task.env"
+}

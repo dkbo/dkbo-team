@@ -86,6 +86,7 @@ R
   dk_task_env; [ -z "$DK_WAVE" ]; [ "$DK_NEWKEY" = "a b" ]
 }
 @test "dk_legacy_task detects a task folder without DK_BASE" {
+  run dk_legacy_task; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
   d=$(fixture_task login x); ! dk_legacy_task
   sed -i '/^DK_BASE=/d' "$d/.task.env"; dk_legacy_task
 }
