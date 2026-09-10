@@ -35,7 +35,7 @@ fi
 
 env_args=(--env "DK_ROOT=$DK_ROOT" --env "DK_TASK_DIR=$dir" --env "DK_ROLE=$role" --env "DK_AGENT=$agent"
   --env "DK_LEADER=$(dk_leader_name)" --env "DK_ISOLATED=$isolated" --env "HERDR_ENV=1")
-tab_no=0; slot=0
+tab_no=0; slot=0; tab_id=""
 if [ "$(dk_fm "$rf" worktree)" = false ]; then   # e.g. pm: beside the leader in the main tree, outside the employee grid
   pane=$(herdr pane split --pane "${HERDR_PANE_ID:?}" --direction "${split_override:-right}" --cwd "$DK_PROJECT_ROOT" --no-focus "${env_args[@]}" | dk_json '.result.pane.pane_id')
 else
@@ -54,7 +54,13 @@ fi
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
 # shellcheck disable=SC2086
 if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
-  herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+  if [ -n "$tab_id" ]; then
+    herdr tab close "$tab_id" >/dev/null 2>&1 </dev/null || true
+    dk_env_set DK_TABS "$DK_TABS"
+    dk_process "tab $tab_no $tab_id closed (agent start failed)"
+  else
+    herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
+  fi
   dk_die "agent start failed for $agent (pane $pane closed)"
 fi
 echo "$agent $pane $(date +%s) $group $tab_no $slot" >> "$dir/.panes"

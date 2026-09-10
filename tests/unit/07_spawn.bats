@@ -94,3 +94,10 @@ teardown() { teardown_project; }
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
   HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; ! grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
 }
+@test "agent start failure after a new tab closes the tab and restores DK_TABS" {
+  printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
+  HERDR_STUB_FAIL="agent start" run dk-spawn qa; [ "$status" -eq 1 ]
+  grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  grep -q '^DK_TABS=""$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
+  grep -q 'tab 2 wB:t2 closed (agent start failed)' "$d/process.md"
+}
