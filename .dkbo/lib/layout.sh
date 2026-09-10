@@ -48,7 +48,7 @@ dk_layout_even() { # TAB_NO [PANES_FILE] — equalise the tab's live employee ce
     fi
     return 0
   fi
-  if [ "$tab" -eq 1 ]; then probe="${DK_ROOT_PANE:?}"; else probe=$(echo "$ids" | head -1); fi
+  if [ "$tab" -eq 1 ]; then probe="${DK_ROOT_PANE:-}"; [ -n "$probe" ] || return 0; else probe=$(echo "$ids" | head -1); fi
   snap=$(herdr pane layout --pane "$probe" 2>/dev/null </dev/null) || return 0
   printf '%s\n' "$snap" | jq -r '.result.layout as $l | ($l.area | "AREA \(.x) \(.y) \(.width) \(.height)"), ($l.panes[] | "PANE \(.pane_id) \(.rect.x) \(.rect.y) \(.rect.width) \(.rect.height)")' 2>/dev/null \
   | awk -v ids=" $(echo "$ids" | tr '\n' ' ')" -v leader="${DK_ROOT_PANE:-}" -v tab="$tab" '

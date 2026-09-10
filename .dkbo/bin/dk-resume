@@ -22,7 +22,7 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
         printf "%s %s %d min%s\n", $1, st, (now-$3)/60, ((now-$3) > t*60 && st!="done") ? " TIMEOUT?" : "" }' "$dir/.panes"
   else echo "沒有開著的波（dk-wave-open N 開下一波）"; fi
   echo "## 裁定（最後一次 wave-open 之後）"
-  rul=$(awk '/ wave-open /{buf=""} / ruling: /{buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/process.md")
+  rul=$(awk '$2=="wave-open"{buf=""} $2=="ruling:"{buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/process.md")
   if [ -n "$rul" ]; then if [ "$3" -gt 0 ]; then printf '%s\n' "$rul" | tail -n "$3"; else printf '%s\n' "$rul"; fi; fi
   echo "## process（最後 $1 行）"; tail -n "$1" "$dir/process.md"
   echo "## 未處理訊息（最後一則 ACK 之後，寄給 leader）"

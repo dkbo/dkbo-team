@@ -84,6 +84,7 @@ R
   dk_env_set DK_NEWKEY "a b"; grep -q '^DK_NEWKEY="a b"$' "$d/.task.env"
   dk_env_set DK_WAVE ""; grep -q '^DK_WAVE=""$' "$d/.task.env"
   dk_task_env; [ -z "$DK_WAVE" ]; [ "$DK_NEWKEY" = "a b" ]
+  run dk_env_set DK_X 'a"b'; [ "$status" -eq 1 ]; ! grep -q '^DK_X=' "$d/.task.env"
 }
 @test "dk_legacy_task detects a task folder without DK_BASE" {
   run dk_legacy_task; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]

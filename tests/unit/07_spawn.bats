@@ -101,3 +101,11 @@ teardown() { teardown_project; }
   grep -q '^DK_TABS=""$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
   grep -q 'tab 2 wB:t2 closed (agent start failed)' "$d/process.md"
 }
+@test "--resume of an overflow tab's only occupant closes the stale tab and keeps one DK_TABS entry" {
+  printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\nlogin-qa wB:p10 0 review 2 1\n' > "$d/.panes"
+  sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t9"/' "$d/.task.env"
+  run dk-spawn qa --resume; [ "$status" -eq 0 ]
+  grep -q '^pane close wB:p10$' "$HERDR_STUB_LOG"; grep -q '^tab close wB:t9$' "$HERDR_STUB_LOG"; grep -q '^tab create ' "$HERDR_STUB_LOG"
+  grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(grep -c '^2=' <<< "$(sed -n 's/^DK_TABS="\(.*\)"$/\1/p' "$d/.task.env" | tr ' ' '\n')")" -eq 1 ]
+  grep -q 'tab 2 wB:t9 closed (recreated)' "$d/process.md"; grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
+}

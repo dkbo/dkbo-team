@@ -11,7 +11,7 @@ if [ "${1:-}" = --agent ]; then   # close one employee (e.g. a timed-out reviewe
   herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
   grep -v "^$a " "$dir/.panes" > "$dir/.panes.tmp" || true; mv "$dir/.panes.tmp" "$dir/.panes"
   dk_process "pane-close $a"
-  if [ -n "${tab:-}" ]; then dk_layout_even "$tab" || true; fi
+  if [ "${tab:-0}" -ge 1 ] 2>/dev/null; then dk_layout_even "$tab" || true; fi
   echo "closed $a"; exit 0
 fi
 force=0; [ "${1:-}" = --force ] && force=1
@@ -42,11 +42,11 @@ fi
 if [ -n "$problems" ] && [ "$force" = 0 ]; then printf 'dk-wave-close: refused (use --force to close anyway):%b\n' "$problems"; exit 1; fi
 tests="skipped (no DK_TEST_CMD)"
 if [ "$legacy" = 0 ] && [ -n "${DK_TEST_CMD:-}" ]; then   # gate c
-  mkdir -p "$dir/waves"; log="$dir/waves/${n:-0}.test.log"
+  mkdir -p "$dir/waves"; log="$dir/waves/${n:-forced}.test.log"
   if (cd "$DK_WORKTREE" && bash -c "$DK_TEST_CMD") > "$log" 2>&1; then tests="ok ($DK_TEST_CMD)"
   else
     echo "dk-wave-close: tests failed ($DK_TEST_CMD); last 20 lines of $log:"; tail -n 20 "$log"
-    if [ "$force" = 0 ]; then dk_process "wave-close $n tests failed ($DK_TEST_CMD)"; exit 1; fi
+    if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($DK_TEST_CMD)"; exit 1; fi
     tests="failed ($DK_TEST_CMD, forced)"
   fi
 fi
@@ -66,7 +66,7 @@ done < "$dir/.panes"
 : > "$dir/.panes"
 if [ "$legacy" = 1 ]; then dk_process "wave-close: $closed agents closed"
 else
-  dk_env_set DK_WAVE ""; dk_process "wave-close $n tests $tests $closed agents closed"
+  dk_env_set DK_WAVE ""; dk_process "wave-close ${n:-?} tests $tests $closed agents closed"
   for t in $tabs; do if [ "$t" -ge 1 ]; then dk_layout_even "$t" || true; fi; done
 fi
 echo "closed $closed"

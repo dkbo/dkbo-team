@@ -57,6 +57,7 @@ dk_settings() { # load .dkbo/settings.env over the defaults; warn once per proce
 }
 dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env (append when the key is missing)
   local d f; d=$(dk_task_dir) || return 1; f="$d/.task.env"
+  case "$2" in *[\"\\\$\`]*) dk_die "dk_env_set $1: value must not contain \" \\ \$ or backtick";; esac
   if grep -q "^$1=" "$f"; then
     awk -v k="$1" -v v="$2" 'index($0, k "=")==1 {print k "=\"" v "\""; next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   else echo "$1=\"$2\"" >> "$f"; fi

@@ -24,7 +24,7 @@ tick() {
       fi
     else rm -f "$m"; fi
   done < "$dir/.panes"
-  dk_task_env   # pick up DK_KIND_DOWN / DK_REVIEW_TIMEOUT_MIN changes made since the watcher started
+  dk_task_env   # pick up DK_KIND_DOWN changes made since the watcher started (settings.env is read once at start)
   while read -r agent _pane epoch group _; do   # reviewer timeout (spec §3.2)
     [ "${group:-}" = review ] && [[ "$agent" == *-reviewer-* ]] && [[ "${epoch:-}" =~ ^[0-9]+$ ]] || continue
     m="$dir/.blocked/$agent.timeout"; [ ! -f "$m" ] || continue
