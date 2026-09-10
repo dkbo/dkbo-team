@@ -1470,7 +1470,7 @@ dk_layout_even() { # TAB_NO [PANES_FILE] — equalise the tab's live employee ce
   printf '%s\n' "$snap" | jq -r '.result.layout as $l | ($l.area | "AREA \(.x) \(.y) \(.width) \(.height)"), ($l.panes[] | "PANE \(.pane_id) \(.rect.x) \(.rect.y) \(.rect.width) \(.rect.height)")' 2>/dev/null \
   | awk -v ids=" $(echo "$ids" | tr '\n' ' ')" -v leader="${DK_ROOT_PANE:-}" -v tab="$tab" '
     $1=="AREA" {ax=$2; ay=$3; aw=$4; ah=$5; next}
-    $1=="PANE" && tab==1 && $2==leader {rx=$3+$4; next}                    # employee region starts right of the leader column
+    $1=="PANE" && tab==1 && $2==leader {rx=$3+$5; next}                    # employee region starts right of the leader column
     $1=="PANE" && index(ids, " " $2 " ") {n++; id[n]=$2; x[n]=$3; y[n]=$4; w[n]=$5; h[n]=$6}
     END {
       if (n==0 || aw==0 || ah==0) exit
