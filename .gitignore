@@ -2,3 +2,4 @@
 !.dkbo/.sessions/.gitkeep
 tests/lib/
 example/node_modules/
+.worktrees/
