@@ -2,5 +2,6 @@
 # dk-version — print the installed dkbo version (from .dkbo/VERSION)
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
-v=$(cat "$DK_ROOT/VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+v=""
+[ -f "$DK_ROOT/VERSION" ] && v=$(tr -d '[:space:]' < "$DK_ROOT/VERSION")
 echo "dkbo ${v:-unknown}"
