@@ -65,11 +65,11 @@ dk_layout_even() { # TAB_NO [PANES_FILE] — equalise the tab's live employee ce
           if (x[j] < x[i]+w[i] && x[i] < x[j]+w[j] && !(y[j] in cy)) {cy[y[j]]=1; nr++}   # same column: distinct rows
         }
         dw=int(rw/nc)-w[i]; dh=int(rh/nr)-h[i]
-        if (dw>1 || dw<-1) printf "%s %s %.3f\n", id[i], (x[i]+w[i] < rx+rw ? "right" : "left"), dw/aw
-        if (dh>1 || dh<-1) printf "%s %s %.3f\n", id[i], (y[i]+h[i] < ry+rh ? "down" : "up"), dh/ah
+        if (dw>1 || dw<-1) printf "%s %s %d %d\n", id[i], (x[i]+w[i] < rx+rw ? "right" : "left"), dw, aw
+        if (dh>1 || dh<-1) printf "%s %s %d %d\n", id[i], (y[i]+h[i] < ry+rh ? "down" : "up"), dh, ah
       }
-    }' | while read -r pid direction amount; do
-      herdr pane resize --pane "$pid" --direction "$direction" --amount "$amount" >/dev/null 2>&1 </dev/null || true
+    }' | while read -r pid direction delta total; do
+      herdr pane resize --pane "$pid" --direction "$direction" --amount "$(dk__layout_amount "$delta" "$total")" >/dev/null 2>&1 </dev/null || true
     done
   return 0
 }
