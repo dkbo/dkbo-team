@@ -89,7 +89,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息） |
 | `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
-| `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind |
+| `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
 | `dk-leader` / `dk-version` | 開第二位領導；印版本 |
 
 ## 目錄

@@ -1,18 +1,77 @@
 #!/usr/bin/env bash
-# dk-watch [--once] [--interval SEC]  — background blocked-agent detector for one task.
+# dk-watch [--once] [--interval SEC] [--ensure]           — blocked + reviewer-timeout watcher for the bound task
+# dk-watch --chores [--once] [--interval SEC] [--ensure]  — blocked watcher for the running chores (no task binding)
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
-dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+once=0; interval=30; ensure=0; chores=0
+while [ $# -gt 0 ]; do case "$1" in
+  --once) once=1; shift;; --interval) interval="$2"; shift 2;;
+  --ensure) ensure=1; shift;; --chores) chores=1; shift;;
+  *) dk_die "unknown flag $1";; esac; done
+cdir="$DK_ROOT/tasks/_chores"                       # chore mode: no .task.env, so pid and markers live in
+cmark="$DK_ROOT/.sessions/chores.blocked"           # .sessions, which is gitignored and already holds transient state
+cpid="$DK_ROOT/.sessions/chores.watch.pid"
+alive() { [[ "${1:-}" =~ ^[0-9]+$ ]] && ps -p "$1" -o args= 2>/dev/null | grep -q "${2:-dk-watch}"; }
+# the full command line, not kill -0: pids get recycled and kill -0 would call a stranger alive
+
+if [ "$chores" = 1 ] && [ "$ensure" = 1 ]; then   # idempotent start; the last chore closing lets it exit on its own
+  [ -z "${DK_NO_WATCH:-}" ] || { echo "watch: disabled (DK_NO_WATCH)"; exit 0; }
+  pid=$(cat "$cpid" 2>/dev/null || true)
+  if alive "$pid" 'dk-watch.*--chores'; then echo "watch: chores running (pid $pid)"; exit 0; fi
+  mkdir -p "$(dirname "$cpid")"
+  nohup "$DK_ROOT/bin/dk-watch" --chores </dev/null >/dev/null 2>&1 3>&- &
+  pid=$!; echo "$pid" > "$cpid"
+  echo "watch: chores started (pid $pid)"; exit 0
+fi
+
+if [ "$chores" = 0 ]; then dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; fi
 dk_settings
-once=0; interval=30
-while [ $# -gt 0 ]; do case "$1" in --once) once=1; shift;; --interval) interval="$2"; shift 2;; *) dk_die "unknown flag $1";; esac; done
-thr="${DK_BLOCK_SEC:-60}"; mkdir -p "$dir/.blocked"
+thr="${DK_BLOCK_SEC:-60}"
+
+if [ "$ensure" = 1 ]; then   # idempotent start: the safety net must not disappear silently
+  [ -z "${DK_NO_WATCH:-}" ] || { echo "watch: disabled (DK_NO_WATCH)"; exit 0; }
+  if alive "${DK_WATCH_PID:-}"; then echo "watch: running (pid $DK_WATCH_PID)"; exit 0; fi
+  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" </dev/null >/dev/null 2>&1 3>&- &
+  new=$!
+  dk_env_set DK_WATCH_PID "$new"; dk_process "watch restarted (pid $new)"
+  echo "watch: restarted (pid $new)"; exit 0
+fi
+
+agent_status() { printf '%s' "$2" | jq -r --arg a "$1" '(.result.agents // [])[] | select(.name==$a) | .agent_status' 2>/dev/null | head -1 || true; }
+
+chore_tick() {   # chores have no reviewers and no waves: blocked detection only
+  local now list f agent leader st m since working=0
+  compgen -G "$cdir/*.md" >/dev/null 2>&1 || exit 0
+  now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
+  mkdir -p "$cmark"
+  for f in "$cdir"/*.md; do
+    grep -q '^status: working' "$f" || continue
+    working=1
+    agent=$(sed -n 's/^成員：\([^ ]*\).*/\1/p' "$f" | head -1); [ -n "$agent" ] || continue
+    leader=$(sed -n 's/^leader: *//p' "$f" | head -1)   # chore files written before 0.1.4 have no leader line
+    st=$(agent_status "$agent" "$list")
+    m="$cmark/$agent"
+    if [ "$st" = blocked ]; then
+      if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
+      since=$(head -1 "$m"); [ "$(wc -l < "$m")" -ge 2 ] && continue   # already notified
+      if [ $((now - since)) -ge "$thr" ]; then
+        herdr notification show "dkbo: $agent blocked" --body "雜務員工卡在審批" --sound request >/dev/null 2>&1 </dev/null || true
+        [ -z "$leader" ] || herdr agent prompt "$leader" "[BLOCKED] from dk-watch: $agent 卡在審批" >/dev/null 2>&1 </dev/null || true
+        echo "$(dk_now) dk-watch -> ${leader:-（無 leader 紀錄）} [BLOCKED] $agent 卡在審批" >> "$cdir/messages.log"
+        echo notified >> "$m"
+      fi
+    else rm -f "$m"; fi
+  done
+  [ "$working" = 1 ] || exit 0   # the last chore closed; nothing left to watch
+}
+
 tick() {
   [ -f "$dir/.panes" ] || exit 0
   local now list; now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
+  mkdir -p "$dir/.blocked"
   while read -r agent _pane; do
     [ -n "$agent" ] || continue
-    st=$(printf '%s' "$list" | jq -r --arg a "$agent" '(.result.agents // [])[] | select(.name==$a) | .agent_status' 2>/dev/null | head -1 || true)
+    st=$(agent_status "$agent" "$list")
     m="$dir/.blocked/$agent"
     if [ "$st" = blocked ]; then
       if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
@@ -42,5 +101,7 @@ tick() {
     dk_process "timeout $agent$tag → kind ${kind:-?} down"; echo notified > "$m"
   done < "$dir/.panes"
 }
-if [ "$once" = 1 ]; then tick; exit 0; fi
-while :; do tick; sleep "$interval"; done
+
+run() { if [ "$chores" = 1 ]; then chore_tick; else tick; fi; }
+if [ "$once" = 1 ]; then run; exit 0; fi
+while :; do run; sleep "$interval"; done

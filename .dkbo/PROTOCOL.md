@@ -57,4 +57,4 @@ DONE 前 `touched` 必須完整。`dk-wave-close` 不是看你自報的清單，
 - 意見只給領導（`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`），不直接對 dev 說；領導轉成 BUG 給 dev。收到領導 `[TASK] 複看` 時重讀差異包、更新 report、再 DONE。
 - 評議波（設計題）沿用：意見寫 state notes，第二輪只准一則反駁。
 
-雜務員工（`chore-*`）沒有任務綁定，不寫 state 檔，進度寫在自己的 chore 檔；回報一律 `dk-msg leader "[DONE] <一句結果>"`（只能對 leader，腳本會等領導閒置再送、記到 `tasks/_chores/messages.log`）。不要直接用 `herdr agent prompt` 回報：領導忙碌時那樣送會被吃掉。
+雜務員工（`chore-*`）沒有任務綁定，不寫 state 檔，進度寫在自己的 chore 檔（`dk-watch --chores` 會盯著它的 `status: working`，你卡在審批超過門檻就推 `[BLOCKED]` 給派你的領導）；回報一律 `dk-msg leader "[DONE] <一句結果>"`（只能對 leader，腳本會等領導閒置再送、記到 `tasks/_chores/messages.log`）。不要直接用 `herdr agent prompt` 回報：領導忙碌時那樣送會被吃掉。

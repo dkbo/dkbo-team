@@ -26,10 +26,120 @@ teardown() { teardown_project; }
   pid=$(sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$output/.task.env"); [[ "$pid" =~ ^[0-9]+$ ]]
   kill "$pid" 2>/dev/null || true
 }
+wpid() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
+
+@test "--ensure starts the watcher and records its pid" {
+  unset DK_NO_WATCH
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *restarted* ]]
+  pid=$(wpid); [[ "$pid" =~ ^[0-9]+$ ]]
+  ps -p "$pid" -o args= | grep -q dk-watch
+  grep -q 'watch restarted' "$d/process.md"
+  kill "$pid" 2>/dev/null || true
+}
+@test "--ensure is a no-op while the watcher is alive" {
+  unset DK_NO_WATCH
+  dk-watch --ensure >/dev/null; pid1=$(wpid)
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"running (pid $pid1)"* ]]
+  [ "$(wpid)" = "$pid1" ]
+  kill "$pid1" 2>/dev/null || true
+}
+@test "--ensure restarts a watcher whose pid is gone" {
+  unset DK_NO_WATCH
+  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *restarted* ]]
+  pid=$(wpid); [ "$pid" != "$dead" ]
+  kill "$pid" 2>/dev/null || true
+}
+@test "--ensure does not trust a recycled pid that is not a watcher" {
+  unset DK_NO_WATCH
+  sleep 30 & other=$!
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$other\"/" "$d/.task.env"
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *restarted* ]]
+  pid=$(wpid); [ "$pid" != "$other" ]
+  kill "$other" "$pid" 2>/dev/null || true
+}
+@test "--ensure honours DK_NO_WATCH" {
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *disabled* ]]
+  grep -q '^DK_WATCH_PID=""$' "$d/.task.env"
+}
+
+@test "dk-spawn ensures the watcher is alive" {
+  unset DK_NO_WATCH
+  run dk-spawn frontend cart; [ "$status" -eq 0 ]
+  pid=$(wpid); [[ "$pid" =~ ^[0-9]+$ ]]; ps -p "$pid" -o args= | grep -q dk-watch
+  kill "$pid" 2>/dev/null || true
+}
+@test "dk-wave-open ensures the watcher is alive" {
+  unset DK_NO_WATCH; fixture_brief "$d"; : > "$d/.panes"
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  pid=$(wpid); [[ "$pid" =~ ^[0-9]+$ ]]; ps -p "$pid" -o args= | grep -q dk-watch
+  kill "$pid" 2>/dev/null || true
+}
+@test "dk-resume prints the watcher's status once" {
+  run dk-resume; [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c '^watch: ')" -eq 1 ]
+  [[ "$output" == *"watch: disabled"* ]]
+}
+
 @test "tick survives an agent list without agents array" {
   echo '{"id":"cli:agent:list","result":{}}' > "$HERDR_STUB_RESPONSES/agent_list.json"
   run dk-watch --once; [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/login-qa" ]
+}
+
+chore_file() { # $1=agent $2=status [$3=leader] — a chore file without running dk-chore
+  mkdir -p "$DK_ROOT/tasks/_chores"
+  local f="$DK_ROOT/tasks/_chores/2026-09-10-$1.md"
+  {
+    echo "交代：翻譯 README"; echo "成員：$1 (claude / M)"; echo "branch: -"; echo "workspace: -"; echo "pane: wC:p3"
+    [ -z "${3:-}" ] || echo "leader: $3"
+    echo "status: $2"; echo "touched:"; echo "結果："
+  } > "$f"
+}
+blocked_chore() { sed -i 's/login-qa/chore-frontend-1/' "$HERDR_STUB_RESPONSES/agent_list.json"; }
+cmark="$DK_ROOT/.sessions/chores.blocked"
+
+@test "--chores: first sighting records a marker, no notify" {
+  blocked_chore; chore_file chore-frontend-1 working leader-login
+  run dk-watch --chores --once; [ "$status" -eq 0 ]
+  [ -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
+  ! grep -q '^notification show' "$HERDR_STUB_LOG"
+}
+@test "--chores: blocked past the threshold notifies the chore's own leader once" {
+  blocked_chore; chore_file chore-frontend-1 working leader-login
+  mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  dk-watch --chores --once; dk-watch --chores --once
+  [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
+  grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log"
+}
+@test "--chores: a chore file with no leader line still raises the desktop notification" {
+  blocked_chore; chore_file chore-frontend-1 working
+  mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  run dk-watch --chores --once; [ "$status" -eq 0 ]
+  grep -q '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG"
+  ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
+}
+@test "--chores: a chore that is not working is not watched" {
+  blocked_chore; chore_file chore-frontend-1 done leader-login
+  run dk-watch --chores --once; [ "$status" -eq 0 ]
+  [ ! -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
+}
+@test "--chores --ensure starts one chore watcher and is idempotent" {
+  unset DK_NO_WATCH; chore_file chore-frontend-1 working leader-login
+  run dk-watch --chores --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"chores started"* ]]
+  pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid"); ps -p "$pid" -o args= | grep -q -- '--chores'
+  run dk-watch --chores --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"chores running (pid $pid)"* ]]
+  [ "$(cat "$DK_ROOT/.sessions/chores.watch.pid")" = "$pid" ]
+  kill "$pid" 2>/dev/null || true
+}
+@test "dk-chore records its leader and ensures the chore watcher" {
+  unset DK_NO_WATCH
+  run dk-chore frontend "翻譯 README"; [ "$status" -eq 0 ]
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^leader: wB:p1$' "$f"
+  pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid"); ps -p "$pid" -o args= | grep -q -- '--chores'
+  kill "$pid" 2>/dev/null || true
 }
 
 old=$(( $(date +%s) - 1500 ))   # 25 minutes ago

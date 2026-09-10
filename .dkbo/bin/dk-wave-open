@@ -23,4 +23,5 @@ for m in $members; do m="${m%%(*}"
 done
 dk_env_set DK_WAVE "$n"
 dk_process "wave-open $n base ${base:0:7} members $peers"
+"$DK_ROOT/bin/dk-watch" --ensure >/dev/null 2>&1 || true   # a pane just appeared; make sure the safety net is alive
 echo "wave $n open (base ${base:0:7}); slices in $dir/briefs/"

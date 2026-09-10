@@ -77,6 +77,7 @@ dk_kind_load "$kind"; have=$(kind_mcp_list || true); missing=""
 for m in $(dk_fm_list "$rf" mcp); do echo "$have" | grep -qx "$m" || missing="$missing $m"; done
 if [ -n "$missing" ]; then echo "dk-spawn: mcp missing for $kind:$missing" >&2; dk_process "mcp-missing $agent:$missing"; fi
 
+"$DK_ROOT/bin/dk-watch" --ensure >/dev/null 2>&1 || true   # a pane just appeared; make sure the safety net is alive
 if herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume" "$brief_for" "$report")" --wait --timeout 60000 >/dev/null; then
   dk_process "spawn $agent ($kind $tier)$notes"
   echo "$agent $pane"

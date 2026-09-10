@@ -3,6 +3,7 @@
 branch: {{BRANCH}}
 workspace: {{WORKSPACE}}
 pane: {{PANE}}
+leader: {{LEADER}}
 status: working
 touched:
 結果：

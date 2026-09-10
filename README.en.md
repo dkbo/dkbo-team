@@ -89,7 +89,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-process` / `dk-resume` | Append an event; print the recovery pack (brief, current wave, rulings, unread messages) |
 | `dk-task-close` | Merge into the main branch, remove the worktree, mark INDEX done |
 | `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |
-| `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind |
+| `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind. `--ensure` restarts it idempotently (dk-spawn, dk-wave-open and dk-resume all call it); `--chores` watches the chore side |
 | `dk-leader` / `dk-version` | Start a second leader; print the version |
 
 ## Layout of the repo
