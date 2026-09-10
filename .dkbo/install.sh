@@ -30,4 +30,4 @@ if ! grep -qs '.dkbo/.sessions' .gitignore; then
 fi
 grep -qsx '.worktrees/' .gitignore || append_line .gitignore '.worktrees/'
 chmod +x .dkbo/bin/* .dkbo/install.sh
-echo "dkbo $(tr -d '[:space:]' < .dkbo/VERSION 2>/dev/null || echo unknown) installed into $target"
+echo "dkbo $(cat .dkbo/VERSION 2>/dev/null | tr -d '[:space:]' || echo unknown) installed into $target"

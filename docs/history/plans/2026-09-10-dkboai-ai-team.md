@@ -2174,7 +2174,7 @@ Expected: all `OK`. For each `FAIL`, fix the corresponding `tests/stub/responses
 - [ ] **Step 4: Commit**
 
 ```bash
-git add tests/integration docs/superpowers/specs
+git add tests/integration docs/design
 git commit -m "test: layer-2 real herdr verification script
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
