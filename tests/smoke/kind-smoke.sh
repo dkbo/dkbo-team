@@ -8,7 +8,7 @@ tmp=$(mktemp -d); cp -r "$repo/.dkbo" "$tmp/"; cd "$tmp"
 git init -q; git -c user.name=t -c user.email=t@t commit -q --allow-empty -m init; git branch -M main
 .dkbo/install.sh >/dev/null; export DK_ROOT="$tmp/.dkbo"; PATH="$tmp/.dkbo/bin:$PATH"
 mkdir -p notes; touch notes/.gitkeep
-git add -A; git -c user.name=t -c user.email=t@t commit -q -m "add dkboai"
+git add -A; git -c user.name=t -c user.email=t@t commit -q -m "add dkbo"
 dir=$(dk-task-new smoke "smoke")
 cat >> "$dir/brief.md" <<'B'
 | it | notes/** | — |

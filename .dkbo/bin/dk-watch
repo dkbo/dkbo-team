@@ -18,7 +18,7 @@ tick() {
       if [ ! -f "$m" ]; then echo "$now" > "$m"; continue; fi
       since=$(head -1 "$m"); [ "$(wc -l < "$m")" -ge 2 ] && continue   # already notified
       if [ $((now - since)) -ge "$thr" ]; then
-        herdr notification show "dkboai: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 </dev/null || true
+        herdr notification show "dkbo: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 </dev/null || true
         herdr agent prompt "$(dk_leader_name)" "[BLOCKED] from dk-watch: $agent 卡在審批" >/dev/null 2>&1 </dev/null || true
         dk_process "blocked $agent"; echo notified >> "$m"
       fi
@@ -34,7 +34,7 @@ tick() {
     txt=$(printf '%s' "$raw" | jq -r '.result.read.text // .result.text // empty' 2>/dev/null || true); txt="${txt:-$raw}"
     tag=""; printf '%s' "$txt" | grep -qiE 'rate limit|quota|429|usage limit' && tag=" (quota?)"
     kind=$(sed -n "s/^[^ ]* spawn $agent (\([a-z0-9_-]*\) .*/\1/p" "$dir/process.md" 2>/dev/null | tail -1 || true)
-    herdr notification show "dkboai: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
+    herdr notification show "dkbo: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
     herdr agent prompt "$(dk_leader_name)" "[TIMEOUT] from dk-watch: $agent 逾時${tag}" >/dev/null 2>&1 </dev/null || true
     if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
       DK_KIND_DOWN="${DK_KIND_DOWN:+$DK_KIND_DOWN }$kind"; dk_env_set DK_KIND_DOWN "$DK_KIND_DOWN"

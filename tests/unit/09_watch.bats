@@ -10,7 +10,7 @@ teardown() { teardown_project; }
 @test "blocked past threshold notifies once" {
   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
   dk-watch --once; dk-watch --once
-  [ "$(grep -c '^notification show dkboai: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^notification show dkbo: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
   grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
   grep -q 'blocked login-qa' "$d/process.md"
 }
@@ -39,7 +39,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   reviewer_row "$old"
   dk-watch --once; dk-watch --once
   [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG")" -eq 1 ]
-  [ "$(grep -c '^notification show dkboai: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
   grep -q '^agent read login-reviewer-b --lines 30$' "$HERDR_STUB_LOG"
   grep -q ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md"; grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
   [ -f "$d/.blocked/login-reviewer-b.timeout" ]

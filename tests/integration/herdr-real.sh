@@ -49,7 +49,7 @@ elif [ -n "$pr" ]; then ok "pane read returns plain text"; echo "NOTE pane/agent
 else fail "pane read returned nothing"; fi
 printf '%s' "$tc" > "$tmp/tab_create.json"; printf '%s' "$lay" > "$tmp/pane_layout.json"; printf '%s' "$pr" > "$tmp/pane_read.json"
 $H tab close "$tid" >/dev/null 2>&1 && ok "tab close" || fail "tab close"
-$H notification show "dkboai layer2" --body ok >/dev/null 2>&1 && ok "notification show" || fail "notification show"
+$H notification show "dkbo layer2" --body ok >/dev/null 2>&1 && ok "notification show" || fail "notification show"
 $H pane close "$p" >/dev/null 2>&1 && ok "pane close" || fail "pane close"
 wsid=$(echo "$wt" | jq -r '.result.workspace.workspace_id // empty' 2>/dev/null); [ -n "$wsid" ] && $H worktree remove --workspace "$wsid" --force >/dev/null 2>&1
 [ -n "$wsid" ] && [ "$wsid" != "$ws0" ] && $H workspace close "$wsid" >/dev/null 2>&1

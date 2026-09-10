@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# .dkbo/install.sh [--target DIR]  — wire dkboai into a project (idempotent).
+# .dkbo/install.sh [--target DIR]  — wire dkbo into a project (idempotent).
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="$(dirname "$here")"; [ "${1:-}" = --target ] && target="$(cd "$2" && pwd)"
@@ -11,10 +11,10 @@ append_line() { # FILE LINE — append LINE, first making sure FILE ends with a 
 for s in init add-role; do
   for d in .claude/skills .agents/skills; do
     mkdir -p "$d"
-    if [ -e "$d/dkboai-$s" ] && [ ! -L "$d/dkboai-$s" ]; then
-      echo "install.sh: $d/dkboai-$s exists and is not a symlink; left untouched" >&2
+    if [ -e "$d/dkbo-$s" ] && [ ! -L "$d/dkbo-$s" ]; then
+      echo "install.sh: $d/dkbo-$s exists and is not a symlink; left untouched" >&2
     else
-      ln -sfn "../../.dkbo/skills/$s" "$d/dkboai-$s"
+      ln -sfn "../../.dkbo/skills/$s" "$d/dkbo-$s"
     fi
   done
 done
@@ -30,4 +30,4 @@ if ! grep -qs '.dkbo/.sessions' .gitignore; then
 fi
 grep -qsx '.worktrees/' .gitignore || append_line .gitignore '.worktrees/'
 chmod +x .dkbo/bin/* .dkbo/install.sh
-echo "dkboai installed into $target"
+echo "dkbo installed into $target"

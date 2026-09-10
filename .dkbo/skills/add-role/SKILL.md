@@ -1,8 +1,8 @@
 ---
-name: dkboai-add-role
-description: 為 dkboai 團隊新增一個角色（例如 translator、designer）。問職責與交接，偵測可用 AI 工具讓人選，依難度建議 S/M/L 三檔的 model/effort 讓人確認，產出 roles/<name>.md 並登錄團隊表。
+name: dkbo-add-role
+description: 為 dkbo 團隊新增一個角色（例如 translator、designer）。問職責與交接，偵測可用 AI 工具讓人選，依難度建議 S/M/L 三檔的 model/effort 讓人確認，產出 roles/<name>.md 並登錄團隊表。
 ---
-# dkboai add-role
+# dkbo add-role
 
 一次問一題。
 

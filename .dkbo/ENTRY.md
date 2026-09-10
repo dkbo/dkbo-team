@@ -1,4 +1,4 @@
-# dkboai 入口
+# dkbo 入口
 
 執行 `.dkbo/bin/dk-whoami`。
 

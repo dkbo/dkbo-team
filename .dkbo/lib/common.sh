@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# Shared helpers for dkboai bin scripts. Source, do not execute. No `set` here: bats sources this too.
+# Shared helpers for dkbo bin scripts. Source, do not execute. No `set` here: bats sources this too.
 case "${LC_ALL:-}" in *UTF-8*|*utf8*) ;; *) export LC_ALL=C.UTF-8;; esac
 DK_ROOT="${DK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DK_PROJECT_ROOT="${DK_PROJECT_ROOT:-$(dirname "$DK_ROOT")}"
@@ -51,7 +51,7 @@ dk_settings() { # load .dkbo/settings.env over the defaults; warn once per proce
     # shellcheck disable=SC1091
     . "$DK_ROOT/settings.env"
   elif [ -z "${DK_SETTINGS_WARNED:-}" ]; then
-    echo "dk: $DK_ROOT/settings.env missing; using defaults (run /dkboai-init)" >&2; DK_SETTINGS_WARNED=1
+    echo "dk: $DK_ROOT/settings.env missing; using defaults (run /dkbo-init)" >&2; DK_SETTINGS_WARNED=1
   fi
   export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_SETTINGS_WARNED
 }
