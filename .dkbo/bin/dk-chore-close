@@ -19,5 +19,5 @@ if [ "$branch" != "-" ]; then
   [ "$abandon" = 1 ] && git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
 fi
 if [ "$abandon" = 1 ]; then sed -i 's/^status: .*/status: abandoned/' "$cf"; dk_index_set "$instr" abandoned "—"
-else [ "$branch" = "-" ] || sed -i "s#^結果：.*#結果：$result#" "$cf"; dk_index_set "$instr" done "${result:-—}"; fi
+else [ "$branch" = "-" ] || sed -i "s#^結果：.*#結果：$result#" "$cf"; dk_index_set "$instr" "done" "${result:-—}"; fi
 echo "${result:-closed}"

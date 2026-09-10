@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # KIND_* are read by lib/kinds.sh after sourcing
 KIND_MODELS="gpt-5.5"
 KIND_EFFORTS="low medium high"
 KIND_DEFAULT_TIERS="S=gpt-5.5/low M=gpt-5.5/medium L=gpt-5.5/high"

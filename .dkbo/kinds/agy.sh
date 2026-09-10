@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # KIND_* are read by lib/kinds.sh after sourcing
 # agy model ids embed the effort suffix: gemini-3.1-pro-high
 KIND_MODELS="gemini-3.1-pro gemini-3.8-flash"
 KIND_EFFORTS="low medium high"

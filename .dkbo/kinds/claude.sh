@@ -1,4 +1,5 @@
 # shellcheck shell=bash
+# shellcheck disable=SC2034  # KIND_* are read by lib/kinds.sh after sourcing
 KIND_MODELS="opus sonnet"
 KIND_EFFORTS="low medium high"
 KIND_DEFAULT_TIERS="S=sonnet/low M=sonnet/medium L=opus/high"

@@ -40,9 +40,11 @@ dk_layout_even() { # TAB_NO [PANES_FILE] — equalise the tab's live employee ce
   ids=$(awk -v t="$tab" 'NF>=6 && $5==t {print $2}' "$panes")
   if [ -z "$ids" ]; then
     if [ "$tab" -ge 2 ]; then
+      # shellcheck disable=SC2086  # DK_TABS is a space-separated list
       tid=$(printf '%s\n' ${DK_TABS:-} | awk -F= -v t="$tab" '$1==t{print $2}')
       if [ -n "$tid" ]; then
         herdr tab close "$tid" >/dev/null 2>&1 </dev/null || true
+        # shellcheck disable=SC2086  # DK_TABS is a space-separated list
         dk_env_set DK_TABS "$(printf '%s\n' ${DK_TABS:-} | grep -v "^$tab=" | tr '\n' ' ' | sed 's/ $//')"
         dk_process "tab $tab $tid closed"
       fi

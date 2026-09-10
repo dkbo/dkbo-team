@@ -42,10 +42,12 @@ else
   read -r tab_no slot anchor direction share <<< "$(dk_layout_slot "$group")"
   if [ "$tab_no" = NEWTAB ]; then
     tab_no="$slot"; slot=1
+    # shellcheck disable=SC2086  # DK_TABS is a space-separated list
     stale=$(printf '%s\n' ${DK_TABS:-} | awk -F= -v t="$tab_no" '$1==t{print $2}' | head -1)
     if [ -n "$stale" ]; then
       herdr tab close "$stale" >/dev/null 2>&1 </dev/null || true
       dk_process "tab $tab_no $stale closed (recreated)"
+      # shellcheck disable=SC2086  # DK_TABS is a space-separated list
       DK_TABS=$(printf '%s\n' ${DK_TABS:-} | grep -v "^$tab_no=" | tr '\n' ' ' | sed 's/ $//') || true
     fi
     out=$(herdr tab create --workspace "$DK_WORKSPACE" --cwd "$DK_WORKTREE" --label "$DK_SHORT-$tab_no" --no-focus "${env_args[@]}") || dk_die "tab create failed"

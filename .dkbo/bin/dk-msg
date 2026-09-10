@@ -20,7 +20,7 @@ if [ "${DK_ISOLATED:-0}" = 1 ] && [ "$target" != "$(dk_leader_name)" ]; then
   echo "dk-msg: you are isolated; only leader may be messaged" >&2; exit 2; fi
 
 line="[$type] from $sender: $body"
-if herdr agent wait "$target" --until idle --until done --timeout "${DK_MSG_WAIT_MS:-300000}" >/dev/null 2>&1 \
+if herdr agent wait "$target" --until idle --until "done" --timeout "${DK_MSG_WAIT_MS:-300000}" >/dev/null 2>&1 \
    && herdr agent prompt "$target" "$line" >/dev/null 2>&1; then
   echo "$(dk_now) $sender -> $target [$type] $body" >> "$log"; exit 0
 fi

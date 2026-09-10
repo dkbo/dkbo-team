@@ -6,6 +6,7 @@ dk_owned() {
   [ -n "$globs" ] || return 1
   while IFS= read -r g; do
     [ -n "$g" ] || continue
+    # shellcheck disable=SC2254  # $g IS a glob pattern (brief 可改 column)
     case "$path" in
       $g) return 0;;
     esac

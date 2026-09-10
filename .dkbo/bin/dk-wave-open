@@ -14,7 +14,7 @@ base=$(git -C "$DK_WORKTREE" rev-parse HEAD)
 goal=$(dk_brief_section "$brief" "## 目標"); contract=$(dk_brief_section "$brief" "## 共用契約"); acc=$(dk_brief_section "$brief" "## 驗收標準")
 peers=$(echo "$members" | tr '\n' ' ' | sed 's/ $//')
 mkdir -p "$dir/briefs"
-for m in $(echo "$members" | sed 's/(.*//'); do
+for m in $members; do m="${m%%(*}"
   rows=$(dk_brief_waves "$brief" | awk -F'|' -v m="$m" -v n="$n" '$1==n && $3==m {printf "| %s | %s | %s | %s | %s | %s | %s |\n", $1,$2,$3,$4,$5,$6,$7}')
   own=$(dk_brief_owners "$brief" | awk -F'|' -v m="$m" '$1==m {printf "| %s | %s | %s |\n", $1,$2,$3}')
   [ -n "$own" ] || echo "dk-wave-open: $m has no row in 檔案所有權 (run dk-brief-check)" >&2

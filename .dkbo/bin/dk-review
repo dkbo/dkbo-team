@@ -27,6 +27,7 @@ for k in $kinds; do
   if [[ " ${DK_KIND_DOWN:-} " == *" $k "* ]]; then echo "dk-review: kind $k is down for this task; skipped" >&2; continue; fi
   use="$use $k"
 done
+# shellcheck disable=SC2086  # split kinds on purpose
 use=$(printf '%s\n' $use | head -3 | tr '\n' ' ')
 [ -n "${use// /}" ] || { echo "dk-review: no reviewer kind available; record: dk-process \"review $n skipped: all kinds down\"" >&2; exit 1; }
 members=$(dk_brief_wave_members "$dir/brief.md" "$n" | tr '\n' ' ' | sed 's/ $//')
