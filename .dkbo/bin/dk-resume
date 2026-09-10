@@ -14,7 +14,7 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   echo "## brief"; cat "$dir/brief.md"
   echo "## 本波"
   if [ -n "${DK_WAVE:-}" ]; then
-    echo "wave: $DK_WAVE  base: $(sed -n "s/^[^ ]* wave-open $DK_WAVE base \([0-9a-f]*\).*/\1/p" "$dir/process.md" | tail -1)  kinds down: ${DK_KIND_DOWN:-無}"
+    echo "wave: $DK_WAVE  base: $(dk_wave_base "$dir" "$DK_WAVE")  kinds down: ${DK_KIND_DOWN:-無}"
     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
       NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"

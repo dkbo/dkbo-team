@@ -7,7 +7,7 @@
 3. 預期：領導 `dk-task-new login --gate1`，`dk-spawn backend`、`dk-spawn qa`，然後閒置。切到 worktree workspace 觀察兩個 pane。切到 tab 1 觀察：領導佔左欄、backend 與 qa 在右側上下兩格。
 4. 故意製造一次 BUG 迴圈：在 qa 的 state 出現前對 qa pane 說「空密碼要回 400，請嚴格驗」。看 messages.log 出現 `[BUG]` → `[FIXED]`。
 5. 若 qa 第二次仍失敗會 `[ESCALATE]` 給領導；領導應在 pane 裡問你（關卡②）。回一個決策，看 `[DECISION]` 進 log、decisions.md 多一行。
-6. 兩人 DONE 後：領導 `dk-review-pack 1`、`dk-review`；reviewer DONE 後領導記 verdict 與 ruling，才 `dk-wave-close` 並 commit `wave 1: ...`。檢查 process.md 有 `review 1 spawned`、`review 1 verdict`、`ruling:`、`wave-close 1 tests`。
+6. 兩人 DONE 後：領導 `dk-review-pack 1`、`dk-review`；reviewer DONE 後領導記 verdict 與 ruling，才 `dk-wave-close`（它自己 commit `wave 1: <成員>`）。檢查 process.md 有 `review 1 spawned`、`review 1 verdict`、`ruling:`、`wave-close 1 tests`、`commit <sha> wave 1`，且 worktree 乾淨。順手驗越界閘：在 worktree 建一個沒人擁有的檔（`echo x > junk.txt`）再跑 `dk-wave-close`，預期 `unowned change: junk.txt` 且不放行；刪掉再跑。
 7. 在領導 pane 執行 `/clear`，再說「執行 .dkbo/bin/dk-resume 然後繼續」。預期：領導讀回恢復包，正確開 wave2（frontend + qa）。
 8. wave2 DONE、wave-close 後，領導寫 report.md 給你看（關卡③）。回「合併」。預期 `dk-task-close` 合併回 main、worktree 移除、INDEX 為 done。
 9. 雜務：對領導說「請翻譯 README.md 成英文」。預期領導發現沒有 translator 角色 → 跑 add-role → `dk-chore translator "..."`；完成後 INDEX 多一行 chore。

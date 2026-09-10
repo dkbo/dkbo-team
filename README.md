@@ -14,7 +14,7 @@
 
 - **記憶外置**：任務的全部狀態（brief、process、每位員工的 state 與 report、訊息紀錄）都是檔案。領導 `/clear` 之後執行 `dk-resume` 就能接續，員工掛掉用 `--resume` 重派。
 - **多模型審查閘**：每一波實作完成，領導派 1 到 3 位不同 kind 的 reviewer 只讀差異包出意見；wave-close 會檢查裁定、每位 dev 的測試段與專案測試指令，缺一不放行。
-- **檔案所有權**：brief 裡每個成員可改的檔案 glob 不得重疊，`dk-brief-check` 事前擋、`dk-wave-close` 事後比對 touched 清單。
+- **檔案所有權**：brief 裡每個成員可改的檔案 glob 不得重疊，`dk-brief-check` 事前擋、`dk-wave-close` 事後拿 worktree 的**真實 git diff**（含未 commit 與未追蹤）比對；出現本波沒人擁有的檔就不放行。
 
 ## 運作方式
 
@@ -36,7 +36,7 @@
 3. 每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔，做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
 4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
 5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；不能判的問你。這是**關卡②**。
-6. qa DONE 且審查裁定完成，`dk-wave-close`：檢查裁定行、每位 dev 的 `## 測試`、跑 `DK_TEST_CMD`、比對越界，然後在 worktree 內 commit。
+6. qa DONE 且審查裁定完成，`dk-wave-close`：四道閘 —— 裁定行、每位 dev 的 `## 測試`、`DK_TEST_CMD`、真實 diff 的越界比對 —— 缺一不放行，然後關 pane 並在 worktree 內 commit（`-m` 可指定訊息）。
 7. 所有波結束，領導先做整分支評議，再寫 `report.md` 給你拍板。這是**關卡③**。`dk-task-close` 合併回主分支、移除 worktree、INDEX 記 done。
 
 **雜務**：「翻譯 README 成英文」「先修登入頁那個 bug」這類不屬於任務的小事，領導用 `dk-chore` 派一位員工，`--code` 的會在獨立 worktree 分支工作並於 `dk-chore-close` 時合併回來。雜務員工用 `dk-msg leader` 回報，腳本會等領導閒置再送，不會漏訊。
@@ -85,7 +85,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-wave-open N` / `dk-spawn <角色>` | 開一波、切成員切片；開員工 pane 並下提示 |
 | `dk-msg <對象> "[類型] 內文"` | 等對方閒置再送訊息，記進 messages.log |
 | `dk-review-pack N` / `dk-review` | 打包差異；派 1 到 3 位 reviewer |
-| `dk-wave-close` | 三道檢查後關 pane、在 worktree 內準備 commit |
+| `dk-wave-close` | 四道閘後關 pane，並在 worktree 內 commit 這一波 |
 | `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息） |
 | `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |

@@ -6,12 +6,14 @@ setup() {
   printf 'status: done\nwave: 1\ntouched:\n  - tests/login.test.ts\n' > "$d/state/qa.md"
   printf '# backend 報告\n## 做了什麼\nlogin\n## 測試\nnpm test → 3 passed\n## 自我審查\n## 疑慮\n' > "$d/state/backend.report.md"
   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+  echo "$(date +%Y-%m-%dT%H:%M) wave-open 1 base $(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD) members backend qa" >> "$d/process.md"
   echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
+  wt() { git -C "$WORKTREE_PATH" -c user.name=t -c user.email=t@t "$@"; }
 }
 teardown() { teardown_project; }
 
 @test "all gates pass: panes closed, DK_WAVE cleared, tests skipped without DK_TEST_CMD" {
-  run dk-wave-close; [ "$status" -eq 0 ]; [ "$output" = "closed 2" ]
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"closed 2"* ]]
   grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"
   [ ! -s "$d/.panes" ]; grep -q '^DK_WAVE=""$' "$d/.task.env"
   grep -q ' wave-close 1 tests skipped (no DK_TEST_CMD) 2 agents closed$' "$d/process.md"
@@ -33,10 +35,11 @@ teardown() { teardown_project; }
   printf '# r\n## 測試\nbats 12 ok\n' > "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 0 ]
 }
 @test "gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail" {
-  echo 'DK_TEST_CMD="cat marker.txt"' >> "$DK_ROOT/settings.env"
-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"tests failed (cat marker.txt)"* ]]; [[ "$output" == *"No such file"* ]]
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
-  echo ok > "$WORKTREE_PATH/marker.txt"; run dk-wave-close; [ "$status" -eq 0 ]; grep -q ' wave-close 1 tests ok (cat marker.txt) 2 agents closed$' "$d/process.md"
+  echo 'DK_TEST_CMD="cat tests/marker.txt"' >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"tests failed (cat tests/marker.txt)"* ]]; [[ "$output" == *"No such file"* ]]
+  ! grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
+  mkdir -p "$WORKTREE_PATH/tests"; echo ok > "$WORKTREE_PATH/tests/marker.txt"   # under qa's ownership, or gate d refuses it
+  run dk-wave-close; [ "$status" -eq 0 ]; grep -q ' wave-close 1 tests ok (cat tests/marker.txt) 2 agents closed$' "$d/process.md"
 }
 @test "gate c: --force closes despite failing tests and says so" {
   echo 'DK_TEST_CMD="echo boom; exit 1"' >> "$DK_ROOT/settings.env"
@@ -47,12 +50,58 @@ teardown() { teardown_project; }
 }
 @test "legacy: two-column .panes or no DK_WAVE key → old behaviour with a warning" {
   printf 'login-backend wC:p2\nlogin-qa wC:p3\n' > "$d/.panes"; rm "$d/state/backend.report.md"; sed -i '/review 1 verdict/d' "$d/process.md"
+  mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"   # no diff gate, no commit either
   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"legacy"* ]]; grep -q 'wave-close: 2 agents closed' "$d/process.md"
+  [[ "$output" != *"unowned"* ]]; [[ "$output" != *"committed"* ]]; [ "$(wt log -1 --pretty=%s)" = init ]
 }
-@test "ownership violations and long state are still reported" {
-  printf 'status: done\ntouched:\n  - src/web/x.ts\n' > "$d/state/backend.md"
+@test "long state is still reported" {
   for i in $(seq 1 25); do echo "notes: line $i" >> "$d/state/qa.md"; done
-  run dk-wave-close; [ "$status" -eq 0 ]; grep -q 'violation login-backend: src/web/x.ts' "$d/process.md"; [[ "$output" == *"state too long"* ]]
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"state too long"* ]]
+}
+@test "越界閘: a real change nobody in the wave owns refuses unless --force" {
+  mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"unowned change: src/web/x.ts"* ]]
+  ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  run dk-wave-close --force; [ "$status" -eq 0 ]; grep -q 'violation unowned: src/web/x.ts' "$d/process.md"
+}
+@test "越界閘: an owned change nobody reported warns but still closes" {
+  mkdir -p "$WORKTREE_PATH/src/api"; echo x > "$WORKTREE_PATH/src/api/other.ts"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [[ "$output" == *"unreported change: src/api/other.ts (owner backend)"* ]]
+  grep -q 'unreported src/api/other.ts' "$d/process.md"
+}
+@test "越界閘: a touched path that never really changed is no longer a violation" {
+  printf 'status: done\ntouched:\n  - src/web/x.ts\n' > "$d/state/backend.md"
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" != *"violation"* ]]; ! grep -q 'violation' "$d/process.md"
+}
+@test "越界閘: a wave with no recorded base skips the diff gate with a warning" {
+  sed -i '/ wave-open 1 base /d' "$d/process.md"
+  mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"no recorded base"* ]]
+}
+@test "越界閘: a wave member with no state file still gets the normal refusal" {
+  rm "$d/state/qa.md"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]
+}
+@test "越界閘: an unreadable worktree refuses rather than passing the gate silently" {
+  rm -rf "$WORKTREE_PATH"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"cannot read the worktree diff"* ]]
+}
+@test "commit: the wave is committed in the worktree once the gates pass" {
+  mkdir -p "$WORKTREE_PATH/src/api"; echo x > "$WORKTREE_PATH/src/api/login.ts"
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"committed"* ]]
+  [ "$(wt log -1 --pretty=%s)" = "wave 1: backend qa" ]
+  [ -z "$(wt status --porcelain)" ]
+  grep -qE ' commit [0-9a-f]{7} wave 1$' "$d/process.md"
+}
+@test "commit: -m overrides the message" {
+  mkdir -p "$WORKTREE_PATH/src/api"; echo x > "$WORKTREE_PATH/src/api/login.ts"
+  run dk-wave-close -m "wave 1: 登入 API 完成"; [ "$status" -eq 0 ]
+  [ "$(wt log -1 --pretty=%s)" = "wave 1: 登入 API 完成" ]
+}
+@test "commit: an unchanged worktree is not committed" {
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"nothing to commit"* ]]
+  [ "$(wt log -1 --pretty=%s)" = init ]
 }
 @test "an emptied overflow tab is closed after the wave" {
   echo 'login-reviewer-a wB:p10 0 review 2 1' >> "$d/.panes"; printf 'status: done\n' > "$d/state/reviewer-a.md"

@@ -54,7 +54,7 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 - 想知道現在做到哪：隨時跑 `dk-resume`，它印的本波、裁定、未處理訊息、各員工 state 與在線員工就是狀態總覽，不必等失憶才用。
 - 第二位領導：在任何 herdr shell 執行 `.dkbo/bin/dk-leader pay "金流"`。
 - 新角色：`/dkbo-add-role`。
-- 每波自動附審查：dev DONE 後領導派 1–3 位 reviewer（kind 依 `.dkbo/settings.env`）與 qa 並行；wave-close 會檢查裁定、每位 dev 的 report 與 `DK_TEST_CMD`。純文件波在 brief 審查欄寫 `skip: <理由>`。
+- 每波自動附審查：dev DONE 後領導派 1–3 位 reviewer（kind 依 `.dkbo/settings.env`）與 qa 並行；wave-close 會檢查裁定、每位 dev 的 report、`DK_TEST_CMD`，以及拿 worktree 的真實 git diff 比對本波的檔案所有權（沒人擁有的檔一律不放行），四道全過才關 pane 並在 worktree 內 commit 這一波。純文件波在 brief 審查欄寫 `skip: <理由>`。
 - 人多時的版面：領導在 tab 1 左欄，員工填右側 2×2（或 3×2）；第 5 位起自動開 `<short>-2` 等 tab，每 tab 6 位。
 
 ## 目錄
@@ -87,4 +87,4 @@ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update 
 | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
 | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md`；必要時 `/clear` 後 `dk-resume`。 |
 | 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 LEADER.md 補位。 |
-| `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |
+| `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗、`unowned change`（本波改了沒人擁有的檔）。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |

@@ -46,7 +46,7 @@ blocked_by: （無則省略）
 report: state/<你的 state 名>.report.md
 notes: 給接手者的必要事實，≤5 行
 ```
-DONE 前 `touched` 必須完整，領導會拿它比對所有權。
+DONE 前 `touched` 必須完整。`dk-wave-close` 不是看你自報的清單，而是拿 worktree 的真實 git diff（含未 commit 與未追蹤）比對所有權：動了不屬於本波任何人的檔，整波關不掉；自己擁有但漏寫進 `touched` 的檔會被列成 `unreported change`。
 
 ## report 檔（`tasks/<t>/state/<你的 state 名>.report.md`，不限行數）
 照 `$DK_ROOT/templates/report-employee.md`：`## 做了什麼`、`## 測試`（**必填**：跑了什麼指令、結果摘要；空的話 dk-wave-close 不放行）、`## 自我審查`、`## 疑慮`。DONE 前 state 與 report 都要寫好。

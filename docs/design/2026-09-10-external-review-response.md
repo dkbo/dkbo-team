@@ -43,3 +43,11 @@ dkbo 的定位是：**一位人類、一位領導、同時 3 到 6 位員工、�
 - `.dkbo/tasks/BACKLOG.md`：新增兩項（herdr 收攏、整波逾時）。
 - `.dkbo/README.md`：dk-resume 補「隨時可跑當狀態總覽」。
 - 不改任何腳本。
+
+## 6. 後續更正（0.1.4，2026-09-11）
+
+第 3 節第二列當時的說法「`dk-wave-close` 已有三道機械閘：…touched 清單比對檔案所有權」只成立一半，這裡更正：那道越界比對的資料來源是**員工自己在 state 寫的 `touched:` 清單**，而且比對出來只 `echo` 警告、不 `exit 1` —— 資料與效力兩端都不是機械閘。
+
+0.1.4 補上：改用 worktree 的真實 git diff（自本波 base 起，含未 commit 與未追蹤，`.gitignore` 照舊生效），本波沒有任何成員擁有的檔案一律不放行（`--force` 例外並在 process 留 `violation unowned:` 紀錄）；自報漏寫降級為 `unreported change` 警告。同時把波的 commit 收進腳本，波的邊界真正等於 commit 邊界。至此第 3 節說的「三道」是四道，且四道都會 exit 1。
+
+無主但預期會變的檔（lockfile 之類）不另開設定鍵，沿用第 4 節 ③ 對 `DK_TEST_CMD` 的同一原則：要動就在 brief 的檔案所有權表列給某位成員，「誰能改什麼」只有一個宣告處。

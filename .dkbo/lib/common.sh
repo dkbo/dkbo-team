@@ -69,3 +69,7 @@ dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env
 dk_legacy_task() { # task folder created before the wave-review scripts
   local d; d=$(dk_task_dir) || return 1; ! grep -q '^DK_BASE=' "$d/.task.env"
 }
+dk_wave_base() { # TASK_DIR N → the base sha dk-wave-open recorded for wave N (empty when absent)
+  [[ "${2:-}" =~ ^[0-9]+$ ]] || return 0
+  sed -n "s/^[^ ]* wave-open $2 base \([0-9a-f]*\).*/\1/p" "$1/process.md" | tail -1
+}

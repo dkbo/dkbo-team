@@ -13,8 +13,8 @@ A multi-model AI development team packaged as one portable directory, `.dkbo/`, 
 A single agent working on a medium-sized feature hits three walls: it forgets things once its context fills up, it confirms its own mistakes without a second opinion, and it steps on files that belong to someone else. dkbo answers with three mechanisms:
 
 - **Memory lives on disk.** Everything about a task (brief, process log, each worker's state and report, the message log) is a file. After `/clear` the leader runs `dk-resume` and carries on. A dead worker is re-spawned with `--resume`.
-- **A multi-model review gate on every wave.** When a wave's implementation is done the leader dispatches one to three read-only reviewers, optionally of different kinds. `dk-wave-close` refuses until a verdict is recorded, every dev report has a filled test section, and the project's test command passes.
-- **File ownership.** Each member's writable globs are declared in the brief and may not overlap. `dk-brief-check` blocks overlaps up front and `dk-wave-close` compares each worker's touched list afterwards.
+- **A multi-model review gate on every wave.** When a wave's implementation is done the leader dispatches one to three read-only reviewers, optionally of different kinds. `dk-wave-close` refuses until a verdict is recorded, every dev report has a filled test section, the project's test command passes, and the real diff stays inside the wave's declared ownership.
+- **File ownership.** Each member's writable globs are declared in the brief and may not overlap. `dk-brief-check` blocks overlaps up front; afterwards `dk-wave-close` compares the worktree's **real git diff** (uncommitted and untracked work included) against those globs and refuses to close a wave that changed a file no member of it owns.
 
 ## How it works
 
@@ -36,7 +36,7 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 3. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own. When done they write their state and report and send `dk-msg leader "[DONE] …"`.
 4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
 5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
-6. Once qa is done and the review has a verdict, `dk-wave-close` checks the verdict line, every dev's `## 測試` section, runs `DK_TEST_CMD`, flags out-of-ownership edits, and the wave is committed inside the worktree.
+6. Once qa is done and the review has a verdict, `dk-wave-close` applies four gates — the verdict line, every dev's `## 測試` section, `DK_TEST_CMD`, and an ownership check against the worktree's real diff — then closes the panes and commits the wave inside the worktree (`-m` sets the message).
 7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
 
 **Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
@@ -85,7 +85,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices; open a worker pane and prompt it |
 | `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
 | `dk-review-pack N` / `dk-review` | Build the diff pack; dispatch one to three reviewers |
-| `dk-wave-close` | Three gates, then close panes and stage the wave for commit |
+| `dk-wave-close` | Four gates, then close panes and commit the wave inside the worktree |
 | `dk-process` / `dk-resume` | Append an event; print the recovery pack (brief, current wave, rulings, unread messages) |
 | `dk-task-close` | Merge into the main branch, remove the worktree, mark INDEX done |
 | `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |

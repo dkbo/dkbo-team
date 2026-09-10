@@ -26,7 +26,7 @@
 2. 對該波每位成員 `dk-spawn <角色> [別名] [--tier S|M|L] [--kind K] [--isolated]`。先派 dev 再派 qa，版面才會照 tab 填。結束這個 turn，閒置。員工訊息與人的輸入會自己推進來。不輪詢、不主動讀員工終端。
 3. 收到 dev `[DONE]`（state `status: done`、`state/<成員>.report.md` 有 `## 測試`）：`dk-review-pack N` 再 `dk-review`。reviewer 與 qa 並行，不必等 qa。
 4. 收到 reviewer `[DONE]`：讀 `state/reviewer-<x>.report.md`。達 `DK_REVIEW_MIN` 且無 Important，或所有 reviewer 皆回覆，即裁定：`dk-process "review N verdict a: ok / b: important 2"`，再記 `ruling:`（見下）。有 Important → `dk-msg <dev> "[BUG] review: …"` 指向 reviewer 的 report；dev `[FIXED]` 後重跑 `dk-review-pack N`，`dk-msg <reviewer> "[TASK] 複看 waves/N.diff"`。同一 bug 一次修復上限照 PROTOCOL。
-5. qa `[DONE]` 且審查已裁定 → `dk-wave-close`。它檢查裁定行、每位 dev 的 report、在 worktree 跑 `DK_TEST_CMD`；看測試結果與越界、超長警告。然後在 worktree 內 `git add -A && git commit -m "wave N: ..."`。
+5. qa `[DONE]` 且審查已裁定 → `dk-wave-close`。四道閘：裁定行、每位 dev 的 report、在 worktree 跑 `DK_TEST_CMD`、拿 worktree 的**真實 git diff**（含未 commit 與未追蹤）比對本波的檔案所有權。四道全過才關 pane，並自己在 worktree 內 commit（訊息預設 `wave N: <成員>`，要自訂用 `dk-wave-close -m "<訊息>"`）—— 你不用再手動 commit。留意 `unreported change` 與 state 超長警告。
 6. 純文件波：審查欄寫 `skip: <理由>`，領導 `dk-process "review N skipped: <理由>"`，wave-close 就放行。
 7. 收到 `[ESCALATE]`：能依 brief 判定就 `dk-msg <員工> "[DECISION] ..."` 並記 `ruling:`；不能就問人（關卡②），得到答案後回 DECISION 並在 `decisions.md` 加一行。收到 `[BLOCKED]`：告知人去按審批。處理完一批訊息後 `dk-msg --ack`。
 8. 依結果增刪下一波，記 process。
@@ -45,6 +45,9 @@
 - reviewer `[TIMEOUT]`（dk-watch 推來；該 kind 已寫進 `.task.env` 的 `DK_KIND_DOWN`）：`dk-wave-close --agent <reviewer>` 關它。達 `DK_REVIEW_MIN` 照常裁定；不夠就 `dk-review --kinds "<未熔斷者>"` 補一位；全部熔斷 → `dk-process "review N skipped: all kinds down"`，report.md 遺留段標「本波未經審查」。同任務內解除熔斷：編輯 `.task.env` 的 `DK_KIND_DOWN` 並 `dk-process "kind <k> up"`；`dk-task-close` 會清掉。
 - `dk-task-close` 或 `dk-chore-close` 回 `uncommitted changes`：worktree 裡有沒 commit 的變更，它不合併也不刪任何東西。任務：在 worktree 內 `git add -A && git commit` 後重跑；雜務：`dk-msg <員工> "[TASK] commit 你的變更"` 後重跑。真的要丟掉才用 `--abandon`。
 - wave-close 測試失敗：它不關 pane；`dk-msg <擁有者> "[BUG] wave-close tests: <最後幾行>"`；連續兩次失敗升關卡②。
+- wave-close 回 `unowned change: <路徑>`：這一波真的改了本波沒人擁有的檔（含在 worktree 裡動 `.dkbo/` 規則檔）。先判斷該不該改：該改就在 brief 的檔案所有權補給該成員並記 ruling，再重跑；不該改就 `dk-msg <該波成員> "[BUG] 還原 <路徑>"`。真要放行才 `--force`，並在 report.md 遺留段記一行。
+- wave-close 回 `unreported change`（只警告、不阻擋）：某成員改了自己擁有的檔卻沒寫進 state 的 `touched`。`dk-msg <成員> "[TASK] 補 state touched"`。
+- wave-close 回 `commit failed`：pane 已關但 commit 沒成（多半是專案的 pre-commit hook）。在 worktree 內自己 `git add -A && git commit` 補上，不要跳過 —— `dk-task-close` 會因未 commit 而拒絕結案。
 - dev report 缺 `## 測試`：wave-close 拒絕；`dk-msg <dev> "[TASK] 補 report 測試段"`。
 - 員工 `[ESCALATE] context` 或 pane 掛掉：`dk-spawn` 同角色同別名 `--resume`，提示會叫他從 state 續作；它會先關掉同名舊 pane。
 - reviewer 第一次派工失敗（`review N spawned` 那行標 `<agent>(<kind>,prompt-failed)`）：`herdr agent read <agent>` 看狀態，再 `herdr agent prompt <agent> "..."` 重新提示，不算一次 DONE。
