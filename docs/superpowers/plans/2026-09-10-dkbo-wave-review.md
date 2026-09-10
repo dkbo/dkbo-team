@@ -1818,7 +1818,8 @@ P
 ```bash
   [[ "$output" == *"wave: 1  base: abc1234  kinds down: codex"* ]]
   [[ "$output" == *"login-reviewer-a working 30 min TIMEOUT?"* ]]
-  [[ "$output" == *"ruling: 用 JWT"* ]]; [[ "$output" == *"ruling: 錯誤碼 422"* ]]; [[ "$output" != *"ruling: old"* ]]
+  rul=$(printf '%s\n' "$output" | awk '/^## 裁定/{s=1; next} /^## process/{exit} s')   # the process tail may still show old rulings
+  [[ "$rul" == *"ruling: 用 JWT"* ]]; [[ "$rul" == *"ruling: 錯誤碼 422"* ]]; [[ "$rul" != *"ruling: old"* ]]
   [[ "$output" == *"tab 1: login-frontend(working) login-qa(blocked)"* ]]; [[ "$output" == *"tab 2: login-reviewer-a(?)"* ]]
 ```
 
