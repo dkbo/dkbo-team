@@ -2,8 +2,9 @@ load ../helpers
 setup() { setup_project; . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/kinds.sh"; }
 teardown() { teardown_project; }
 
-@test "claude tier to args" {
-  [ "$(dk_kind_args claude sonnet/low)" = "--model sonnet --effort low --permission-mode acceptEdits" ]
+@test "claude tier to args uses auto mode and grants the main tree" {
+  # e2e 實測：acceptEdits 下員工連讀自己的切片、寫自己的 state 都要人按審批（RESULTS-2026-09-11 ①）
+  [ "$(dk_kind_args claude sonnet/low)" = "--model sonnet --effort low --permission-mode auto --add-dir $DK_PROJECT_ROOT" ]
 }
 @test "codex tier to args" {
   [ "$(dk_kind_args codex gpt-5.5/medium)" = "-m gpt-5.5 -c model_reasoning_effort=medium -a never -s workspace-write" ]

@@ -10,10 +10,10 @@ teardown() { teardown_project; }
   [[ "$split" == *"--env DK_TASK_DIR=$d"* ]]; [[ "$split" == *"--env DK_ROLE=frontend"* ]]
   [[ "$split" == *"--env DK_AGENT=login-frontend-cart"* ]]; [[ "$split" == *"--env DK_LEADER=leader-login"* ]]
   [[ "$split" == *"--env DK_ISOLATED=0"* ]]
-  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode acceptEdits$' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
   p=$(grep '^agent prompt login-frontend-cart' "$HERDR_STUB_LOG")
   [[ "$p" == *"$DK_ROOT/roles/frontend.md"* ]]; [[ "$p" == *"$d/brief.md"* ]]; [[ "$p" == *"$d/state/frontend-cart.report.md"* ]]
-  [[ "$p" == *"$d/state/frontend-cart.md"* ]]; [[ "$p" == *"禁止使用 subagent"* ]]; [[ "$p" == *"--wait --timeout 60000" ]]
+  [[ "$p" == *"$d/state/frontend-cart.md"* ]]; [[ "$p" == *"禁止使用 subagent"* ]]; [[ "$p" == *"--wait --until working --timeout 15000" ]]
   grep -Eq '^login-frontend-cart wC:p2 [0-9]{10} dev 1 1$' "$d/.panes"
   grep -q 'spawn login-frontend-cart (claude L)' "$d/process.md"
 }
@@ -49,10 +49,14 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]
   ! grep -q '^pane split' "$HERDR_STUB_LOG"
 }
-@test "spawn closes the pane and dies when agent start fails" {
+@test "spawn keeps the pane when agent start fails, so the startup prompt survives" {
+  # e2e 實測：codex 卡在「Update available!」升級提示而 agent start 失敗，
+  # 舊行為把 pane 關掉連證據一起銷毀，現場查不出原因（RESULTS-2026-09-11 ⑧）
   HERDR_STUB_FAIL="agent start" run dk-spawn qa
   [ "$status" -eq 1 ]
-  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+  ! grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+  [[ "$output" == *"wC:p2"* ]] && [[ "$output" == *"pane read"* ]]
+  grep -q 'spawn login-qa failed: pane wC:p2 kept' "$d/process.md"
   ! grep -q '^login-qa ' "$d/.panes"
 }
 @test "spawn --resume closes and dedupes the old pane entry" {
@@ -94,12 +98,12 @@ teardown() { teardown_project; }
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
   HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; ! grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
 }
-@test "agent start failure after a new tab closes the tab and restores DK_TABS" {
+@test "agent start failure on a new tab keeps the tab so the startup prompt survives" {
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
   HERDR_STUB_FAIL="agent start" run dk-spawn qa; [ "$status" -eq 1 ]
-  grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; ! grep -q '^pane close' "$HERDR_STUB_LOG"
-  grep -q '^DK_TABS=""$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
-  grep -q 'tab 2 wB:t2 closed (agent start failed)' "$d/process.md"
+  ! grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
+  grep -q 'spawn login-qa failed: pane .* kept for diagnosis' "$d/process.md"
 }
 @test "--resume of an overflow tab's only occupant closes the stale tab and keeps one DK_TABS entry" {
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\nlogin-qa wB:p10 0 review 2 1\n' > "$d/.panes"

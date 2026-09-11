@@ -23,7 +23,7 @@ teardown() { teardown_project; }
 @test "dk-leader --kind overrides DK_LEADER_KIND and takes the new kind's L tier" {
   echo 'DK_LEADER_KIND="codex"' >> "$DK_ROOT/settings.env"
   run dk-leader pay 金流 --kind claude; [ "$status" -eq 0 ]
-  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode acceptEdits$' "$HERDR_STUB_LOG"
+  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
 }
 
 @test "init skill asks for the leader kind" {

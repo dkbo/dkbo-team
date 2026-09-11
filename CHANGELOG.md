@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.2 — 2026-09-11
+- fix(kinds): claude 員工的權限模式從 `acceptEdits` 改成 `auto`，並加 `--add-dir $DK_PROJECT_ROOT`。實跑（`tests/e2e/RESULTS-2026-09-11.md` ①）顯示 `acceptEdits` 下員工的**每一個協定動作**都在授權之外：讀自己的切片、讀 `PROJECT.md`、寫自己的 state、跑任何 shell —— 因為員工的 cwd 是 worktree 而任務記憶在主樹的 `.dkbo/`。批准一個路徑只會跳出下一個，實跑共人工介入 7 次才走得完一個任務，「領導閒置、員工自己做」根本不成立。對照組是 codex（`-a never -s workspace-write`），整趟零審批。**這是刻意放寬權限**：員工跑在隔離的 worktree 內，`PROTOCOL.md` 的停止條件仍禁止 push／改寫歷史／刪分支／裝依賴／動 `.dkbo/`；要改回嚴格模式就改 `kinds/claude.sh` 一行。
+- fix(spawn): `agent start` 失敗時**不再關掉 pane**。實跑中 codex 連續四次 spawn 失敗，原因是 codex CLI 的 `✨ Update available!` 升級提示擋在啟動 —— 但舊行為把 pane（連同那個畫面）關掉，領導只看得到「失敗」兩個字，現場完全無從診斷。現在 pane 保留、`process.md` 記 `spawn <agent> failed: pane <id> kept for diagnosis`，錯誤訊息直接告訴領導怎麼讀它、怎麼收掉。`LEADER.md` 故障段補一條。
+- fix(spawn): 第一段提示的等待從 `--wait --timeout 60000` 改成 `--wait --until working --timeout 15000`。`herdr agent prompt --wait` 的預設語意是等**這一輪跑完**（`--help`：matches idle, done, or blocked），不是「提示送到了沒」—— 所以第一輪超過 60 秒的員工會被誤判成 `prompt-failed`，而 `LEADER.md` 會教領導去「重新提示」一個正在工作的 agent，claude 又會把提示排隊，於是它做完後再收到一次同樣的任務。
+- fix(msg): `dk-msg` 送不到改成重試（`DK_MSG_TRIES` 預設 3 次、`DK_MSG_RETRY_SEC` 預設 5 秒）才認輸。實跑中 codex reviewer 的 `[DONE]` 在一分鐘內就被判失敗、整筆遺失，而它的報告好端端躺在磁碟上 —— 領導從不知道它交過，於是 `review 1 verdict` 只有一位。
+- feat(wave-close): 新增第五道閘：裁定行必須交代每一位真的派出去的 reviewer（`review N spawned` 列出誰就要有誰，沒回來的寫 `<別名>: skipped (<理由>)`）。實跑中兩波都派了 claude + codex，兩波都只有 claude 進入裁定，而 `DK_REVIEW_MIN=1` 讓領導每次都合法地靜默放行 —— 多模型審查的實際生效率是 0，且整個系統看起來一切正常。這道閘讓退化必須被寫下來。
+- 測試：219 bats（+2 淨增，另改寫 6 條以對齊新行為）；shellcheck 零警告。
+
 ## 0.2.1 — 2026-09-11
 - fix(watch): 送給領導的 `[BLOCKED]` 與 `[TIMEOUT]` 不再可能被靜靜吃掉。`dk-watch` 的三處推送（blocked ×2、reviewer timeout）原本直接 `herdr agent prompt` 領導、結果丟棄、標記照寫 —— 而守望觸發的前提正是領導忙著，且「提示送給 working 的 agent 會排隊還是被丟掉」在三個 kind 上都還是 `KIND_PROMPT_QUEUES=unknown`。現在一律走 `notify_leader`：先 `agent wait --until idle --until done`（**有界**，`DK_WATCH_WAIT_MS` 預設 5000 毫秒，背景迴圈不會被卡住），送到才寫 `delivered`；沒送到就留著，下一 tick 重試到送達為止。
 - fix(watch): 標記檔從「兩行就算通知過」改成分開的 `notified`（桌面通知已發）與 `delivered`（領導已收到）。桌面通知、`dk_process` 的事件行、以及 reviewer 逾時的 kind 熔斷都只做一次，**且不等領導** —— 熔斷是任務狀態的改變，領導收不收得到訊息都一樣成立。逾時訊息的 `(quota?)` 標記存進標記檔，重試時訊息與第一次逐字相同。

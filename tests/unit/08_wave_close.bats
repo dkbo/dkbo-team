@@ -119,3 +119,13 @@ teardown() { teardown_project; }
   printf '| qa-a | docs/** | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$d/brief.md"
   dk_owned "$d/brief.md" qa tests/x.ts; ! dk_owned "$d/brief.md" qa docs/x.md; dk_owned "$d/brief.md" qa-a docs/x.md
 }
+
+@test "verdict must account for every reviewer that was spawned" {
+  # e2e 實測：兩位 reviewer 派出去，領導只對 a 裁定就放行，codex 那位的意見整筆蒸發
+  # 而流程看起來完全正常（RESULTS-2026-09-11 ⑧）
+  echo "2026-09-11T10:00 review 1 spawned login-reviewer-a(claude) login-reviewer-b(codex)" >> "$d/process.md"
+  run dk-wave-close                      # setup 已寫了 "review 1 verdict a: ok"，缺 b
+  [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}

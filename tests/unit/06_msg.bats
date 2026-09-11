@@ -53,3 +53,12 @@ teardown() { teardown_project; }
   [ "$status" -eq 2 ]
   ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
 }
+
+@test "dk-msg retries a message that does not land before giving up" {
+  # e2e 實測：codex reviewer 的 [DONE] 一次就被判定失敗、整筆遺失，領導從不知道它交過報告
+  # （RESULTS-2026-09-11 ⑦）。送不到要重試幾次才認輸。
+  HERDR_STUB_FAIL="agent wait" DK_MSG_TRIES=3 DK_MSG_RETRY_SEC=0 run dk-msg login-qa "[DONE] x"
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^agent wait login-qa ' "$HERDR_STUB_LOG")" -eq 3 ]
+  [ "$(grep -c 'UNDELIVERED' "$DK_ROOT/tasks/$(date +%F)-login/messages.log")" -eq 1 ]
+}
