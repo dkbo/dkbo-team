@@ -44,7 +44,7 @@ teardown() { teardown_project; }
   echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
   f=$(grep -l 'chore-frontend-1' "$DK_ROOT/tasks/_chores/"*.md); sed -i 's/^status: working/status: done/' "$f"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
-  [ -f "$PROJECT/x.txt" ]; git -C "$PROJECT" log --oneline -1 | grep -q 'chore: fix'
+  [ -f "$PROJECT/x.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'chore: fix'
   ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
   ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
   ! git -C "$PROJECT" rev-parse --verify -q chore/fix

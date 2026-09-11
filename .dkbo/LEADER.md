@@ -39,7 +39,7 @@
 
 ## 結案
 1. 關卡③前先整分支評議：`dk-review-pack --task`，再 `dk-review --task --tier L`（L 檔 reviewer 讀 `waves/task.diff`）。Important 修掉或記 ruling，才寫 `report.md`（照範本；遺留段列出未經審查的波）。關卡③：給人拍板。
-2. `dk-task-close`。合併衝突時它會停：不要自己解，問人或開 `it` 的修復波。放棄用 `dk-task-close --abandon "<原因>"`。
+2. `dk-task-close`。它會合併回主分支，然後**把這個任務的記憶 commit 進主樹**（任務目錄、`tasks/INDEX.md`、`decisions.md`，只有這幾條路徑，你工作樹上的其他改動不會被掃進去）。合併衝突時它會停：不要自己解，問人或開 `it` 的修復波。放棄用 `dk-task-close --abandon "<原因>"`。
 
 ## 故障
 - reviewer `[TIMEOUT]`（dk-watch 推來；該 kind 已寫進 `.task.env` 的 `DK_KIND_DOWN`）：`dk-wave-close --agent <reviewer>` 關它。達 `DK_REVIEW_MIN` 照常裁定；不夠就 `dk-review --kinds "<未熔斷者>"` 補一位；全部熔斷 → `dk-process "review N skipped: all kinds down"`，report.md 遺留段標「本波未經審查」。同任務內解除熔斷：編輯 `.task.env` 的 `DK_KIND_DOWN` 並 `dk-process "kind <k> up"`；`dk-task-close` 會清掉。

@@ -16,7 +16,7 @@ teardown() { teardown_project; }
 @test "merges, removes worktree, clears binding and index" {
   echo '# r' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]
-  [ -f "$PROJECT/f.txt" ]; git -C "$PROJECT" log --oneline -1 | grep -q 'task login: 使用者登入'
+  [ -f "$PROJECT/f.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'task login: 使用者登入'
   ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$WORKTREE_PATH" ]
   ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
@@ -68,4 +68,21 @@ teardown() { teardown_project; }
   [ -d "$WORKTREE_PATH" ]; [ -f "$WORKTREE_PATH/g.txt" ]   # nothing discarded
   git -C "$PROJECT" rev-parse --verify -q dk/login; [ -f "$DK_ROOT/.sessions/wB:p1" ]
   ! git -C "$PROJECT" log --oneline -1 | grep -q 'task login'
+}
+
+@test "task-close commits the task's memory in the main tree" {
+  # e2e 實測：結案後整個 .dkbo/tasks/<t>/ 仍是 untracked，README 與 decisions.md 都聲稱
+  # 記憶「進 git」但沒有任何一步做（RESULTS-2026-09-11 ⑨）
+  : > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  t="$DK_ROOT/tasks/$(date +%F)-login"
+  [ -z "$(git -C "$PROJECT" status --porcelain -- "$t" "$DK_ROOT/tasks/INDEX.md")" ]   # 任務目錄與 INDEX 都已進 git
+  git -C "$PROJECT" log -1 --name-only --format=%s | grep -q "memory"
+  git -C "$PROJECT" ls-files --error-unmatch "$DK_ROOT/tasks/$(date +%F)-login/brief.md" >/dev/null
+  git -C "$PROJECT" ls-files --error-unmatch "$DK_ROOT/tasks/INDEX.md" >/dev/null
+}
+@test "task-close leaves unrelated working-tree changes alone" {
+  : > "$d/report.md"; echo dirty > "$PROJECT/unrelated.txt"
+  run dk-task-close; [ "$status" -eq 0 ]
+  [ -n "$(git -C "$PROJECT" status --porcelain -- unrelated.txt)" ]
 }

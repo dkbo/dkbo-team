@@ -37,3 +37,11 @@ teardown() { teardown_project; }
   grep -q -- '--exclude=settings.env' "$DK_ROOT/README.md"; grep -q '每波自動附審查' "$DK_ROOT/README.md"
   grep -q '^10\. ' "$REPO_ROOT/tests/e2e/RUNBOOK.md"; grep -q 'TIMEOUT' "$REPO_ROOT/tests/e2e/RUNBOOK.md"
 }
+
+@test "PROTOCOL's FIXED row covers the leader-relayed BUG that LEADER.md expects" {
+  # LEADER.md 教領導把 reviewer 的 Important 轉成 [BUG] 給 dev、等 dev 的 [FIXED]，
+  # 但 PROTOCOL 的類型表只寫「員工→員工」，於是 dev 照自己的規範回了 [DONE]
+  # （RESULTS-2026-09-11 ⑩）
+  grep -qE 'dev .?\[FIXED\]' "$DK_ROOT/LEADER.md"
+  grep -qE '^\| FIXED \|[^|]*領導' "$DK_ROOT/PROTOCOL.md"
+}

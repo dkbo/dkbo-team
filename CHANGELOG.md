@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3 — 2026-09-11
+- feat(task-close, chore-close): 結案時把記憶 commit 進主樹。新增 `dk_commit_memory`（`lib/common.sh`）：只 `git add` 並 commit 指定的那幾條路徑（任務目錄、`tasks/INDEX.md`、`decisions.md`；雜務則是雜務檔、`_chores/messages.log`、INDEX），**不碰工作樹上的其他改動**（有測試守住這一點）。先前 `dk-wave-close` 在 worktree 內 commit 程式碼，但任務記憶住在主樹的 `.dkbo/tasks/`，沒有任何腳本碰過它 —— 實跑結案後整個 `tasks/<t>/`（brief、process.md 的 7 條 ruling、每位員工的 state 與 report、report.md）仍是 untracked，一個 `git clean -fd` 就會抹掉，而 README 與 `decisions.md` 都聲稱記憶「進 git」。commit 失敗只警告不擋結案。
+- fix(task-new): 領導 pane 的 rename 條件從「完全沒有 agent 名字」改成「還不叫 `leader-<short>`」。pane 只要曾被命名過（例如用 `herdr agent rename` 取過名、或用 `agent start <name>` 起的），rename 就被靜默跳過，而 `dk_leader_name` 固定回 `leader-<short>` —— 員工的 `dk-msg leader` 與 `dk-watch` 的 `[BLOCKED]`／`[TIMEOUT]` 會全部送不到，**且沒有任何警告**，`process.md` 照樣寫得像一切正常。實跑時是手動改名才把訊息接回來的。
+- fix(protocol): `[FIXED]` 的方向從「員工→員工」補成「員工→員工、dev→領導」。`LEADER.md` 早就規定領導把 reviewer 的 Important 轉成 `[BUG]` 給 dev、等 dev 的 `[FIXED]` 再重打差異包請 reviewer 複看，但 `PROTOCOL.md` 的類型表沒有這個方向 —— 員工照自己的規範回了 `[DONE]`，於是實跑中 `[FIXED]` 一次都沒出現，RUNBOOK 的驗收條件結構上不可能成立。兩份文件現在對齊，並加了一條測試釘住。
+- 測試：223 bats（+4）；shellcheck 零警告。
+
 ## 0.2.2 — 2026-09-11
 - fix(kinds): claude 員工的權限模式從 `acceptEdits` 改成 `auto`，並加 `--add-dir $DK_PROJECT_ROOT`。實跑（`tests/e2e/RESULTS-2026-09-11.md` ①）顯示 `acceptEdits` 下員工的**每一個協定動作**都在授權之外：讀自己的切片、讀 `PROJECT.md`、寫自己的 state、跑任何 shell —— 因為員工的 cwd 是 worktree 而任務記憶在主樹的 `.dkbo/`。批准一個路徑只會跳出下一個，實跑共人工介入 7 次才走得完一個任務，「領導閒置、員工自己做」根本不成立。對照組是 codex（`-a never -s workspace-write`），整趟零審批。**這是刻意放寬權限**：員工跑在隔離的 worktree 內，`PROTOCOL.md` 的停止條件仍禁止 push／改寫歷史／刪分支／裝依賴／動 `.dkbo/`；要改回嚴格模式就改 `kinds/claude.sh` 一行。
 - fix(spawn): `agent start` 失敗時**不再關掉 pane**。實跑中 codex 連續四次 spawn 失敗，原因是 codex CLI 的 `✨ Update available!` 升級提示擋在啟動 —— 但舊行為把 pane（連同那個畫面）關掉，領導只看得到「失敗」兩個字，現場完全無從診斷。現在 pane 保留、`process.md` 記 `spawn <agent> failed: pane <id> kept for diagnosis`，錯誤訊息直接告訴領導怎麼讀它、怎麼收掉。`LEADER.md` 故障段補一條。

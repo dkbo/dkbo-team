@@ -30,4 +30,6 @@ if [ "$branch" != "-" ]; then
 fi
 if [ "$abandon" = 1 ]; then sed -i 's/^status: .*/status: abandoned/' "$cf"; dk_index_set "$instr" abandoned "—"
 else [ "$branch" = "-" ] || sed -i "s#^結果：.*#結果：$result#" "$cf"; dk_index_set "$instr" "done" "${result:-—}"; fi
+dk_commit_memory "dkbo memory: chore $(basename "$cf" .md)" "$cf" "$DK_ROOT/tasks/_chores/messages.log" "$DK_ROOT/tasks/INDEX.md" \
+  || echo "dk-chore-close: 雜務記憶沒 commit 成功，請自己 git add \"$cf\" 並 commit" >&2
 echo "${result:-closed}"

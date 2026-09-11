@@ -33,7 +33,14 @@ teardown() { teardown_project; }
   grep -q '| x | task | planning |' "$DK_ROOT/tasks/INDEX.md"
   grep -q 'rename failed' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
 }
-@test "task-new skips rename when agent already named" {
+@test "task-new renames a pane whose agent carries some other name" {
+  # e2e 實測：領導 pane 只要曾被命名過，rename 就被跳過，而 dk_leader_name 固定回
+  # leader-<short> —— 員工的 dk-msg leader 與 dk-watch 推送全部靜默送不到（RESULTS-2026-09-11 ④）
+  echo '{"result":{"agent":{"name":"dke2e"}}}' > "$HERDR_STUB_RESPONSES/agent_get.json"
+  run dk-task-new login x; [ "$status" -eq 0 ]
+  grep -q '^agent rename wB:p1 leader-login$' "$HERDR_STUB_LOG"
+}
+@test "task-new skips rename when already named leader-<short>" {
   echo '{"result":{"agent":{"name":"leader-login","agent_status":"idle","pane_id":"wB:p1"}}}' > "$HERDR_STUB_RESPONSES/agent_get.json"
   dk-task-new login x >/dev/null
   ! grep -q '^agent rename' "$HERDR_STUB_LOG"

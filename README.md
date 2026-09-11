@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.2.2），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.2.3），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.2.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.2.3; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # 預期印出 leader

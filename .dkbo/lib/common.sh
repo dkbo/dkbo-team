@@ -86,6 +86,17 @@ dk_settings() { # load .dkbo/settings.env over the defaults; warn once per proce
   fi
   export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_LEADER_KIND DK_SETTINGS_WARNED
 }
+dk_commit_memory() { # <message> <path…> — commit只有這幾條路徑（任務／雜務記憶）到主樹
+  # 記憶是 markdown、可 grep、進 git —— 但在這之前沒有任何一步真的把它們放進 git，
+  # 結案後整個 tasks/<t>/ 還是 untracked，一個 git clean 就抹掉所有裁定理由。
+  local msg="$1"; shift
+  local p; local -a paths=()
+  for p in "$@"; do [ -e "$p" ] && paths+=("$p"); done
+  [ "${#paths[@]}" -gt 0 ] || return 0
+  [ -n "$(git -C "$DK_PROJECT_ROOT" status --porcelain -- "${paths[@]}" 2>/dev/null)" ] || return 0
+  git -C "$DK_PROJECT_ROOT" add -- "${paths[@]}" >/dev/null 2>&1 || return 1
+  git -C "$DK_PROJECT_ROOT" commit -q -m "$msg" -- "${paths[@]}" >/dev/null 2>&1 || return 1
+}
 dk_env_set() { # KEY VALUE — rewrite KEY="VALUE" in the bound task's .task.env (append when missing). flock-serialised: dk-watch (background) and the leader's scripts both write this file.
   local d f lock; d=$(dk_task_dir) || return 1; f="$d/.task.env"; lock="$DK_ROOT/.sessions/$(basename "$d").lock"
   case "$2" in *[\"\\\$\`]*) dk_die "dk_env_set $1: value must not contain \" \\ \$ or backtick";; esac
