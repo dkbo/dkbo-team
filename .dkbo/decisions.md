@@ -6,3 +6,4 @@
 - 2026-09-10 不做金額／token 預算：三家 CLI 沒有可 script 的統一計價來源，算出來會是假數字；預算只做時間（逾時）與次數（修復迴圈、QUESTION 上限）。
 - 2026-09-10 不做 per-task Verify 取代全套測試：單 task 指令抓不到跨 task 互相破壞；dev 的 `## 測試` 段已是各自的驗證紀錄。`DK_TEST_CMD` 仍是唯一機械閘。
 - 2026-09-10 不做共用主工作樹：員工只看得到已 commit 的檔案是刻意隔離，換共用樹會讓 touched 比對失去意義。
+- 2026-09-11 layer-2 整合測試不綁發版：`tests/integration/herdr-real.sh` 驗的是 stub 對 herdr JSON 形狀的假設，只在 herdr 換版或 dkbo 動到 herdr 介面時跑，不在每次發版跑。它零 token，但 nested 環境要先 bootstrap `dktest` session 的 server（見 tests/integration/README.md），成本在人不在機器。
