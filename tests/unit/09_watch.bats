@@ -221,3 +221,29 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   [ "$(grep -c 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log")" -eq 1 ]
   grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
 }
+
+@test "整波逾時：超過 DK_WAVE_TIMEOUT_MIN 推一次 [TIMEOUT] wave 給領導" {
+  echo 'DK_WAVE_TIMEOUT_MIN="30"' >> "$DK_ROOT/settings.env"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+  sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"/" "$d/.task.env" 2>/dev/null || \
+    echo "DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"" >> "$d/.task.env"
+  dk-watch --once; ! grep -q 'TIMEOUT. from dk-watch: wave' "$HERDR_STUB_LOG"   # 才過 1 分鐘
+  sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 2000 ))\"/" "$d/.task.env"
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: wave 1 ' "$HERDR_STUB_LOG")" -eq 1 ]
+  grep -q 'timeout wave 1' "$d/process.md"
+}
+
+@test "herdr agent list 失敗時留下痕跡，而不是讓守望靜靜變成 no-op" {
+  # 0.1.5 的 CHANGELOG 自己點名過：herdr 呼叫的失敗是刻意吞掉的，換版時的表現不是報錯，
+  # 而是 dk-watch 永遠偵測不到 blocked —— 整套安全網變成 no-op 而看起來一切正常
+  HERDR_STUB_FAIL="agent list" run dk-watch --once
+  [ "$status" -eq 0 ]                       # 仍然不崩、不擋住別的事
+  grep -q 'herdr-degraded: agent list' "$d/process.md"
+  [[ "$output" == *"降級"* ]]
+}
+@test "降級只記一次，不會每個 tick 洗版" {
+  HERDR_STUB_FAIL="agent list" dk-watch --once 2>/dev/null || true
+  HERDR_STUB_FAIL="agent list" dk-watch --once 2>/dev/null || true
+  [ "$(grep -c 'herdr-degraded' "$d/process.md")" -le 2 ]   # 每個行程樹一次
+}

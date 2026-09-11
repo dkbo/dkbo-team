@@ -2,7 +2,7 @@
 # dk-watch [--once] [--interval SEC] [--ensure]           — blocked + reviewer-timeout watcher for the bound task
 # dk-watch --chores [--once] [--interval SEC] [--ensure]  — blocked watcher for the running chores (no task binding)
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/herdr.sh"
 once=0; interval=30; ensure=0; chores=0
 while [ $# -gt 0 ]; do case "$1" in
   --once) once=1; shift;; --interval) interval="$2"; shift 2;;
@@ -52,7 +52,7 @@ notify_leader() { # target text — bounded wait for idle, then prompt; non-zero
 chore_tick() {   # chores have no reviewers and no waves: blocked detection only
   local now list f agent leader st m since working=0
   compgen -G "$cdir/*.md" >/dev/null 2>&1 || exit 0
-  now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
+  now=$(date +%s); list=$(dk_h_soft agent list) || return 0
   mkdir -p "$cmark"
   for f in "$cdir"/*.md; do
     grep -q '^status: working' "$f" || continue
@@ -85,7 +85,7 @@ chore_tick() {   # chores have no reviewers and no waves: blocked detection only
 
 tick() {
   [ -f "$dir/.panes" ] || exit 0
-  local now list; now=$(date +%s); list=$(herdr agent list 2>/dev/null) || return 0
+  local now list; now=$(date +%s); list=$(dk_h_soft agent list) || return 0
   mkdir -p "$dir/.blocked"
   while read -r agent _pane; do
     [ -n "$agent" ] || continue
@@ -128,6 +128,20 @@ tick() {
     tag=$(sed -n 's/^tag=//p' "$m" | head -1)
     if notify_leader "$(dk_leader_name)" "[TIMEOUT] from dk-watch: $agent 逾時${tag}"; then echo delivered >> "$m"; fi
   done < "$dir/.panes"
+
+  # 整波逾時：員工沒 blocked、reviewer 也沒逾時，但這一波就是卡著不動的情況
+  if [ -n "${DK_WAVE:-}" ] && [[ "${DK_WAVE_TIMEOUT_MIN:-0}" =~ ^[0-9]+$ ]] && [ "${DK_WAVE_TIMEOUT_MIN:-0}" -gt 0 ] \
+     && [[ "${DK_WAVE_STARTED:-}" =~ ^[0-9]+$ ]] && [ $((now - DK_WAVE_STARTED)) -gt $((DK_WAVE_TIMEOUT_MIN * 60)) ]; then
+    m="$dir/.blocked/wave-$DK_WAVE.timeout"
+    if ! { [ -f "$m" ] && grep -q '^delivered$' "$m"; }; then
+      if [ ! -f "$m" ]; then
+        herdr notification show "dkbo: wave $DK_WAVE timeout" --body "整波超過 $DK_WAVE_TIMEOUT_MIN 分鐘" --sound request >/dev/null 2>&1 </dev/null || true
+        dk_process "timeout wave $DK_WAVE (${DK_WAVE_TIMEOUT_MIN}min)"
+        echo notified > "$m"
+      fi
+      if notify_leader "$(dk_leader_name)" "[TIMEOUT] from dk-watch: wave $DK_WAVE 超過 $DK_WAVE_TIMEOUT_MIN 分鐘未收尾"; then echo delivered >> "$m"; fi
+    fi
+  fi
 }
 
 run() { if [ "$chores" = 1 ]; then chore_tick; else tick; fi; }

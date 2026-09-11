@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-09-11
+- feat(brief-check): 檔案所有權表新增「獨佔資源」欄（`db`、`port:3000`、`docker`…，逗號分隔），同一波內兩位成員宣告同一個資源即 FAIL。worktree 隔離檔案，**不隔離執行環境** —— 同波兩位 dev 仍會對同一個 dev DB 跑 migration、搶同一個 port、重啟同一組 docker。舊的三欄 brief 照常通過（欄位缺就是沒宣告）。
+- feat(watch): 新增 `DK_WAVE_TIMEOUT_MIN`（第七個設定鍵，預設 60 分鐘，0 表示關閉）。`dk-wave-open` 記下 `DK_WAVE_STARTED`，`dk-watch` 超過門檻就推一次 `[TIMEOUT] wave N` 給領導、發一次桌面通知、記一行 process，`dk-wave-close` 收尾時清掉。補的是「員工沒 blocked、reviewer 也沒逾時，但這一波就是卡著不動」這個先前沒有任何守望覆蓋的狀態。訊息走 0.2.1 的 `notify_leader`，送不到會重試。
+- feat(herdr): 新增 `lib/herdr.sh` —— `dk_h_soft` 與 `dk_h_note`。dkbo 對 herdr 的呼叫有一種特別危險：吞掉失敗之後還裝作正常。`herdr agent list` 一壞，`dk-watch` 的 `|| return 0` 會讓它每 30 秒安靜地什麼都不做，blocked 與 timeout 永遠偵測不到，而 `process.md` 乾乾淨淨 —— 0.1.5 的 CHANGELOG 已經點名過這件事但沒有動作。現在這類呼叫走 `dk_h_soft`：照樣不崩，但在 `process.md` 留一行 `herdr-degraded: <呼叫>`（每個行程樹只記一次，不洗版），`LEADER.md` 故障段也補了對應處理。
+- 範圍裁定（見 `decisions.md`）：**不做**全面收攏 51 個 herdr 呼叫點。失敗就該死的那些非零會自然往上傳，收尾與桌面通知吞掉是對的，硬包一層只是拿 51 處改寫的回歸風險換一個假的抽象；外部評論原本的理由（單一適配點）已由 herdr 版本硬閘與 layer-2 形狀測試涵蓋。
+- BACKLOG 清空。
+- 測試：231 bats（+8）；shellcheck 零警告。
+
 ## 0.2.3 — 2026-09-11
 - feat(task-close, chore-close): 結案時把記憶 commit 進主樹。新增 `dk_commit_memory`（`lib/common.sh`）：只 `git add` 並 commit 指定的那幾條路徑（任務目錄、`tasks/INDEX.md`、`decisions.md`；雜務則是雜務檔、`_chores/messages.log`、INDEX），**不碰工作樹上的其他改動**（有測試守住這一點）。先前 `dk-wave-close` 在 worktree 內 commit 程式碼，但任務記憶住在主樹的 `.dkbo/tasks/`，沒有任何腳本碰過它 —— 實跑結案後整個 `tasks/<t>/`（brief、process.md 的 7 條 ruling、每位員工的 state 與 report、report.md）仍是 untracked，一個 `git clean -fd` 就會抹掉，而 README 與 `decisions.md` 都聲稱記憶「進 git」。commit 失敗只警告不擋結案。
 - fix(task-new): 領導 pane 的 rename 條件從「完全沒有 agent 名字」改成「還不叫 `leader-<short>`」。pane 只要曾被命名過（例如用 `herdr agent rename` 取過名、或用 `agent start <name>` 起的），rename 就被靜默跳過，而 `dk_leader_name` 固定回 `leader-<short>` —— 員工的 `dk-msg leader` 與 `dk-watch` 的 `[BLOCKED]`／`[TIMEOUT]` 會全部送不到，**且沒有任何警告**，`process.md` 照樣寫得像一切正常。實跑時是手動改名才把訊息接回來的。

@@ -32,3 +32,9 @@ teardown() { teardown_project; }
   echo "login-qa wC:p3 0 review 1 1" >> "$d/.panes"
   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"live panes remain (1)"* ]]
 }
+
+@test "wave-open 記下這一波的開始時間" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  v=$(sed -n 's/^DK_WAVE_STARTED="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$v" =~ ^[0-9]+$ ]]
+  [ "$v" -ge "$(( $(date +%s) - 60 ))" ]
+}

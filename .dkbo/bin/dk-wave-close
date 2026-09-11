@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dk-wave-close [--force] [-m "<commit msg>"] | dk-wave-close --agent <agent>
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"; . "$DK_ROOT/lib/layout.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/ownership.sh"; . "$DK_ROOT/lib/layout.sh"; . "$DK_ROOT/lib/herdr.sh"
 . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
@@ -96,7 +96,8 @@ done < "$dir/.panes"
 : > "$dir/.panes"
 if [ "$legacy" = 1 ]; then dk_process "wave-close: $closed agents closed"
 else
-  dk_env_set DK_WAVE ""; dk_process "wave-close ${n:-?} tests $tests $closed agents closed"
+  dk_env_set DK_WAVE ""; dk_env_set DK_WAVE_STARTED ""; rm -f "$dir/.blocked/wave-${n:-0}.timeout"
+  dk_process "wave-close ${n:-?} tests $tests $closed agents closed"
   for t in $tabs; do if [ "$t" -ge 1 ]; then dk_layout_even "$t" || true; fi; done
 fi
 echo "closed $closed"

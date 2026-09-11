@@ -42,3 +42,20 @@ teardown() { teardown_project; }
   rm "$DK_ROOT/.sessions/wB:p1"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
   run dk-brief-check /nonexistent.md; [ "$status" -eq 1 ]; [[ "$output" == *"no brief"* ]]
 }
+
+@test "同一波兩位成員不得宣告同一個獨佔資源" {
+  # 外部比較排入：worktree 隔離檔案，不隔離執行環境 —— 同波兩位 dev 仍會對同一個 dev DB
+  # 跑 migration、搶同一個 port、重啟同一組 docker
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db, port:3000 |#' "$b"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/** | — | db |#' "$b"
+  run dk-brief-check "$b"
+  [ "$status" -eq 1 ]; [[ "$output" == *"獨佔資源"* ]]; [[ "$output" == *"db"* ]]
+}
+@test "不同波宣告同一個獨佔資源是可以的" {
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db |#' "$b"
+  sed -i 's#^| frontend-cart | src/web/\*\* | src/api/types.ts |$#| frontend-cart | src/web/** | src/api/types.ts | db |#' "$b"
+  run dk-brief-check "$b"; [ "$status" -eq 0 ]   # backend 在波 1、frontend-cart 在波 2
+}
+@test "沒有獨佔資源欄的舊 brief 照常通過" {
+  run dk-brief-check "$b"; [ "$status" -eq 0 ]
+}

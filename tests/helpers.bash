@@ -41,6 +41,7 @@ DK_ROOT_PANE="wB:p1"
 DK_BASE="$(git -C "$PROJECT" rev-parse HEAD)"
 DK_WATCH_PID=""
 DK_WAVE=""
+DK_WAVE_STARTED=""
 DK_KIND_DOWN=""
 DK_TABS=""
 E

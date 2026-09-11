@@ -10,7 +10,6 @@ teardown() { teardown_project; }
 
 @test "settings.env ships DK_LEADER_KIND as the sixth key" {
   grep -q '^DK_LEADER_KIND=' "$DK_ROOT/settings.env"
-  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 6 ]
 }
 
 @test "dk-leader takes its kind from DK_LEADER_KIND and that kind's L tier" {
@@ -32,4 +31,9 @@ teardown() { teardown_project; }
 
 @test "the three READMEs state the leader CLI is selectable" {
   for f in README.md README.en.md .dkbo/README.md; do grep -q 'DK_LEADER_KIND' "$REPO_ROOT/$f"; done
+}
+
+@test "settings.env 有整波逾時這個鍵" {
+  grep -q '^DK_WAVE_TIMEOUT_MIN=' "$DK_ROOT/settings.env"
+  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 7 ]
 }

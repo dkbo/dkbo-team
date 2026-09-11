@@ -2,7 +2,7 @@
 # dk-spawn <role> [alias] [--tier S|M|L] [--kind K] [--isolated] [--resume] [--split right|down]
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
-. "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"; . "$DK_ROOT/lib/layout.sh"
+. "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"; . "$DK_ROOT/lib/layout.sh"; . "$DK_ROOT/lib/herdr.sh"
 dk_require_herdr
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
 role="${1:-}"; shift || true; [ -n "$role" ] || dk_die "usage: dk-spawn <role> [alias] [--tier T] [--kind K] [--isolated] [--resume] [--split right|down]"

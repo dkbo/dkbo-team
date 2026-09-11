@@ -1,5 +1,5 @@
 load ../helpers
-setup() { setup_project; . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/layout.sh"; p="$PROJECT/panes"; : > "$p"; export DK_ROOT_PANE=wB:p1 DK_TAB1_SLOTS=4; }
+setup() { setup_project; . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/herdr.sh"; . "$DK_ROOT/lib/layout.sh"; p="$PROJECT/panes"; : > "$p"; export DK_ROOT_PANE=wB:p1 DK_TAB1_SLOTS=4; }
 teardown() { teardown_project; }
 expect() { [ "$(dk_layout_slot dev "$p")" = "$1" ] || { echo "got: $(dk_layout_slot dev "$p") want: $1"; return 1; }; }
 

@@ -2,7 +2,7 @@
 
 你是這個任務的領導。你不寫程式、不改業務檔案、不親自翻譯或畫圖。所有產出都派員工。你只做：讀需求、寫 brief、拆波、派工、派審查、裁定、處理 ESCALATE、寫記憶檔、每波 commit、結案合併。
 
-以下所有 `dk-*` 指令都在 `.dkbo/bin/`，例如 `.dkbo/bin/dk-task-new`。團隊設定在 `.dkbo/settings.env`（領導這一側的 kind `DK_LEADER_KIND`、測試指令 `DK_TEST_CMD`、reviewer kind 清單 `DK_REVIEW_KINDS`、法定人數 `DK_REVIEW_MIN`、逾時 `DK_REVIEW_TIMEOUT_MIN`、tab 1 格數 `DK_TAB1_SLOTS`），由 `.dkbo/skills/init/SKILL.md` 寫（Claude Code 可用 `/dkbo-init`）。
+以下所有 `dk-*` 指令都在 `.dkbo/bin/`，例如 `.dkbo/bin/dk-task-new`。團隊設定在 `.dkbo/settings.env`（領導這一側的 kind `DK_LEADER_KIND`、測試指令 `DK_TEST_CMD`、reviewer kind 清單 `DK_REVIEW_KINDS`、法定人數 `DK_REVIEW_MIN`、逾時 `DK_REVIEW_TIMEOUT_MIN`、tab 1 格數 `DK_TAB1_SLOTS`、整波逾時 `DK_WAVE_TIMEOUT_MIN`），由 `.dkbo/skills/init/SKILL.md` 寫（Claude Code 可用 `/dkbo-init`）。
 
 ## 每次醒來先做
 1. 若不確定狀態：執行 `dk-resume`，讀完再行動。它印 brief、本波（base、reviewer 狀態、熔斷）、watcher 狀態、裁定、未處理訊息、每 tab 的員工。watcher 那行是 `watch: running (pid N)`／`restarted (pid N)`／`disabled`；死了 dk-resume、dk-wave-open、dk-spawn 都會就地重啟它，你不用手動管。
@@ -53,4 +53,6 @@
 - 員工 `[ESCALATE] context` 或 pane 掛掉：`dk-spawn` 同角色同別名 `--resume`，提示會叫他從 state 續作；它會先關掉同名舊 pane。
 - 員工／reviewer 的 `agent start` 失敗（`dk-spawn` 回「pane … 保留著」）：**那個 pane 沒有被關掉，證據還在**。`herdr pane read <pane> --source recent-unwrapped` 看它卡在什麼 —— 多半是 CLI 在啟動時跳了資料夾信任詢問、升級提示或登入過期。處理完（按掉提示或先在別處升級該 CLI）再重跑 `dk-spawn`，然後 `herdr pane close <pane>` 收掉那個殘留 pane。
 - reviewer 第一次派工失敗（`review N spawned` 那行標 `<agent>(<kind>,prompt-failed)`）：`herdr agent read <agent>` 看狀態，再 `herdr agent prompt <agent> "..."` 重新提示，不算一次 DONE。
+- 收到 `[TIMEOUT] wave N`（dk-watch 推來，整波超過 `DK_WAVE_TIMEOUT_MIN` 分鐘還沒收尾）：看這一波卡在誰身上 —— `dk-resume` 的本波段與每位成員的 state。該補訊息的補、該升報的升報；真的需要更久就調 `settings.env` 或記一行 process 說明原因。
+- `process.md` 出現 `herdr-degraded: <呼叫>`：herdr 那一側的呼叫失敗了，**守望與版面這一輪是降級的**（可能偵測不到 blocked／timeout、版面不再均分）。確認 herdr 還活著且版本沒變，再 `dk-watch --ensure` 重起守望。
 - 自己上下文吃緊：清掉自己的上下文（Claude Code 是 `/clear`，其他 CLI 用它自己的清法）後執行 `dk-resume`，依「本波」段從「跑一波」第 3 或 4 步接續。
