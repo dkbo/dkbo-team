@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.1.4); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.2.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -45,20 +45,20 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 
 ## Quick start
 
-Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git, jq, bash 5, the `claude` CLI (required for the leader), optionally `codex` and `agy` for second and third opinions. The target project must be a clean git repo.
+Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git >= 2.17, jq >= 1.5, bash 3.2+ (the version macOS ships is enough; `flock` is a soft dependency and its absence degrades to unlocked writes), and at least one of the three AI CLIs (`claude`, `codex`, `agy`). Which one drives the leader is set by `DK_LEADER_KIND` (default `claude`); the rest serve as workers and second/third opinions. The target project must be a clean git repo.
 
 Paste this into a Claude Code session running inside herdr at the project root:
 
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.1.4; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.2.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # expected: leader
 ```
 
-Then run `/dkbo-init`. It detects installed AI CLIs, lets you pick the primary model and the second/third-opinion kinds, writes `settings.env`, pre-fills `PROJECT.md`, and scans your existing CLAUDE.md / AGENTS.md for rules that conflict with dkbo's. Manual install and upgrade steps are in [.dkbo/README.md](.dkbo/README.md).
+Then run `/dkbo-init`. It detects installed AI CLIs, lets you pick the leader kind (`DK_LEADER_KIND`) and the workers' primary model plus second/third-opinion kinds, writes `settings.env`, wires the entry files, pre-fills `PROJECT.md`, and scans your existing CLAUDE.md / AGENTS.md for rules that conflict with dkbo's. Manual install and upgrade steps are in [.dkbo/README.md](.dkbo/README.md).
 
 ## Roles and kinds
 
@@ -90,7 +90,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-task-close` | Merge into the main branch, remove the worktree, mark INDEX done |
 | `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |
 | `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind. `--ensure` restarts it idempotently (dk-spawn, dk-wave-open and dk-resume all call it); `--chores` watches the chore side |
-| `dk-leader` / `dk-version` | Start a second leader; print the version |
+| `dk-leader` / `dk-version` | Start a second leader (kind from `DK_LEADER_KIND`, tier L of that kind); print the version |
 
 ## Layout of the repo
 
@@ -100,14 +100,13 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
   LEADER.md           leader rules (three gates, running a wave, rulings, failure handling)
   PROTOCOL.md         messaging protocol: types, escalation rules, stop conditions, state / report formats
   PROJECT.md          project facts, ≤40 lines, pre-filled by init
-  settings.env        DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS
+  settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS
   roles/  kinds/      role files; flag mappings per AI CLI
   bin/  lib/          dk-* scripts and shared functions
   templates/          brief, slice, state, report and chore templates
   skills/             dkbo-init and dkbo-add-role (install.sh symlinks them into .claude/skills and .agents/skills)
   tasks/<date-short>/ all memory for one task
   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   cross-task memory
-docs/design/          design documents (v1 overall design, v2 per-wave review gate and multi-pane layout)
 tests/                unit (bats, fake herdr), integration (real herdr), smoke (real agents), e2e RUNBOOK
 example/              minimal Node project used by the e2e RUNBOOK
 ```
@@ -129,5 +128,4 @@ The unit tests and shellcheck run on every push and pull request via [`.github/w
 
 - [.dkbo/README.md](.dkbo/README.md): install, verify, daily use, upgrade, troubleshooting (Traditional Chinese)
 - [.dkbo/LEADER.md](.dkbo/LEADER.md), [.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md): the rules the leader and workers actually follow
-- [docs/design/2026-09-09-dkboai-ai-team-design.md](docs/design/2026-09-09-dkboai-ai-team-design.md): v1 overall design (the package directory was called `dkboai/` at the time; it is `.dkbo/` now)
-- [docs/design/2026-09-10-dkbo-wave-review-design.md](docs/design/2026-09-10-dkbo-wave-review-design.md): v2, per-wave review gate and multi-pane layout
+- Design documents are not version-controlled (`docs/` is gitignored): settled conclusions go into `.dkbo/decisions.md`, and work still to be done becomes a task's `plan.md`.

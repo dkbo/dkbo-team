@@ -8,8 +8,16 @@ teardown() { teardown_project; }
 @test "codex tier to args" {
   [ "$(dk_kind_args codex gpt-5.5/medium)" = "-m gpt-5.5 -c model_reasoning_effort=medium -a never -s workspace-write" ]
 }
-@test "agy tier to args" {
-  [ "$(dk_kind_args agy gemini-3.1-pro/high)" = "--model gemini-3.1-pro-high --mode accept-edits" ]
+@test "agy tier to args passes model and effort as separate flags" {
+  [ "$(dk_kind_args agy gemini-3.1-pro/high)" = "--model gemini-3.1-pro --effort high --mode accept-edits" ]
+}
+@test "every kind declares its efforts per model" {
+  for k in claude codex agy; do grep -q '^KIND_MODEL_EFFORTS=' "$DK_ROOT/kinds/$k.sh"; done
+}
+@test "rejects an effort the model does not offer" {
+  run dk_kind_args agy gemini-3.1-pro/medium   # agy models: pro has high and low only
+  [ "$status" -eq 1 ]; [[ "$output" == *"unknown effort"* ]]
+  [ "$(dk_kind_args agy gemini-3.8-flash/medium)" = "--model gemini-3.8-flash --effort medium --mode accept-edits" ]
 }
 @test "rejects unknown model or effort" {
   run dk_kind_args claude haiku/low; [ "$status" -eq 1 ]

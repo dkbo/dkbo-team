@@ -1,6 +1,17 @@
 # Changelog
 
-## 0.1.5 — 2026-09-11
+## 0.2.0 — 2026-09-11
+- feat(leader): 領導這一側的 AI CLI 可選。`settings.env` 新增第六鍵 `DK_LEADER_KIND`（預設 `claude`，`dk_settings` 補預設與 export），`dk-leader` 不再寫死 `claude/opus/high`：kind 取 `DK_LEADER_KIND`，model/effort 取該 kind `KIND_DEFAULT_TIERS` 的 **L 檔**（領導用最高檔），`--kind` / `--model` / `--effort` 仍可逐次覆寫。它也不再自己拼 `--model/--effort`，改走 `dk_kind_args` —— 原本那樣對 codex 會送出它不認的旗標，而且漏掉 `kind_args` 該帶的權限模式。`dk-leader` 先前完全沒呼叫 `dk_settings`，順帶補上。
+- feat(init): `/dkbo-init` 第 2 步拆成兩問（領導 kind，預設偵測目前 pane 的 CLI；員工主模型），第 3 步從五鍵變六鍵，並新增入口檔佈線一步。佈線放在 init 而不是 `install.sh`：install 跑在 init 之前，那時還不知道領導是誰，讓它無條件生出 `GEMINI.md` 會在 claude-only 的專案裡塞垃圾。
+- refactor(docs): `LEADER.md` 去 claude 化。`/dkbo-init`、「用 add-role skill」這類 Claude Code 專屬呼叫改成指路 `.dkbo/skills/<name>/SKILL.md`（括號註明 Claude Code 的斜線指令），`/clear` 改成「清掉自己的上下文」。一份規範三種 kind 共用，不做 if/else 分歧。
+- fix(kinds): `KIND_MODELS` × `KIND_EFFORTS` 的笛卡兒積驗證換成逐 model 宣告的 `KIND_MODEL_EFFORTS`。`agy models` 實測：`gemini-3.1-pro` 只有 `high` 與 `low`，**沒有 medium**，但笛卡兒積會放行 `gemini-3.1-pro/medium`，錯誤要等到 `herdr agent start` 才爆 —— 而那時 pane 已經切出去、`.panes` 也寫了。出廠檔位剛好都避開，所以這個洞一直沒被觸發。`agy` 的 `kind_args` 同時從 `--model <id>-<effort>` 改成 `--model <id> --effort <e>`（實測兩種都可用，但後綴與 `--effort` 同時給會衝突；分開傳較乾淨）。兩件都做才有意義：改傳法不會讓本地擋下不存在的組合。
+- fix(docs): README 的 `bash 5` 比實際需求嚴格三個大版本，改成 `bash 3.2+`。`dk_ver_ge` 刻意避開 `sort -V` 就是為了 macOS，而 macOS 內建的正是 bash 3.2 —— 程式碼跑得動，是文件把門檻寫高了。新增 bats 掃 `.dkbo/` 不得出現 bash 4+ 語法（`declare -A`、`mapfile`、`${x,,}` 等），把文件宣稱變成機械閘，跟 0.1.5 對 herdr 做的事同一個路數；該測試會先種一個違規再掃，確認掃描真的有牙齒。
+- fix(docs): 補查證出來、README 沒列的真實依賴：`git ≥ 2.17`、`jq ≥ 1.5`、`flock`（軟依賴，缺了 `dk_env_set` 退化成無鎖寫入不會崩）。早先以為需要的 `column`、coreutils `timeout`、python、node 經逐字查證並未被任何程式碼使用（grep 命中的全是註解與 herdr 自己的 `--timeout` 旗標），不列入。
+- chore(docs): `docs/` 移出版控（`git rm -r --cached docs/design` + `.gitignore`）。已定案的結論寫進 `.dkbo/decisions.md`，待實作的寫成任務的 `plan.md`；README 與 BACKLOG 的九處引用改成不帶路徑的描述，CHANGELOG 的歷史條目不動（那是當時的事實）。新增 bats 擋住任何進版控的文件再指向 `docs/design`。
+- test: 新增 `CHANGELOG` 最上面的版本段必須等於 `.dkbo/VERSION`。先前 `VERSION` 是 0.1.4 而 CHANGELOG 頂端已是未發布的 0.1.5，版本一致性測試只比對 VERSION 與三份 README，抓不到這個落差 —— 那個狀態下推 `v0.1.5` tag 會被 CI 擋。
+- 測試：+13 bats；shellcheck 零警告。
+
+### 0.1.5 的內容（未單獨發版，併入 0.2.0）
 - feat(herdr): herdr 版本從「文件上的期望」變成實際的閘。`lib/common.sh` 新增 `DK_HERDR_MIN="0.9.0"`（低於即拒跑）與 `DK_HERDR_VERIFIED="0.9"`（`tests/integration/herdr-real.sh` 實測過 JSON 形狀的系列）；`dk_herdr_check` 解析 `herdr --version`，讀不到版本或低於下界就 `dk_die`，高於已驗證系列則每個行程樹提醒一次去跑整合測試。`dk_require_herdr`（每支 dk-* 都會過）與 `install.sh` 都呼叫它 —— install 不要求 `HERDR_ENV`，從普通 shell 安裝仍可。版本比較用自帶的 `dk_ver_ge`（純 bash，逐段十進位比較）而不是 `sort -V` —— `sort -V` 是 GNU 擴充、macOS 的 sort 不保證有，缺了會讓 `dk_herdr_check` 把每一支 dk-* 都判成「herdr 太舊」而全面停擺；字串比較則會把 0.10.0 判成小於 0.9.0。兩個陷阱測試都有覆蓋，另加前導零不被當八進位、`-rc1` 這類後綴忽略、`0.9` 等於 `0.9.0`（刻意與 `sort -V` 不同：對下界檢查而言短版本不是舊版本）。實測 `herdr --version` 20 次共 17ms，擋在每支指令上的成本可以忽略。
 - 為什麼需要這道閘：dkbo 對 herdr 的假設（`pane split --ratio` 是 anchor 保留的份、`--amount` 是面積比例、`pane read` 回純文字）是實測 0.9.0 得到的，而 herdr 呼叫的失敗是刻意吞掉的（`dk_layout_even || true`、`agent list || return 0`，見測試「herdr failure is swallowed」）。換版時的表現不是報錯，而是版面悄悄歪掉、`agent list` 取不到 agents 之後 **dk-watch 永遠偵測不到 blocked** —— 整套安全網變成 no-op 而看起來一切正常。
 - test(integration): `herdr-real.sh` 開頭印出實際 herdr 版本是否落在 `DK_HERDR_VERIFIED`，超出時提示驗完就把常數往上調。stub 支援 `HERDR_STUB_VERSION` 假裝任何版本。

@@ -22,3 +22,8 @@ teardown() { teardown_project; }
 @test "dk-version tolerates a missing VERSION file" {
   rm "$DK_ROOT/VERSION"; run dk-version; [ "$status" -eq 0 ]; [ "$output" = "dkbo unknown" ]
 }
+@test "the newest CHANGELOG section matches .dkbo/VERSION" {
+  v=$(tr -d '[:space:]' < "$REPO_ROOT/.dkbo/VERSION")
+  top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/CHANGELOG.md" | awk '{print $2}')
+  [ "$top" = "$v" ] || { echo "CHANGELOG top is '$top' but .dkbo/VERSION is '$v'"; false; }
+}

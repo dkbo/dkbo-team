@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.1.4），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.2.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -45,20 +45,20 @@
 
 ## 快速開始
 
-前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git、jq、bash 5、`claude` CLI（領導必要），可選 `codex`、`agy` 當第二三意見。目標專案要是乾淨的 git repo。
+前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的版本就夠；`flock` 是軟依賴，缺了退化成無鎖寫入）、三種 AI CLI 至少一種（`claude` / `codex` / `agy`）。領導這一側用哪個由 `DK_LEADER_KIND` 決定（預設 `claude`），其餘當員工與第二三意見。目標專案要是乾淨的 git repo。
 
 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code：
 
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.1.4; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.2.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # 預期印出 leader
 ```
 
-然後執行 `/dkbo-init`：它偵測已裝的 AI CLI、選主模型與第二三意見、寫 `settings.env`、預填 `PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突。細節、手動安裝與更新方式見 [.dkbo/README.md](.dkbo/README.md)。
+然後執行 `/dkbo-init`：它偵測已裝的 AI CLI、選領導 kind（`DK_LEADER_KIND`）與員工主模型、選第二三意見、寫 `settings.env`、佈線入口檔、預填 `PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突。細節、手動安裝與更新方式見 [.dkbo/README.md](.dkbo/README.md)。
 
 ## 角色與 kind
 
@@ -90,7 +90,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
 | `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
-| `dk-leader` / `dk-version` | 開第二位領導；印版本 |
+| `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；印版本 |
 
 ## 目錄
 
@@ -100,14 +100,13 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
   LEADER.md           領導規範（三個關卡、跑一波、裁定、故障處理）
   PROTOCOL.md         通訊協定：訊息類型、升報規則、停止條件、state / report 格式
   PROJECT.md          專案事實，≤40 行，init 預填
-  settings.env        DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS
+  settings.env        DK_LEADER_KIND、DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS
   roles/  kinds/      角色檔；各 AI CLI 的旗標對應
   bin/  lib/          dk-* 腳本與共用函式
   templates/          brief、切片、state、report、chore 範本
   skills/             dkbo-init、dkbo-add-role（install.sh 會 symlink 進 .claude/skills 與 .agents/skills）
   tasks/<日期-短名>/  一個任務的全部記憶
   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   跨任務記憶
-docs/design/          設計文件（第一版整體設計、第二版每波審查閘與多人版面）
 tests/                單元（bats，假 herdr）、整合（真 herdr）、smoke（真 agent）、e2e RUNBOOK
 example/              給 e2e RUNBOOK 用的最小 Node 專案
 ```
@@ -129,5 +128,4 @@ shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # 目�
 
 - [.dkbo/README.md](.dkbo/README.md)：安裝、驗證、日常使用、更新、疑難排解
 - [.dkbo/LEADER.md](.dkbo/LEADER.md)、[.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md)：領導與員工實際照著做的規範
-- [docs/design/2026-09-09-dkboai-ai-team-design.md](docs/design/2026-09-09-dkboai-ai-team-design.md)：第一版整體設計（當時套件目錄寫作 `dkboai/`，實際為 `.dkbo/`）
-- [docs/design/2026-09-10-dkbo-wave-review-design.md](docs/design/2026-09-10-dkbo-wave-review-design.md)：第二版，每波審查閘與多人版面
+- 設計文件不進版控（`docs/` 已 gitignore）：定案的結論寫進 `.dkbo/decisions.md`，待實作的寫成任務的 `plan.md`。
