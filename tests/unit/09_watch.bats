@@ -174,3 +174,50 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   printf 'login-reviewer wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"; echo "2026-09-10T10:00 spawn login-reviewer (claude M) isolated" >> "$d/process.md"
   dk-watch --once; grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer 逾時' "$HERDR_STUB_LOG"
 }
+
+# --- 送給領導的通知：等 idle，沒送到就重試（BACKLOG 2026-09-11） ---
+
+@test "blocked: waits for the leader to be idle before prompting" {
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  dk-watch --once
+  grep -q '^agent wait leader-login --until idle --until done --timeout 5000$' "$HERDR_STUB_LOG"
+}
+
+@test "blocked: an undelivered prompt retries next tick without repeating the desktop notification" {
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  [ "$(grep -c '^notification show dkbo: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c ' blocked login-qa$' "$d/process.md")" -eq 1 ]
+  ! grep -q '^delivered$' "$d/.blocked/login-qa"
+  dk-watch --once                      # 領導終於閒下來
+  grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  grep -q '^delivered$' "$d/.blocked/login-qa"
+}
+
+@test "timeout: the kind goes down and is logged once even when the prompt never lands" {
+  reviewer_row "$old"
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+  [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
+  ! grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  [ "$(grep -c '^notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
+  dk-watch --once
+  [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG")" -eq 1 ]
+  grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+}
+
+@test "--chores: an undelivered prompt retries and only logs the message once it lands" {
+  blocked_chore; chore_file chore-frontend-1 working leader-login
+  mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  HERDR_STUB_FAIL="agent wait" dk-watch --chores --once
+  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  ! grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log" 2>/dev/null
+  dk-watch --chores --once
+  [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log")" -eq 1 ]
+  grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-09-11
+- fix(watch): 送給領導的 `[BLOCKED]` 與 `[TIMEOUT]` 不再可能被靜靜吃掉。`dk-watch` 的三處推送（blocked ×2、reviewer timeout）原本直接 `herdr agent prompt` 領導、結果丟棄、標記照寫 —— 而守望觸發的前提正是領導忙著，且「提示送給 working 的 agent 會排隊還是被丟掉」在三個 kind 上都還是 `KIND_PROMPT_QUEUES=unknown`。現在一律走 `notify_leader`：先 `agent wait --until idle --until done`（**有界**，`DK_WATCH_WAIT_MS` 預設 5000 毫秒，背景迴圈不會被卡住），送到才寫 `delivered`；沒送到就留著，下一 tick 重試到送達為止。
+- fix(watch): 標記檔從「兩行就算通知過」改成分開的 `notified`（桌面通知已發）與 `delivered`（領導已收到）。桌面通知、`dk_process` 的事件行、以及 reviewer 逾時的 kind 熔斷都只做一次，**且不等領導** —— 熔斷是任務狀態的改變，領導收不收得到訊息都一樣成立。逾時訊息的 `(quota?)` 標記存進標記檔，重試時訊息與第一次逐字相同。
+- fix(watch): 雜務那一側同理；`messages.log` 改成送達才記，沒送到不留半筆。0.1.4 之前沒有 `leader:` 行的舊雜務檔沿用原行為（記一行「（無 leader 紀錄）」就收工，不無限重試）。
+- docs(leader): 領導回雜務員工那條（`LEADER.md`）是同一個問題的第二處，改成先 `herdr agent wait --until idle` 再 prompt。
+- 為什麼不先跑 layer-3 smoke 問出答案：兩條路的終點都是「讓 dk-watch 不要在乎這件事」。直接走那一步是零 token，而且未知數從此不在關鍵路徑上。`KIND_PROMPT_QUEUES` 仍是 unknown，但已不再是安全網的單點。
+- 測試：217 bats（+4，含「等 idle 才送」「沒送到就重試且不重複桌面通知」「熔斷不受送達與否影響」「雜務側重試」）；shellcheck 零警告。
+
 ## 0.2.0 — 2026-09-11
 - feat(leader): 領導這一側的 AI CLI 可選。`settings.env` 新增第六鍵 `DK_LEADER_KIND`（預設 `claude`，`dk_settings` 補預設與 export），`dk-leader` 不再寫死 `claude/opus/high`：kind 取 `DK_LEADER_KIND`，model/effort 取該 kind `KIND_DEFAULT_TIERS` 的 **L 檔**（領導用最高檔），`--kind` / `--model` / `--effort` 仍可逐次覆寫。它也不再自己拼 `--model/--effort`，改走 `dk_kind_args` —— 原本那樣對 codex 會送出它不認的旗標，而且漏掉 `kind_args` 該帶的權限模式。`dk-leader` 先前完全沒呼叫 `dk_settings`，順帶補上。
 - feat(init): `/dkbo-init` 第 2 步拆成兩問（領導 kind，預設偵測目前 pane 的 CLI；員工主模型），第 3 步從五鍵變六鍵，並新增入口檔佈線一步。佈線放在 init 而不是 `install.sh`：install 跑在 init 之前，那時還不知道領導是誰，讓它無條件生出 `GEMINI.md` 會在 claude-only 的專案裡塞垃圾。
