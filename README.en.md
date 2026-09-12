@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.3.1); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.4.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -52,7 +52,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.3.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.4.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # expected: leader
@@ -100,7 +100,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
   LEADER.md           leader rules (three gates, running a wave, rulings, failure handling)
   PROTOCOL.md         messaging protocol: types, escalation rules, stop conditions, state / report formats
   PROJECT.md          project facts, ≤40 lines, pre-filled by init
-  settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS, DK_WAVE_TIMEOUT_MIN
+  settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIER, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS, DK_WAVE_TIMEOUT_MIN
   roles/  kinds/      role files; flag mappings per AI CLI
   bin/  lib/          dk-* scripts and shared functions
   templates/          brief, slice, state, report and chore templates

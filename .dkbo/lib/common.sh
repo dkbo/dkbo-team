@@ -77,14 +77,14 @@ dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column match
 }
 
 dk_settings() { # load .dkbo/settings.env over the defaults; warn once per process tree when the file is missing
-  DK_TEST_CMD=""; DK_REVIEW_KINDS="claude"; DK_REVIEW_MIN="1"; DK_REVIEW_TIMEOUT_MIN="20"; DK_TAB1_SLOTS="4"; DK_LEADER_KIND="claude"; DK_WAVE_TIMEOUT_MIN="60"
+  DK_TEST_CMD=""; DK_REVIEW_KINDS="claude"; DK_REVIEW_MIN="1"; DK_REVIEW_TIMEOUT_MIN="20"; DK_TAB1_SLOTS="4"; DK_LEADER_KIND="claude"; DK_WAVE_TIMEOUT_MIN="60"; DK_REVIEW_TIER="M"
   if [ -f "$DK_ROOT/settings.env" ]; then
     # shellcheck disable=SC1091
     . "$DK_ROOT/settings.env"
   elif [ -z "${DK_SETTINGS_WARNED:-}" ]; then
     echo "dk: $DK_ROOT/settings.env missing; using defaults (run /dkbo-init)" >&2; DK_SETTINGS_WARNED=1
   fi
-  export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_LEADER_KIND DK_WAVE_TIMEOUT_MIN DK_SETTINGS_WARNED
+  export DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS DK_LEADER_KIND DK_WAVE_TIMEOUT_MIN DK_REVIEW_TIER DK_SETTINGS_WARNED
 }
 dk_commit_memory() { # <message> <path…> — commit只有這幾條路徑（任務／雜務記憶）到主樹
   # 記憶是 markdown、可 grep、進 git —— 但在這之前沒有任何一步真的把它們放進 git，

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-09-12
+- feat(review): 新增第八個設定鍵 `DK_REVIEW_TIER`（`M` 或 `L`，預設 `M` 維持相容）。`dk-review` 的檔位改從它來，`--tier` 仍逐次覆寫。審查是全隊最吃推理的位置，卻跟 dev 同樣預設 M；而 reviewer 是 `--isolated` 唯讀、只讀一個 diff pack + brief、單輪，升到 L 的邊際成本遠低於一個要跑 20–60 分鐘的 dev pane。現在這是一個設定，不是一次改角色檔的手術。
+- 為什麼**不**把 `roles/reviewer.md` 的 `M: sonnet/medium` 直接改成 `opus/high`（這是收到的原始提案）：`dk-review` 收 `--tier M|L`，兩個值會解析到同一組旗標，旗標變成**靜默的 no-op**；結案評議的 `dk-review --task --tier L` 從此與例行波審查無異，失去加碼的意義；而 tier 在別處一律是「切片難度」（`dk-spawn`、`dk-chore` 都預設 M），讓某一個角色的 M 改指頂配，同一個字在不同角色就不同義。審查政策本來就住在 `settings.env`（`DK_REVIEW_KINDS` / `DK_REVIEW_MIN` / `DK_REVIEW_TIMEOUT_MIN`），第四把鑰匙也該放在那裡。
+- `/dkbo-init` 第 3 步改問八鍵，並在問 `DK_REVIEW_TIER` 時要求先確認 `DK_REVIEW_KINDS` 已有第二個 kind：**密度先於天花板**。0.2.2 加 `dk-wave-close` 第五道閘，正是因為實跑兩波都派了 claude + codex、兩波都只有 claude 進裁定，`DK_REVIEW_MIN=1` 讓領導每次都合法地靜默放行，多模型審查的實際生效率是 0。換一個不同模型抓到的錯誤類別，跟同一個模型想得更久抓到的，不是同一批。
+- 測試：240 bats（+6，其中一條釘住出廠預設仍是 M、一條釘住 `roles/reviewer.md` 的 tier 語義沒被動過）；shellcheck 零警告。
+
 ## 0.3.1 — 2026-09-12
 - fix(chore): `dk-chore` 不再把正在工作的員工腳下的 worktree 與分支刪掉。兩個缺陷疊在一起造成一次實際的資料遺失（`sport-frontend-panova` 的 `chore/chore18`，員工改完 `GameModule.vue` 尚未 commit，整個 worktree 與分支消失，`git branch -a` 也查無此分支）：(1) 第一段提示用的是 `--wait --timeout 60000`，而 `herdr agent prompt --wait` 的預設語意是等**這一輪跑完**（`--help`：matches idle, done, or blocked），任何真的要動手的雜務第一輪都超過 60 秒，於是必然回 timeout；(2) 那個非零在 `set -e` 下觸發了還掛著的 `trap rollback EXIT`，rollback 執行 `worktree remove --force` 與 `branch -D`。**0.2.2 已經針對 `dk-spawn` 修過同一條**（「等這一輪結束 ≠ 提示送到了沒」），但 `dk-chore` 與 `dk-leader` 兩處漏掉了；在 `dk-chore` 這一處它不只是誤判，而是會毀掉工作。
 - fix(chore): rollback 的契約收斂成「還沒有人進去過就清乾淨」——`herdr agent start` 一成功就 `trap - EXIT`，而不是拖到腳本最後一行。此後任何一步失敗（`dk_index_add`、`dk-watch`、Ctrl+C）都只報錯不動 worktree：那裡有一個活著的 agent 和它還沒 commit 的改動。提示失敗時 pane 與 worktree 都留著，INDEX 也已寫入（在提示之前），領導可以讀 pane 診斷後重送提示，或 `dk-chore-close <agent> --abandon` 收乾淨。

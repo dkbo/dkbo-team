@@ -35,5 +35,13 @@ teardown() { teardown_project; }
 
 @test "settings.env 有整波逾時這個鍵" {
   grep -q '^DK_WAVE_TIMEOUT_MIN=' "$DK_ROOT/settings.env"
-  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 7 ]
+  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 8 ]
+}
+@test "dk_settings provides and exports DK_REVIEW_TIER, defaulting to M" {
+  rm -f "$DK_ROOT/settings.env"
+  run bash -c '. "$DK_ROOT/lib/common.sh"; dk_settings 2>/dev/null; env | grep "^DK_REVIEW_TIER="'
+  [ "$status" -eq 0 ]; [ "$output" = "DK_REVIEW_TIER=M" ]
+}
+@test "settings.env ships DK_REVIEW_TIER as the eighth key" {
+  grep -q '^DK_REVIEW_TIER=' "$DK_ROOT/settings.env"
 }
