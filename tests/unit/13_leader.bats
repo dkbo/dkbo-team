@@ -21,3 +21,12 @@ teardown() { teardown_project; }
 @test "dk-leader dies cleanly when pane split fails" {
   HERDR_STUB_FAIL="pane split" run dk-leader pay x; [ "$status" -eq 1 ]; [[ "$output" == *"no pane_id"* ]]
 }
+@test "dk-leader's first prompt waits for the leader to start, and a failure keeps the pane" {
+  dk-leader pay "金流" >/dev/null
+  p=$(grep '^agent prompt leader-pay ' "$HERDR_STUB_LOG")
+  [[ "$p" == *"--wait --until working"* ]]
+  : > "$HERDR_STUB_LOG"
+  HERDR_STUB_FAIL="agent prompt" run dk-leader pay "金流"
+  [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+  ! grep -q '^pane close' "$HERDR_STUB_LOG"
+}

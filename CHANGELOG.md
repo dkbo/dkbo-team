@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — 2026-09-12
+- fix(chore): `dk-chore` 不再把正在工作的員工腳下的 worktree 與分支刪掉。兩個缺陷疊在一起造成一次實際的資料遺失（`sport-frontend-panova` 的 `chore/chore18`，員工改完 `GameModule.vue` 尚未 commit，整個 worktree 與分支消失，`git branch -a` 也查無此分支）：(1) 第一段提示用的是 `--wait --timeout 60000`，而 `herdr agent prompt --wait` 的預設語意是等**這一輪跑完**（`--help`：matches idle, done, or blocked），任何真的要動手的雜務第一輪都超過 60 秒，於是必然回 timeout；(2) 那個非零在 `set -e` 下觸發了還掛著的 `trap rollback EXIT`，rollback 執行 `worktree remove --force` 與 `branch -D`。**0.2.2 已經針對 `dk-spawn` 修過同一條**（「等這一輪結束 ≠ 提示送到了沒」），但 `dk-chore` 與 `dk-leader` 兩處漏掉了；在 `dk-chore` 這一處它不只是誤判，而是會毀掉工作。
+- fix(chore): rollback 的契約收斂成「還沒有人進去過就清乾淨」——`herdr agent start` 一成功就 `trap - EXIT`，而不是拖到腳本最後一行。此後任何一步失敗（`dk_index_add`、`dk-watch`、Ctrl+C）都只報錯不動 worktree：那裡有一個活著的 agent 和它還沒 commit 的改動。提示失敗時 pane 與 worktree 都留著，INDEX 也已寫入（在提示之前），領導可以讀 pane 診斷後重送提示，或 `dk-chore-close <agent> --abandon` 收乾淨。
+- fix(leader): `dk-leader` 的第一段提示同樣改成 `--wait --until working --timeout 15000`。領導第一輪要讀 `LEADER.md`、跑 `dk-task-new`、開始寫 brief，一定超過任何合理逾時；舊行為讓一個開得好好的領導 pane 被回報成失敗。這一處沒有破壞性 trap，只是誤報。
+- 前例：`_chores/messages.log` 顯示 09-10 23:45 `chore-translator-12` 出過形狀相同的 ESCALATE（`chore-hi-in-144-key` 環境消失）。同一個坑吃掉兩次雜務。
+- 測試：234 bats（+3）；shellcheck 零警告。
+
 ## 0.3.0 — 2026-09-11
 - feat(brief-check): 檔案所有權表新增「獨佔資源」欄（`db`、`port:3000`、`docker`…，逗號分隔），同一波內兩位成員宣告同一個資源即 FAIL。worktree 隔離檔案，**不隔離執行環境** —— 同波兩位 dev 仍會對同一個 dev DB 跑 migration、搶同一個 port、重啟同一組 docker。舊的三欄 brief 照常通過（欄位缺就是沒宣告）。
 - feat(watch): 新增 `DK_WAVE_TIMEOUT_MIN`（第七個設定鍵，預設 60 分鐘，0 表示關閉）。`dk-wave-open` 記下 `DK_WAVE_STARTED`，`dk-watch` 超過門檻就推一次 `[TIMEOUT] wave N` 給領導、發一次桌面通知、記一行 process，`dk-wave-close` 收尾時清掉。補的是「員工沒 blocked、reviewer 也沒逾時，但這一波就是卡著不動」這個先前沒有任何守望覆蓋的狀態。訊息走 0.2.1 的 `notify_leader`，送不到會重試。

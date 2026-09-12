@@ -115,3 +115,19 @@ teardown() { teardown_project; }
   grep -q '| 同步四個文件位置 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
   ! grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
 }
+@test "chore --code keeps the live worker's worktree when the first prompt fails" {
+  HERDR_STUB_FAIL="agent prompt" run dk-chore frontend "fix" --code
+  [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+  wt="$PROJECT/.worktrees/chore-fix"
+  [ -d "$wt" ]                                   # 員工已經站在裡面：rollback 不准再刪
+  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+  git -C "$PROJECT" rev-parse --verify -q chore/fix
+  ! grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
+  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^branch: chore/fix$' "$f"
+  grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "chore's first prompt waits for the worker to start, not for its whole first turn" {
+  dk-chore frontend "fix" --code >/dev/null
+  p=$(grep '^agent prompt chore-frontend-1 ' "$HERDR_STUB_LOG")
+  [[ "$p" == *"--wait --until working"* ]]
+}
