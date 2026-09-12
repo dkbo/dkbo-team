@@ -259,3 +259,33 @@ X
   dk-chore frontend "翻譯 README" >/dev/null
   grep -q '^branch=-$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
 }
+@test "同名雜務撿不到上一輪留在 messages.log 的 [DONE]" {
+  dk-chore frontend "fix" --code >/dev/null
+  wt="$PROJECT/.worktrees/chore-fix"
+  echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
+  done_msg chore-frontend-1 "第一輪的結果"
+  dk-chore-close chore-frontend-1 >/dev/null          # 正常關閉：記錄檔被刪，[DONE] 永遠留在 log 裡
+  rm -f "$DK_ROOT/tasks/_chores/"*.md                 # 有人整理 _chores/ → n 重算回 1
+  dk-chore frontend "fix2" --code >/dev/null          # 又叫 chore-frontend-1，但它還沒回報
+  run dk-chore-close chore-frontend-1
+  [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
+  git -C "$PROJECT" rev-parse --verify -q chore/fix2   # 沒被誤合併
+}
+
+@test "dk-chore-close 拒絕不合法的 agent 名" {
+  run dk-chore-close "../../../victim"
+  [ "$status" -eq 1 ]; [[ "$output" == *"agent name"* ]]
+  run dk-chore-close "Chore-Frontend-1"
+  [ "$status" -eq 1 ]; [[ "$output" == *"agent name"* ]]
+}
+
+@test "記錄檔寫不進去時 rollback 連雜務檔與記錄檔一起清掉" {
+  mkdir -p "$DK_ROOT/.sessions/chores"; chmod 555 "$DK_ROOT/.sessions/chores"
+  run dk-chore frontend "fix" --code
+  chmod 755 "$DK_ROOT/.sessions/chores"
+  [ "$status" -ne 0 ]
+  [ ! -d "$PROJECT/.worktrees/chore-fix" ]
+  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
+  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
+  [ ! -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-09-12
+- fix(chore): 完成訊號綁上這件雜務的生命期。記錄檔多一欄 `logline=`（建立當下 `_chores/messages.log` 的行數），`dk-chore-close` 只看那之後的行。0.5.0 的撞號守衛擋的是「記錄檔還在就拒絕同名」，但有一條路徑繞過它：一件雜務正常跑完關閉後記錄檔就刪了，而它的 `[DONE]` 永遠留在 append-only 的 `messages.log` 裡；等有人整理逐漸變大的 `_chores/*.md`（agent 編號正是 `count(_chores/*.md) + 1` 算出來的），編號重算回同一個數字，新雜務的記錄檔是乾淨的、守衛不會觸發，而閘門會撿到上一輪的 `[DONE]` 立刻放行 —— `--code` 的話等於合併一個員工從沒回報過的分支。`messages.log` 只增不減、`_chores/*.md` 是人會去清的那一個，所以這不是「會不會」而是「什麼時候」。順帶讓閘門對任何陳舊 `[DONE]` 免疫，不只這個情境。
+- fix(chore): `dk-chore-close` 在讀取端也驗 agent 名。`dk-chore` 早就有 `[[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]]`，但那是**寫入端**；操作者打的字是從 `dk-chore-close <agent>` 進系統的，而 `$agent` 會組成 `rm -f` 的路徑、也會被內插進 `sed` program。同一條規則在讀取端再擋一次。
+- fix(chore): `rollback()` 補上雜務檔與記錄檔。它的契約是「還沒有人進去過就清乾淨」，但先前只清 worktree 與分支；`--code` 雜務在 trap 掛上之後、`herdr agent start` 之前若被 Ctrl+C 或磁碟出事，`$cf` 與 `$crec` 會留下來 —— 而 0.5.0 之後「記錄檔存在 ⟺ 雜務在跑」，一個孤兒記錄檔會讓 `dk-watch --chores` 永遠不退出，且那時 `dk_index_add` 還沒跑，INDEX 裡看不到它。
+- 這三條都是 0.5.0 最終審查延後、實跑前重新評估後決定收掉的；其餘延後項維持延後。
+- 測試：256 bats（+3）；shellcheck 零警告。
+
 ## 0.5.0 — 2026-09-12
 - fix(chore): 雜務檔不再一檔兩主。實跑收尾發現兩件事——`dk-chore-close chore-it-19` 回 `no chore file for chore-it-19`（員工把雜務檔整份重寫成自己的報告格式，`成員：`／`branch:`／`pane:` 全沒了）；人工補回欄位關掉之後，`tasks/INDEX.md` 那列仍停在 `working`，而 `dk-chore-close` 回了 0。查下來是**同一個結構缺陷的兩個出口**：雜務檔同時裝著系統的識別碼（`成員：` `branch:` `workspace:` `pane:` `leader:`）與員工的進度（`status:` `touched:` `結果：`），而 `dk-chore` 的第一段提示與 `PROTOCOL.md:60` 正是叫員工去寫那個檔案的。員工要「更新」一個檔案，最自然的動作就是重寫整份。對照組是任務那側：`dk-spawn` 把 agent→pane 寫進 `.panes`，員工從不碰它——**雜務沒有 `.panes` 的對應物**。
 - 另外三個出口當時沒被觸發：(1) `dk-watch --chores` 同樣從雜務檔 `sed` 出 `成員：` 與 `leader:`，員工重寫後那件雜務靜默地從 blocked 名單消失；(2) 更糟的是 `[ "$working" = 1 ] || exit 0` 的 `working` 來自掃描所有雜務檔的 `^status: working`，**一個員工重寫自己的檔案會讓整個守望行程退出，連帶放掉同時在跑的其他雜務的 blocked 偵測**；(3) 若 `成員：` 僥倖留著而 `branch:` 掉了，`git merge --no-ff ""` 失敗會吐出 `merge conflict on ; ask the human`——訊息是錯的，而 `herdr pane close ""` 靜默 no-op、pane 留著不關。五個出口裡只有 `no chore file` 那個會誠實報錯。

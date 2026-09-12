@@ -27,9 +27,11 @@ if [ "$code" = 1 ]; then
   fi
   mkdir -p "$(dirname "$cwd")"
   git -C "$DK_PROJECT_ROOT" worktree add -q -b "$branch" "$cwd" HEAD >/dev/null 2>&1 || dk_die "git worktree add failed for $branch"
-  rollback() { # any later step dying must not leave the worktree or branch behind
+  rollback() { # any later step dying must not leave the worktree, branch, chore file or record behind
     git -C "$DK_PROJECT_ROOT" worktree remove --force "$cwd" >/dev/null 2>&1 || true
     git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+    rm -f "$cf" 2>/dev/null || true              # $cf 這時還沒有人讀過它
+    [ -z "${crec:-}" ] || rm -f "$crec" "$crec.tmp" 2>/dev/null || true   # crec 在 trap 掛上之後才賦值
   }
   trap rollback EXIT
 fi
@@ -46,12 +48,17 @@ dk_render "$DK_ROOT/templates/chore.md" "SOURCE=$instr" "AGENT=$agent" "KIND=$ki
 # 執行狀態：機器的。.sessions 是 gitignored，這些欄位是 runtime handle，用完即丟。
 # 放在這裡（agent start 之前）是為了讓失敗路徑能和 $cf 一起清掉。
 mkdir -p "$(dirname "$crec")"
+# 完成訊號要綁這件雜務的生命期：messages.log 是 append-only 且永遠增長，而 _chores/*.md 是人會去
+# 整理的那一個 —— 整理過後 n 會重算，同名雜務就會撿到上一輪留下的 [DONE]。記下起點，關閉時只看之後的行。
+clog="$DK_ROOT/tasks/_chores/messages.log"; nlog=0
+[ -f "$clog" ] && nlog=$(wc -l < "$clog" | tr -d ' ')
 { printf 'file=%s\n'      "$cf"
   printf 'instr=%s\n'     "${instr%%$'\n'*}"   # 首行；全文留在雜務檔給人看
   printf 'branch=%s\n'    "$branch"
   printf 'workspace=%s\n' "$ws"
   printf 'pane=%s\n'      "$pane"
   printf 'leader=%s\n'    "$leader"
+  printf 'logline=%s\n'   "$nlog"
 } > "$crec.tmp"
 mv "$crec.tmp" "$crec"   # atomic：record 是後面破壞性操作的唯一輸入，不容許半寫的檔案
 # shellcheck disable=SC2086
