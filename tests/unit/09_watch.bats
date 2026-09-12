@@ -251,3 +251,23 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   HERDR_STUB_FAIL="agent list" dk-watch --once 2>/dev/null || true
   [ "$(grep -c 'herdr-degraded' "$d/process.md")" -le 2 ]   # 每個行程樹一次
 }
+
+# panova2/sportswitch：領導 pane 沒被註冊成 leader-<short>，守望的三個出口全部靜默失效 ——
+# reviewer-b 逾時的 .timeout 標記躺在磁碟上沒有 delivered，領導是自己發現它沒動的。
+@test "blocked notification falls back to the leader pane id when leader-<short> is gone" {
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  HERDR_STUB_MISSING="leader-login" dk-watch --once
+  grep -q '^agent prompt wB:p1 \[BLOCKED\] from dk-watch: login-qa 卡在審批$' "$HERDR_STUB_LOG"
+  grep -q '^delivered$' "$d/.blocked/login-qa"
+}
+@test "reviewer timeout falls back to the leader pane id too" {
+  reviewer_row "$old"
+  HERDR_STUB_MISSING="leader-login" dk-watch --once
+  grep -q '^agent prompt wB:p1 \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG"
+  grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+}
+@test "still leaves no delivered mark when the pane id is unreachable too" {
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  HERDR_STUB_MISSING="leader-login wB:p1" dk-watch --once
+  ! grep -q '^delivered$' "$d/.blocked/login-qa"
+}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2 — 2026-09-12
+- fix(msg): 收件者名字對不上 herdr 時，訊息不再靜默全滅。`sport-frontend-panova` 的 sportswitch 任務實跑，`messages.log` 13 筆有 **12 筆 `[UNDELIVERED]`** —— 唯一送到的那筆是領導放棄 `dk-msg`、改用 `herdr agent prompt` 直送的。兩個方向各壞一邊，而且是兩個獨立的洞：(1) 員工的 `dk-msg leader` 被 `dk_leader_name` 解析成 `leader-<short>`，但領導 pane 在 herdr 裡的 `name` 是 `null`，`herdr agent get leader-sportswitch` 回 `agent_not_found`；(2) 領導照 `LEADER.md` 的 `dk-msg <reviewer>` 佔位符打了短名 `reviewer-a`／`frontend`，而 `dk-spawn` 註冊的是 `sportswitch-reviewer-a`／`sportswitch-frontend` —— `dk-msg` 只對字面 `leader` 做解析，其他對象原樣丟給 herdr。
+- 這個故障穿的是「對方忙到送不進」的衣服：`agent_not_found` 讓 `wait` 與 `prompt` **雙雙**回非零，跟 0.2.3 修的那個「一次就判死」長得一模一樣，所以 0.2.3 加的三次重試在這裡只是把同一個必敗的動作做三遍。`dk-msg` 現在先解析對象（短名補上任務前綴、對 `.panes` 查真名），送不到再退回 **pane id**：那是 herdr 唯一不靠 rename 的把手。對照組就在隔壁 —— `dk-chore` 記的 `leader=w9:p1` 是 pane id，雜務那側的 `messages.log` 幾乎全通。
+- fix(watch): 守望的三個出口（`[BLOCKED]`、reviewer `[TIMEOUT]`、整波 `[TIMEOUT]`）同樣走 `dk_leader_name`，同樣全滅。`.blocked/sportswitch-reviewer-b.timeout` 躺在磁碟上、沒有 `delivered`，而領導是自己發現 reviewer-b 沒動的。`notify_leader` 補上 `DK_ROOT_PANE` 退路（雜務那側本來就是 pane id，維持不變）。
+- fix(task-new): rename 回 `rc=0` 不等於生效。`dk-task-new` 那行本來就是為「領導 pane 不是 `dk-leader` 開的」準備的補救，21:29 它跑過了、`process.md` 卻一片乾淨 —— 守衛只看 exit code。現在 rename 後把名字讀回來比對，不符就記 `process.md` 並提示訊息改走 pane id。**0.2.3 已經為同一個症狀修過一次**（RESULTS-2026-09-11 ④：「pane 只要曾被命名過就跳過 rename」），那次修的是**要不要做**，這次修的是**做了有沒有成**。
+- 下游災情兩筆，都不是它們看起來的那件事：`sportswitch-reviewer-b` 整場沒收到 `[TASK]`、閒置到逾時，被記成 `kind codex down` —— codex 沒壞；`sportswitch-frontend` 三次 `[ESCALATE]` 求授權全部投不到，又被 Stop hook 擋著不能收工，只好自行改了不在它所有權清單裡的 `src/api/sport.spec.ts`（事後由 ruling 追認）。**兩筆都是靜默投遞失敗長出來的假象**，而領導對著錯的原因做了裁定。
+- 為什麼**不**只補 `herdr agent rename`（領導在事故現場的救火）：那治的是這一次。pane 是誰開的、herdr 有沒有重連、rename 有沒有生效，都不在 dkbo 控制之內，而失敗是靜默的；名字是**衍生**的把手，pane id 是**原生**的。為什麼**不**讓 `dk-msg` 一律改用 pane id：`messages.log` 那一欄是人與 `dk-wave-close` 在讀的，`w9:pT` 讀不出是誰。名字負責可讀，pane id 負責送達。
+- 測試：265 bats（+9）；stub 補上兩件真 herdr 的行為，否則這個故障在測試裡無從被看見：`HERDR_STUB_MISSING` 讓指定對象回 `agent_not_found`，`agent rename` 會真的改變之後 `agent get` 讀到的名字（`HERDR_STUB_RENAME_NOOP=1` 演靜默失敗）。shellcheck 零警告。
+
 ## 0.5.1 — 2026-09-12
 - fix(chore): 完成訊號綁上這件雜務的生命期。記錄檔多一欄 `logline=`（建立當下 `_chores/messages.log` 的行數），`dk-chore-close` 只看那之後的行。0.5.0 的撞號守衛擋的是「記錄檔還在就拒絕同名」，但有一條路徑繞過它：一件雜務正常跑完關閉後記錄檔就刪了，而它的 `[DONE]` 永遠留在 append-only 的 `messages.log` 裡；等有人整理逐漸變大的 `_chores/*.md`（agent 編號正是 `count(_chores/*.md) + 1` 算出來的），編號重算回同一個數字，新雜務的記錄檔是乾淨的、守衛不會觸發，而閘門會撿到上一輪的 `[DONE]` 立刻放行 —— `--code` 的話等於合併一個員工從沒回報過的分支。`messages.log` 只增不減、`_chores/*.md` 是人會去清的那一個，所以這不是「會不會」而是「什麼時候」。順帶讓閘門對任何陳舊 `[DONE]` 免疫，不只這個情境。
 - fix(chore): `dk-chore-close` 在讀取端也驗 agent 名。`dk-chore` 早就有 `[[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]]`，但那是**寫入端**；操作者打的字是從 `dk-chore-close <agent>` 進系統的，而 `$agent` 會組成 `rm -f` 的路徑、也會被內插進 `sed` program。同一條規則在讀取端再擋一次。

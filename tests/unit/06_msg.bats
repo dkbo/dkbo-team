@@ -62,3 +62,42 @@ teardown() { teardown_project; }
   [ "$(grep -c '^agent wait login-qa ' "$HERDR_STUB_LOG")" -eq 3 ]
   [ "$(grep -c 'UNDELIVERED' "$DK_ROOT/tasks/$(date +%F)-login/messages.log")" -eq 1 ]
 }
+
+# panova2/sportswitch 實跑：13 筆訊息 12 筆 UNDELIVERED。兩個獨立的洞，兩個方向各壞一邊。
+@test "leader addressing an employee by its short role name reaches the registered agent" {
+  # 領導照 PROTOCOL 打 `dk-msg reviewer-a`，但 herdr 裡註冊的是 login-reviewer-a：
+  # 實跑中三筆 [TASK] 就這樣全滅，reviewer-b 整場沒收到工作還被記成「codex down」。
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  printf 'login-reviewer-a wB:pT 0 review 1 2\n' > "$d/.panes"
+  HERDR_STUB_MISSING="reviewer-a" run dk-msg reviewer-a "[TASK] 對 AC1–AC8 逐條"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt login-reviewer-a \[TASK\] from leader-login: 對 AC1–AC8 逐條$' "$HERDR_STUB_LOG"
+  grep -Eq '^[0-9T:-]+ leader-login -> login-reviewer-a \[TASK\] ' "$d/messages.log"
+}
+
+@test "falls back to the leader pane id when the leader has no registered agent name" {
+  # 領導 pane 是人手開的 claude，沒經過 herdr agent start，dk-task-new 的 rename 又沒生效
+  # → leader-login 不存在 → 員工回報 100% 送不到。.task.env 的 DK_ROOT_PANE 一直都在。
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  DK_AGENT=login-qa HERDR_STUB_MISSING="leader-login" run dk-msg leader "[DONE] 驗收全過"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt wB:p1 \[DONE\] from login-qa: 驗收全過$' "$HERDR_STUB_LOG"
+  grep -Eq '^[0-9T:-]+ login-qa -> leader-login \[DONE\] 驗收全過$' "$d/messages.log"
+}
+
+@test "falls back to the employee pane id from .panes when its agent name is gone" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  printf 'login-frontend wB:pS 0 dev 1 1\n' > "$d/.panes"
+  DK_AGENT=login-qa HERDR_STUB_MISSING="login-frontend" run dk-msg login-frontend "[BUG] 空密碼未擋"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt wB:pS \[BUG\] from login-qa: 空密碼未擋$' "$HERDR_STUB_LOG"
+}
+
+@test "still gives up when neither the name nor the pane id can be reached" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  printf 'login-frontend wB:pS 0 dev 1 1\n' > "$d/.panes"
+  DK_AGENT=login-qa HERDR_STUB_MISSING="login-frontend wB:pS" DK_MSG_TRIES=2 DK_MSG_RETRY_SEC=0 \
+    run dk-msg login-frontend "[BUG] x"
+  [ "$status" -eq 1 ]
+  grep -q 'login-qa -> login-frontend \[UNDELIVERED\] \[BUG\] x' "$d/messages.log"
+}
