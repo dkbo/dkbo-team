@@ -33,23 +33,37 @@ if [ "$code" = 1 ]; then
   }
   trap rollback EXIT
 fi
+crec="$DK_ROOT/.sessions/chores/$agent"
+# 撞號：員工刪過自己的雜務檔後 n 可能重算回同一個數字。record 檔還在就代表那個 agent 還活著。
+[ ! -e "$crec" ] || dk_die "$agent 的執行記錄 $crec 已存在（它還在跑？先 dk-chore-close $agent）"
 direction=$(dk_fm "$rf" split); direction="${direction:-right}"
 leader=$(herdr agent get "${HERDR_PANE_ID:?}" 2>/dev/null | dk_json '.result.agent.name // empty' || true); leader="${leader:-$HERDR_PANE_ID}"
 pane=$(herdr pane split "${split_from[@]}" --direction "$direction" --cwd "$cwd" --no-focus \
   --env "DK_ROOT=$DK_ROOT" --env "DK_ROLE=$role" --env "DK_AGENT=$agent" --env "DK_CHORE_FILE=$cf" \
   --env "DK_LEADER=$leader" --env "DK_CHORE_CODE=$code" --env "HERDR_ENV=1" | dk_json '.result.pane.pane_id')
 [ -n "$pane" ] || dk_die "pane split returned no pane_id"
-dk_render "$DK_ROOT/templates/chore.md" "SOURCE=$instr" "AGENT=$agent" "KIND=$kind" "TIER=$tier" "BRANCH=$branch" "WORKSPACE=$ws" "PANE=$pane" "LEADER=$leader" > "$cf"
+dk_render "$DK_ROOT/templates/chore.md" "SOURCE=$instr" "AGENT=$agent" "KIND=$kind" "TIER=$tier" > "$cf"
+# 執行狀態：機器的。.sessions 是 gitignored，這些欄位是 runtime handle，用完即丟。
+# 放在這裡（agent start 之前）是為了讓失敗路徑能和 $cf 一起清掉。
+mkdir -p "$(dirname "$crec")"
+{ printf 'file=%s\n'      "$cf"
+  printf 'instr=%s\n'     "${instr%%$'\n'*}"   # 首行；全文留在雜務檔給人看
+  printf 'branch=%s\n'    "$branch"
+  printf 'workspace=%s\n' "$ws"
+  printf 'pane=%s\n'      "$pane"
+  printf 'leader=%s\n'    "$leader"
+} > "$crec.tmp"
+mv "$crec.tmp" "$crec"   # atomic：record 是後面破壞性操作的唯一輸入，不容許半寫的檔案
 # shellcheck disable=SC2086
 if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
   herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
-  rm -f "$cf"
+  rm -f "$cf" "$crec"
   dk_die "agent start failed for $agent (pane $pane closed)"
 fi
 # 員工從這一刻起活在 worktree 裡，rollback 的契約（「沒人進去過就清乾淨」）到此為止。
 # 再往後任何一步失敗都不准動 worktree：那裡有一個正在跑的 agent 和它還沒 commit 的改動。
 trap - EXIT
-prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/roles/$role.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md。交代：$instr。進度與結果寫在 $cf（status、touched、結果）。禁止使用 subagent。"
+prompt="你是 $agent，角色 $role，這是一件雜務。先讀 $DK_ROOT/roles/$role.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md。交代：$instr。$cf 是你的筆記，格式隨你寫。禁止使用 subagent。"
 [ "$code" = 1 ] && prompt="$prompt 你在分支 $branch 的 worktree 中，完成後自己跑測試並 commit。範圍比想的大就停下回報。" || prompt="$prompt 不得修改程式碼。"
 prompt="$prompt 完成後執行：$DK_ROOT/bin/dk-msg leader \"[DONE] <一句結果>\"（它會等領導閒置再送）。"
 "$DK_ROOT/bin/dk-watch" --chores --ensure >/dev/null 2>&1 || true   # a chore pane just appeared

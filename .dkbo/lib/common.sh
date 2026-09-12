@@ -71,9 +71,15 @@ dk_render() { # TEMPLATE_FILE KEY=VALUE... → stdout with every {{KEY}} replace
 }
 dk_index_add() { local name="${2//|/／}"; name="${name//$'\n'/ }"; printf '| %s | %s | %s | %s | %s |\n' "$1" "$name" "$3" "$4" "$5" >> "$DK_ROOT/tasks/INDEX.md"; }
 dk_index_set() { # NAME STATUS NOTE  — rewrite the row whose name column matches ('|' in NAME is stored as '／')
-  local name="${1//|/／}" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md"
+  # 非零＝沒有任何一列被改到。名稱是主鍵，而主鍵對不上是靜默的 —— 呼叫端必須接住這個非零。
+  local name="${1//|/／}" status="$2" note="$3" f="$DK_ROOT/tasks/INDEX.md" rc=0
   awk -F'|' -v n="$name" -v s="$status" -v o="$note" 'BEGIN{OFS="|"}
-    { if ($3 == " " n " ") { $5=" " s " "; $6=" " o " " } print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+    { if ($3 == " " n " ") { $5=" " s " "; $6=" " o " "; hit=1 } print }
+    END { exit !hit }' "$f" > "$f.tmp" || rc=$?
+  case "$rc" in
+    0|1) mv "$f.tmp" "$f"; return "$rc";;    # 0 命中、1 沒命中；兩種情況 $f.tmp 都是完整的
+    *)   rm -f "$f.tmp"; dk_die "dk_index_set: awk failed (rc=$rc) on $f";;
+  esac
 }
 
 dk_settings() { # load .dkbo/settings.env over the defaults; warn once per process tree when the file is missing

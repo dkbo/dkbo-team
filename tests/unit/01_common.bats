@@ -80,6 +80,21 @@ teardown() { teardown_project; }
   grep -q '| 使用者登入 | task | done | merged abc123 |' "$DK_ROOT/tasks/INDEX.md"
 }
 
+@test "dk_index_set 命中時回 0" {
+  dk_index_add 2026-09-12 使用者登入 task planning —
+  run dk_index_set 使用者登入 done "merged abc123"
+  [ "$status" -eq 0 ]
+  grep -q '| 使用者登入 | task | done | merged abc123 |' "$DK_ROOT/tasks/INDEX.md"
+}
+
+@test "dk_index_set 沒命中時回非零，且 INDEX 一個字都不動" {
+  dk_index_add 2026-09-12 使用者登入 task planning —
+  before=$(cat "$DK_ROOT/tasks/INDEX.md")
+  run dk_index_set 使用者登出 done "merged abc123"
+  [ "$status" -eq 1 ]
+  [ "$(cat "$DK_ROOT/tasks/INDEX.md")" = "$before" ]
+}
+
 @test "index add flattens newlines so a row never spans lines" {
   dk_index_add 2026-09-10 $'第一行\n第二行' chore working —
   grep -q '^| 2026-09-10 | 第一行 第二行 | chore | working | — |$' "$DK_ROOT/tasks/INDEX.md"

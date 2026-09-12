@@ -11,6 +11,7 @@ while [ $# -gt 0 ]; do case "$1" in
 cdir="$DK_ROOT/tasks/_chores"                       # chore mode: no .task.env, so pid and markers live in
 cmark="$DK_ROOT/.sessions/chores.blocked"           # .sessions, which is gitignored and already holds transient state
 cpid="$DK_ROOT/.sessions/chores.watch.pid"
+crdir="$DK_ROOT/.sessions/chores"                   # 一件雜務一個記錄檔；存在 ⟺ 它還在跑
 alive() { [[ "${1:-}" =~ ^[0-9]+$ ]] && ps -p "$1" -o args= 2>/dev/null | grep -q "${2:-dk-watch}"; }
 # the full command line, not kill -0: pids get recycled and kill -0 would call a stranger alive
 
@@ -50,15 +51,12 @@ notify_leader() { # target text — bounded wait for idle, then prompt; non-zero
 }
 
 chore_tick() {   # chores have no reviewers and no waves: blocked detection only
-  local now list f agent leader st m since working=0
-  compgen -G "$cdir/*.md" >/dev/null 2>&1 || exit 0
+  local now list rec agent leader st m since
+  compgen -G "$crdir/*" >/dev/null 2>&1 || exit 0   # 最後一件雜務關掉了，守望自己退
   now=$(date +%s); list=$(dk_h_soft agent list) || return 0
   mkdir -p "$cmark"
-  for f in "$cdir"/*.md; do
-    grep -q '^status: working' "$f" || continue
-    working=1
-    agent=$(sed -n 's/^成員：\([^ ]*\).*/\1/p' "$f" | head -1); [ -n "$agent" ] || continue
-    leader=$(sed -n 's/^leader: *//p' "$f" | head -1)   # chore files written before 0.1.4 have no leader line
+  for rec in "$crdir"/*; do
+    agent=$(basename "$rec"); leader=$(sed -n 's/^leader=//p' "$rec" | head -1)
     st=$(agent_status "$agent" "$list")
     m="$cmark/$agent"
     if [ "$st" = blocked ]; then
@@ -70,17 +68,13 @@ chore_tick() {   # chores have no reviewers and no waves: blocked detection only
           herdr notification show "dkbo: $agent blocked" --body "雜務員工卡在審批" --sound request >/dev/null 2>&1 </dev/null || true
           echo notified >> "$m"
         fi
-        if [ -z "$leader" ]; then   # 0.1.4 之前的雜務檔沒有 leader 行：沒有對象可送，記一行就收工
-          echo "$(dk_now) dk-watch -> （無 leader 紀錄） [BLOCKED] $agent 卡在審批" >> "$cdir/messages.log"
-          echo delivered >> "$m"
-        elif notify_leader "$leader" "[BLOCKED] from dk-watch: $agent 卡在審批"; then
+        if notify_leader "$leader" "[BLOCKED] from dk-watch: $agent 卡在審批"; then
           echo "$(dk_now) dk-watch -> $leader [BLOCKED] $agent 卡在審批" >> "$cdir/messages.log"
           echo delivered >> "$m"
         fi
       fi
     else rm -f "$m"; fi
   done
-  [ "$working" = 1 ] || exit 0   # the last chore closed; nothing left to watch
 }
 
 tick() {

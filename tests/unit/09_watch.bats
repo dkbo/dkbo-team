@@ -88,46 +88,50 @@ wpid() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
   [ ! -f "$d/.blocked/login-qa" ]
 }
 
-chore_file() { # $1=agent $2=status [$3=leader] — a chore file without running dk-chore
-  mkdir -p "$DK_ROOT/tasks/_chores"
-  local f="$DK_ROOT/tasks/_chores/2026-09-10-$1.md"
-  {
-    echo "交代：翻譯 README"; echo "成員：$1 (claude / M)"; echo "branch: -"; echo "workspace: -"; echo "pane: wC:p3"
-    [ -z "${3:-}" ] || echo "leader: $3"
-    echo "status: $2"; echo "touched:"; echo "結果："
-  } > "$f"
+chore_rec() { # $1=agent [$2=leader] — 一個執行記錄檔，不跑 dk-chore
+  mkdir -p "$DK_ROOT/.sessions/chores" "$DK_ROOT/tasks/_chores"
+  { echo "file=$DK_ROOT/tasks/_chores/2026-09-10-$1.md"
+    echo "instr=翻譯 README"; echo "branch=-"; echo "workspace=-"; echo "pane=wC:p3"
+    echo "leader=${2:-}"
+  } > "$DK_ROOT/.sessions/chores/$1"
 }
 blocked_chore() { sed -i 's/login-qa/chore-frontend-1/' "$HERDR_STUB_RESPONSES/agent_list.json"; }
 cmark="$DK_ROOT/.sessions/chores.blocked"
 
 @test "--chores: first sighting records a marker, no notify" {
-  blocked_chore; chore_file chore-frontend-1 working leader-login
+  blocked_chore; chore_rec chore-frontend-1 leader-login
   run dk-watch --chores --once; [ "$status" -eq 0 ]
   [ -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
   ! grep -q '^notification show' "$HERDR_STUB_LOG"
 }
 @test "--chores: blocked past the threshold notifies the chore's own leader once" {
-  blocked_chore; chore_file chore-frontend-1 working leader-login
+  blocked_chore; chore_rec chore-frontend-1 leader-login
   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
   dk-watch --chores --once; dk-watch --chores --once
   [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
   [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
   grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log"
 }
-@test "--chores: a chore file with no leader line still raises the desktop notification" {
-  blocked_chore; chore_file chore-frontend-1 working
+@test "--chores: 記錄檔的 leader 是空的時仍發桌面通知，且不誤標 delivered" {
+  blocked_chore; chore_rec chore-frontend-1
   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
   run dk-watch --chores --once; [ "$status" -eq 0 ]
   grep -q '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG"
-  ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
+  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
 }
-@test "--chores: a chore that is not working is not watched" {
-  blocked_chore; chore_file chore-frontend-1 done leader-login
+@test "--chores: 沒有記錄檔時守望直接退出" {
+  blocked_chore
   run dk-watch --chores --once; [ "$status" -eq 0 ]
   [ ! -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
 }
+@test "--chores: 員工重寫 chore 檔不影響守望名單" {
+  blocked_chore; chore_rec chore-frontend-1 leader-login
+  echo '# 我的報告' > "$DK_ROOT/tasks/_chores/2026-09-10-chore-frontend-1.md"   # 員工整份重寫
+  run dk-watch --chores --once; [ "$status" -eq 0 ]
+  [ -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]                    # 仍在守望名單裡
+}
 @test "--chores --ensure starts one chore watcher and is idempotent" {
-  unset DK_NO_WATCH; chore_file chore-frontend-1 working leader-login
+  unset DK_NO_WATCH; chore_rec chore-frontend-1 leader-login
   run dk-watch --chores --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"chores started"* ]]
   pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid"); ps -p "$pid" -o args= | grep -q -- '--chores'
   run dk-watch --chores --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"chores running (pid $pid)"* ]]
@@ -137,7 +141,7 @@ cmark="$DK_ROOT/.sessions/chores.blocked"
 @test "dk-chore records its leader and ensures the chore watcher" {
   unset DK_NO_WATCH
   run dk-chore frontend "翻譯 README"; [ "$status" -eq 0 ]
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^leader: wB:p1$' "$f"
+  grep -q '^leader=wB:p1$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
   pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid"); ps -p "$pid" -o args= | grep -q -- '--chores'
   kill "$pid" 2>/dev/null || true
 }
@@ -210,7 +214,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
 }
 
 @test "--chores: an undelivered prompt retries and only logs the message once it lands" {
-  blocked_chore; chore_file chore-frontend-1 working leader-login
+  blocked_chore; chore_rec chore-frontend-1 leader-login
   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
   HERDR_STUB_FAIL="agent wait" dk-watch --chores --once
   ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"

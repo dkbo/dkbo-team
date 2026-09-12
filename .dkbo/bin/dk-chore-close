@@ -5,10 +5,34 @@ set -euo pipefail
 dk_require_herdr
 agent="${1:-}"; [ -n "$agent" ] || dk_die "usage: dk-chore-close <agent> [--abandon]"
 abandon=0; [ "${2:-}" = --abandon ] && abandon=1
-cf=$(grep -l "^成員：$agent " "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null | head -1 || true); [ -n "$cf" ] || dk_die "no chore file for $agent"
-field() { sed -n "s/^$1: *//p" "$cf" | head -1; }
-instr=$(sed -n 's/^交代：//p' "$cf" | head -1); branch=$(field branch); ws=$(field workspace); pane=$(field pane); result=$(sed -n 's/^結果：//p' "$cf" | head -1)
-if [ "$abandon" = 0 ] && ! grep -q '^status: done' "$cf"; then echo "dk-chore-close: $agent is not done (status in $cf)"; exit 1; fi
+crec="$DK_ROOT/.sessions/chores/$agent"
+log="$DK_ROOT/tasks/_chores/messages.log"
+if [ -f "$crec" ]; then
+  rf() { sed -n "s/^$1=//p" "$crec" | head -1; }
+  cf=$(rf file); instr=$(rf instr); branch=$(rf branch); ws=$(rf workspace); pane=$(rf pane)
+  [ -n "$cf" ] || dk_die "執行記錄 $crec 讀不到 file=（記錄檔壞了？半寫的 truncate？）"
+  # 完成訊號住在 messages.log —— dk-msg 寫的，員工的 markdown 碰不到它。
+  # [UNDELIVERED] 也算完成：員工確實交差了，只是投遞失敗。
+  # 錨定在行首的 timestamp（dk_now 只吐一個 token，見 lib/common.sh）：訊息本文是員工可寫的自由文字，
+  # 不錨定的話一句「…chore-x -> wB:p1 [DONE] …」的本文就能偽造完成訊號（見設計文件 §3.2）。
+  result=""
+  [ -f "$log" ] && result=$(sed -n "s/^[^ ]* $agent -> [^ ]* \[DONE\] //p
+                   s/^[^ ]* $agent -> [^ ]* \[UNDELIVERED\] \[DONE\] //p" "$log" | tail -1)
+  if [ "$abandon" = 0 ] && [ -z "$result" ]; then
+    echo "dk-chore-close: $agent 還沒回報 [DONE]（見 $log）"; exit 1
+  fi
+else   # legacy：0.5.0 之前開的雜務，一切仍住在雜務檔裡
+  cf=$(grep -l "^成員：$agent " "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null | head -1 || true)
+  [ -n "$cf" ] || dk_die "no chore record or chore file for $agent"
+  field() { sed -n "s/^$1: *//p" "$cf" | head -1; }
+  instr=$(sed -n 's/^交代：//p' "$cf" | head -1)
+  branch=$(field branch); ws=$(field workspace); pane=$(field pane)
+  [ -n "$branch" ] || branch="-"   # 新版模板沒有 branch: 這一行；空字串不是分支名，當成沒分支
+  result=$(sed -n 's/^結果：//p' "$cf" | head -1)
+  if [ "$abandon" = 0 ] && ! grep -q '^status: done' "$cf"; then
+    echo "dk-chore-close: $agent is not done (status in $cf)"; exit 1
+  fi
+fi
 wt=""
 if [ "$branch" != "-" ]; then
   wt=$(git -C "$DK_PROJECT_ROOT" worktree list --porcelain | awk -v b="refs/heads/$branch" '$1=="worktree"{p=$2} $1=="branch"&&$2==b{print p}')
@@ -28,8 +52,20 @@ if [ "$branch" != "-" ]; then
   if [ "$abandon" = 1 ]; then git -C "$DK_PROJECT_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
   else git -C "$DK_PROJECT_ROOT" branch -d "$branch" >/dev/null 2>&1 || true; fi   # merged above, so -d is safe
 fi
-if [ "$abandon" = 1 ]; then sed -i 's/^status: .*/status: abandoned/' "$cf"; dk_index_set "$instr" abandoned "—"
-else [ "$branch" = "-" ] || sed -i "s#^結果：.*#結果：$result#" "$cf"; dk_index_set "$instr" "done" "${result:-—}"; fi
+st="done"; [ "$abandon" = 1 ] && st=abandoned
+if [ "$abandon" = 1 ]; then
+  dk_index_set "$instr" abandoned "—" || echo "dk-chore-close: INDEX 沒有名稱為「$instr」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+else
+  dk_index_set "$instr" "done" "${result:-—}" || echo "dk-chore-close: INDEX 沒有名稱為「$instr」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+fi
+# record 先刪：$crec 存在＝雜務還在跑，是 dk-watch 與這支腳本唯一認的真相。
+# 放在雜務檔 append 之前，這樣就算後面的寫入死掉（pane 已關、branch 已 merge、INDEX 已寫），
+# 也不會留一個「明明關完了卻還算在跑」的記錄檔。
+rm -f "$crec"
+# 記憶：append 一行機器寫的封存記錄。不用 sed 取代 結果： —— 員工可能已經把那一行寫沒了，
+# 而 append 不管員工把檔案改成什麼樣都會成功。
+[ -f "$cf" ] || printf '交代：%s\n' "$instr" > "$cf"
+printf '\n---\n關閉：%s %s — %s\n' "$(dk_now)" "$st" "${result:-—}" >> "$cf"
 dk_commit_memory "dkbo memory: chore $(basename "$cf" .md)" "$cf" "$DK_ROOT/tasks/_chores/messages.log" "$DK_ROOT/tasks/INDEX.md" \
   || echo "dk-chore-close: 雜務記憶沒 commit 成功，請自己 git add \"$cf\" 並 commit" >&2
 echo "${result:-closed}"

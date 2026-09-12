@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-09-12
+- fix(chore): 雜務檔不再一檔兩主。實跑收尾發現兩件事——`dk-chore-close chore-it-19` 回 `no chore file for chore-it-19`（員工把雜務檔整份重寫成自己的報告格式，`成員：`／`branch:`／`pane:` 全沒了）；人工補回欄位關掉之後，`tasks/INDEX.md` 那列仍停在 `working`，而 `dk-chore-close` 回了 0。查下來是**同一個結構缺陷的兩個出口**：雜務檔同時裝著系統的識別碼（`成員：` `branch:` `workspace:` `pane:` `leader:`）與員工的進度（`status:` `touched:` `結果：`），而 `dk-chore` 的第一段提示與 `PROTOCOL.md:60` 正是叫員工去寫那個檔案的。員工要「更新」一個檔案，最自然的動作就是重寫整份。對照組是任務那側：`dk-spawn` 把 agent→pane 寫進 `.panes`，員工從不碰它——**雜務沒有 `.panes` 的對應物**。
+- 另外三個出口當時沒被觸發：(1) `dk-watch --chores` 同樣從雜務檔 `sed` 出 `成員：` 與 `leader:`，員工重寫後那件雜務靜默地從 blocked 名單消失；(2) 更糟的是 `[ "$working" = 1 ] || exit 0` 的 `working` 來自掃描所有雜務檔的 `^status: working`，**一個員工重寫自己的檔案會讓整個守望行程退出，連帶放掉同時在跑的其他雜務的 blocked 偵測**；(3) 若 `成員：` 僥倖留著而 `branch:` 掉了，`git merge --no-ff ""` 失敗會吐出 `merge conflict on ; ask the human`——訊息是錯的，而 `herdr pane close ""` 靜默 no-op、pane 留著不關。五個出口裡只有 `no chore file` 那個會誠實報錯。
+- feat(chore): 執行狀態搬到 `.dkbo/.sessions/chores/<agent>`（gitignored，`key=value` 純文字，用 `sed` 讀**不 source**——`instr` 來自領導打的字，可能含引號與 `$`）。完成訊號改讀 `tasks/_chores/messages.log` 的 `[DONE]` 行（`dk-msg` 寫的，員工的 markdown 碰不到；`[UNDELIVERED]` 也算完成，因為員工確實交差了只是投遞失敗）。雜務檔從此**整份是員工的，機器完全不讀**。收尾從 `sed -i` 改成 append 一行 `關閉：<時間> done|abandoned — <結果>`：append 不管員工把檔案改成什麼樣都會成功。
+- fix(index): `dk_index_set` 沒命中時回非零，六個呼叫點全部接上警告。名稱是 INDEX 的主鍵，而主鍵對不上是靜默的——這是上面第二件事能活到事後才被發現的原因，而六個呼叫點裡有四個在任務那側（人手動整理過 `INDEX.md` 就會踩到同一顆雷）。
+- 為什麼**不**把提示語寫得更嚴厲叫員工別重寫整份檔案：那是把正確性押在一個 LLM 對格式的自制力上，對不同 kind、不同檔位、不同上下文長度的員工效果不同，而失敗是靜默的。為什麼**不**多加幾條 fallback 反查（用 branch 或 pane 倒推 agent）：那是在同一個壞結構上疊防線，真相仍住在員工的寫入面，每加一條「真相在哪」就更模糊一分。為什麼**不**給 INDEX 加 id 主鍵：名稱現在由記錄檔供應、開檔時寫一次就不再變，主鍵已經穩定，要補的是失敗的音量不是主鍵。
+- `dk-chore-close` 保留 legacy 分支（0.5.0 之前開的雜務沒有記錄檔，走舊的 grep 反查 + `status: done` 閘門），但 **`dk-watch` 刻意不做**：做了就等於「誰在跑」又有兩個真相來源，正是這次要消滅的病。在途舊雜務升級後失去 blocked 守望直到被關掉為止，關閉不受影響。
+- 已知代價：雜務檔的 `status:` 從此可能永遠停在 `working`（那是員工的欄位，機器不再改它，真相在 `關閉：` 那行與 INDEX）；員工做完卻忘記跑 `dk-msg` 就關不掉（`--abandon` 會跳過 merge），不加 `--done` 人工覆寫是刻意的——那等於在新界線上開一個後門。
+- fix(chore): 最終審查收掉這次改動自己新開的兩個出口（同一個結構缺陷的殘餘）。`[DONE]` 的判定從此錨定在行首的 timestamp（`^[^ ]*`），不再是不設防的 `^.*`——員工可寫的訊息本文含一句偽造的 `-> … [DONE] …` 就能騙過閘門，正是這次要消滅的病換了個地方。`dk-chore` 撞號時（員工刪了自己的雜務檔，agent 編號重算撞上正在跑的那個）現在會先拒絕，不會覆蓋或牽連活著的執行記錄。記錄檔寫入改成 `.tmp` + `mv` 的原子寫，`dk-chore-close` 對 legacy 分支的空 `branch` 也加了防呆，不再把「記錄檔遺失」誤判成「merge 衝突」。
+- 測試：253 bats（+13，其中三條是事故本體：員工重寫雜務檔後仍關得掉、員工刪掉雜務檔後仍留下可 commit 的記憶、員工重寫雜務檔不影響守望名單；另兩條是最終審查加的：偽造的 `[DONE]` 不算數、撞號時拒絕且不留第二個 pane）；shellcheck 零警告。
+
 ## 0.4.0 — 2026-09-12
 - feat(review): 新增第八個設定鍵 `DK_REVIEW_TIER`（`M` 或 `L`，預設 `M` 維持相容）。`dk-review` 的檔位改從它來，`--tier` 仍逐次覆寫。審查是全隊最吃推理的位置，卻跟 dev 同樣預設 M；而 reviewer 是 `--isolated` 唯讀、只讀一個 diff pack + brief、單輪，升到 L 的邊際成本遠低於一個要跑 20–60 分鐘的 dev pane。現在這是一個設定，不是一次改角色檔的手術。
 - 為什麼**不**把 `roles/reviewer.md` 的 `M: sonnet/medium` 直接改成 `opus/high`（這是收到的原始提案）：`dk-review` 收 `--tier M|L`，兩個值會解析到同一組旗標，旗標變成**靜默的 no-op**；結案評議的 `dk-review --task --tier L` 從此與例行波審查無異，失去加碼的意義；而 tier 在別處一律是「切片難度」（`dk-spawn`、`dk-chore` 都預設 M），讓某一個角色的 M 改指頂配，同一個字在不同角色就不同義。審查政策本來就住在 `settings.env`（`DK_REVIEW_KINDS` / `DK_REVIEW_MIN` / `DK_REVIEW_TIMEOUT_MIN`），第四把鑰匙也該放在那裡。

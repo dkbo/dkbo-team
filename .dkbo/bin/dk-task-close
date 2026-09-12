@@ -23,7 +23,8 @@ cleanup() {
 if [ "$abandon" = 1 ]; then
   printf '# %s 結案\n結果：abandoned   分支：%s\n## 原因\n%s\n' "$DK_DISPLAY" "$DK_BRANCH" "$reason" > "$dir/report.md"
   cleanup; git -C "$DK_PROJECT_ROOT" branch -D "$DK_BRANCH" >/dev/null 2>&1 || true
-  dk_index_set "$DK_DISPLAY" abandoned "$reason"; dk_process "task-close abandoned: $reason"
+  dk_index_set "$DK_DISPLAY" abandoned "$reason" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+  dk_process "task-close abandoned: $reason"
   dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
   echo abandoned; exit 0
 fi
@@ -32,7 +33,8 @@ if [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ] && [ -d "$DK_WORKTREE" ] && [ -n "$(
 fi
 if [ "$DK_WORKTREE" = "$DK_PROJECT_ROOT" ]; then   # --no-worktree task: work already on the current branch, nothing to merge
   sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD); cleanup
-  dk_index_set "$DK_DISPLAY" "done" "in-tree $sha"; dk_process "task-close in-tree $sha"
+  dk_index_set "$DK_DISPLAY" "done" "in-tree $sha" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+  dk_process "task-close in-tree $sha"
   dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
   echo "closed $sha"; exit 0
 fi
@@ -42,6 +44,7 @@ if ! git -C "$DK_PROJECT_ROOT" merge --no-ff "$DK_BRANCH" -m "task $DK_SHORT: $D
 fi
 sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD)
 cleanup; git -C "$DK_PROJECT_ROOT" branch -d "$DK_BRANCH" >/dev/null 2>&1 || true   # merged above, so -d is safe
-dk_index_set "$DK_DISPLAY" "done" "merged $sha"; dk_process "task-close merged $sha"
+dk_index_set "$DK_DISPLAY" "done" "merged $sha" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+dk_process "task-close merged $sha"
 dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
 echo "merged $sha"
