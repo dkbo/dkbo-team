@@ -8,4 +8,5 @@
 - 2026-09-10 不做共用主工作樹：員工只看得到已 commit 的檔案是刻意隔離，換共用樹會讓 touched 比對失去意義。
 - 2026-09-11 layer-2 整合測試不綁發版：`tests/integration/herdr-real.sh` 驗的是 stub 對 herdr JSON 形狀的假設，只在 herdr 換版或 dkbo 動到 herdr 介面時跑，不在每次發版跑。它零 token，但 nested 環境要先 bootstrap `dktest` session 的 server（見 tests/integration/README.md），成本在人不在機器。
 - 2026-09-11 herdr 呼叫不做全面收攏：`lib/herdr.sh` 只提供 `dk_h_soft`／`dk_h_note`，用在「吞掉失敗之後還裝作正常」的呼叫上（`dk-watch` 的 `agent list`、`layout` 的探測）。其餘 51 個呼叫點維持直呼 —— 失敗就該死的那些非零會自然往上傳，收尾與桌面通知那些吞掉是對的，硬包一層只是 51 處改寫的回歸風險換一個假的抽象。外部評論原本的理由（單一適配點）已由 herdr 版本硬閘與 layer-2 形狀測試涵蓋。
+- 2026-09-13 雜務佈局一天一夾、編號回收：日期由資料夾承載（`_chores/<日期>/`，檔名只剩內容），agent 編號改從 `.sessions/chores/` 找最小可用號而不是數雜務檔 —— 編號與檔案佈局脫鉤之後，0.5.1 的撞號情境（人整理檔案→編號重算→撿到上一輪的 `[DONE]`）不再可能，`logline=` 退守「陳舊 `[DONE]` 不算數」這一件。增長由 `dk-chore-tidy` 處理，它與搬檔共用同一道閘門（`.sessions/chores/` 必須是空的）。`messages.log` 刻意不切日期：跨午夜回報的 `[DONE]` 會落在隔天的檔，`dk-chore-close` 的閘門就找不到它。
 - 2026-09-12 雜務檔只有一個主人：執行狀態住 `.sessions/chores/<agent>`（不進 git），完成訊號住 `_chores/messages.log` 的 `[DONE]`，雜務檔整份是員工的、機器不讀。不靠提示語約束員工的格式，也不在壞結構上疊 fallback 反查。配套：`dk_index_set` 沒命中要回非零並由呼叫端警告 —— 以名稱為主鍵的靜默 no-op 是這類錯誤能活到事後才被發現的原因。

@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.5.2），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.6.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.5.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.6.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # 預期印出 leader
@@ -89,6 +89,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息） |
 | `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
+| `dk-chore-tidy` | 雜務檔歸位到日期資料夾、`messages.log` 歸檔（沒有雜務在跑時） |
 | `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
 | `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；印版本 |
 

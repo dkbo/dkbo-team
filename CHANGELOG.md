@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — 2026-09-13
+- feat(chore): 雜務檔改成一天一夾。實跑三天累積 33 個 `.md` 平躺在 `_chores/` 底下，展開就是一面牆；日期本來就寫在每個檔名前面，把它提到資料夾上，檔名就只剩內容（`_chores/2026-09-10/commi.md`）。`dk-chore-close` 的 legacy 反查改掃兩層，0.5.0 之前留在根層的舊檔照樣關得掉。
+- feat(chore): 新增 `dk-chore-tidy`。根層舊檔歸位到日期資料夾、`messages.log` 整份 append 進 `archive/YYYY-MM.log` 後清空。兩件事合成一支指令，是因為它們的前提是同一個：`.sessions/chores/` 非空就拒絕。搬走在途雜務的檔會讓記錄檔的 `file=` 失效，截斷 log 會讓它的 `logline=` 指錯行 —— 一道閘門同時擋住兩種壞法，而閘門成立時「整份歸檔」才是安全的（沒有任何 `logline=` 指著它）。收掉 BACKLOG 那筆「`_chores/` 只增不減、沒有歸檔機制」。
+- feat(chore): agent 編號改成回收最小可用號。舊的 `count(_chores/*.md) + 1` 只增不減，跑到第 33 件就是 `chore-qa-33`；而編號真正要保證的只有「同時在跑的不撞」，那件事的真相是 `.sessions/chores/<agent>`（存在 ⟺ 它還在跑），不是雜務檔的數量。改成從 1 找第一個沒被佔的號之後，號碼永遠停在同時在跑的件數（實務上個位數），而且**編號與檔案佈局徹底脫鉤** —— 0.5.1 修的那個撞號情境（人整理過 `_chores/`，編號重算回同一個數字，新雜務撿到上一輪的 `[DONE]`）從根本上不再可能發生。`logline=` 留著，它現在守的是更窄也更明確的一件事：陳舊 `[DONE]` 不算數。`dk-chore:40` 的「執行記錄已存在」守衛從主要防線退成 race 保險，刻意不刪。
+- fix(chore): 雜務檔的防撞後綴從 `-$n` 改成在該日資料夾內遞增找空位。這是上一條引進的洞：`$n` 現在會回收，同一天同 slug 的第三件會算出跟第二件一樣的 `-1` 檔名，而舊寫法 `[ ! -e "$cf" ] || cf="${cf%.md}-$n.md"` 只試一次就放棄 —— 第三件會靜靜覆蓋掉第二件的雜務檔。
+- 為什麼 `messages.log` **不**跟著切日期：一件 23:50 開、00:10 回報的雜務，`[DONE]` 會落在隔天的檔裡，而 `dk-chore-close` 的閘門在今天的檔裡找不到它 —— 關不掉。活躍的 log 只有一份，跨午夜就不是問題；增長由 `dk-chore-tidy` 處理，那是有閘門保護的明確動作。
+- 為什麼舊檔**不**自動搬：`dk-chore` 每次都偷偷搬一次檔案，等於讓一個派工指令兼差做檔案系統手術，而且它跑的時候正好有雜務在跑（自己那件），閘門條件天生不成立。tidy 是人明確跑的。
+- 其他目錄**不動**：`tasks/<日期>-<short>/` 早就一任務一夾，任務內的 `state/`／`briefs/`／`waves/` 隨任務有界（實跑最多 10 個檔）、跑完整夾歸檔；`.sessions/chores/` 是短命執行記錄，關掉就刪。扁平累積的從頭到尾只有 `_chores/` 這一處。
+- 測試：274 bats（+9）；shellcheck 零警告。
+
 ## 0.5.2 — 2026-09-12
 - fix(msg): 收件者名字對不上 herdr 時，訊息不再靜默全滅。`sport-frontend-panova` 的 sportswitch 任務實跑，`messages.log` 13 筆有 **12 筆 `[UNDELIVERED]`** —— 唯一送到的那筆是領導放棄 `dk-msg`、改用 `herdr agent prompt` 直送的。兩個方向各壞一邊，而且是兩個獨立的洞：(1) 員工的 `dk-msg leader` 被 `dk_leader_name` 解析成 `leader-<short>`，但領導 pane 在 herdr 裡的 `name` 是 `null`，`herdr agent get leader-sportswitch` 回 `agent_not_found`；(2) 領導照 `LEADER.md` 的 `dk-msg <reviewer>` 佔位符打了短名 `reviewer-a`／`frontend`，而 `dk-spawn` 註冊的是 `sportswitch-reviewer-a`／`sportswitch-frontend` —— `dk-msg` 只對字面 `leader` 做解析，其他對象原樣丟給 herdr。
 - 這個故障穿的是「對方忙到送不進」的衣服：`agent_not_found` 讓 `wait` 與 `prompt` **雙雙**回非零，跟 0.2.3 修的那個「一次就判死」長得一模一樣，所以 0.2.3 加的三次重試在這裡只是把同一個必敗的動作做三遍。`dk-msg` 現在先解析對象（短名補上任務前綴、對 `.panes` 查真名），送不到再退回 **pane id**：那是 herdr 唯一不靠 rename 的把手。對照組就在隔壁 —— `dk-chore` 記的 `leader=w9:p1` 是 pane id，雜務那側的 `messages.log` 幾乎全通。

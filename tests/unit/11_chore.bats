@@ -9,7 +9,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
 @test "chore without code splits from current pane in project root" {
   run dk-chore frontend "翻譯 docs/README.md 成英文" --tier S
   [ "$status" -eq 0 ]
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^交代：翻譯 docs/README.md 成英文$' "$f"
+  f=$(chore_files); grep -q '^交代：翻譯 docs/README.md 成英文$' "$f"
   grep -q '^成員：chore-frontend-1 (claude / S)$' "$f"
   grep -q '^branch=-$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
   split=$(grep '^pane split' "$HERDR_STUB_LOG"); [[ "$split" == *"--current --direction right --cwd $PROJECT --no-focus"* ]]
@@ -35,17 +35,20 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   DK_WORKTREE_DIR="$PROJECT/wt" run dk-chore frontend "fix" --code; [ "$status" -eq 0 ]
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $PROJECT/wt/chore-fix"
   run dk-chore frontend "fix" --code; [ "$status" -eq 1 ]; [[ "$output" == *"chore/fix"* ]]
-  [ "$(ls "$DK_ROOT/tasks/_chores/"*.md | wc -l)" -eq 1 ]   # no second chore file, no second pane
+  [ "$(chore_files | wc -l)" -eq 1 ]   # no second chore file, no second pane
   [ "$(grep -c '^pane split' "$HERDR_STUB_LOG")" -eq 1 ]
 }
-@test "record 檔還在時 dk-chore 拒絕撞號，不留第二個 pane 或雜務檔" {
+@test "員工刪掉自己的雜務檔不再撞號：編號跳過還在跑的那一個" {
+  # 0.5.0 的守衛（dk-chore:40 的「執行記錄已存在」）擋的就是這個情境：員工刪掉雜務檔 → 編號
+  # 重算 → 撞上正在跑的那件。編號改從 .sessions/chores/ 來之後，撞號在正常路徑已不可達，
+  # 那道守衛退成 race 保險（兩個 dk-chore 同時跑），刻意留著不刪。
   dk-chore frontend "first" --code >/dev/null
-  rm -f "$DK_ROOT/tasks/_chores/"*.md   # 模擬員工刪掉自己的雜務檔；record 還活著
+  rm -f $(chore_files)   # 員工刪掉自己的雜務檔；record 還活著
   run dk-chore frontend "second" --code
-  [ "$status" -eq 1 ]; [[ "$output" == *"已存在"* ]]
-  [ "$(grep -c '^pane split' "$HERDR_STUB_LOG")" -eq 1 ]
-  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
-  ! git -C "$PROJECT" rev-parse --verify -q chore/second
+  [ "$status" -eq 0 ]
+  [ -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]   # 還在跑的那件沒被動到
+  [ -e "$DK_ROOT/.sessions/chores/chore-frontend-2" ]   # 新的一件跳過 1
+  [ "$(grep -c '^pane split' "$HERDR_STUB_LOG")" -eq 2 ]
 }
 @test "chore-close without code: closes pane, marks index done" {
   dk-chore frontend "翻譯 README" >/dev/null
@@ -98,7 +101,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   HERDR_STUB_FAIL="agent start" run dk-chore frontend "x"
   [ "$status" -eq 1 ]
   grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
-  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
+  [ -z "$(chore_files)" ]
   [ ! -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
 }
 @test "chore-close dies cleanly when no chore file matches" {
@@ -111,7 +114,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   done_msg chore-frontend-1 'docs/a & b.md'
   run dk-chore-close chore-frontend-1
   [ "$status" -eq 0 ]
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md)
+  f=$(chore_files)
   grep -q '^關閉：.* done — docs/a & b.md$' "$f"
   grep -q '| fix | chore | done | docs/a & b.md |' "$DK_ROOT/tasks/INDEX.md"
 }
@@ -119,7 +122,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   dk-chore frontend "fix" --code >/dev/null
   wt="$PROJECT/.worktrees/chore-fix"
   echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md)
+  f=$(chore_files)
   cat > "$f" <<'X'
 # chore-frontend-1 工作報告
 ## 做了什麼
@@ -137,7 +140,7 @@ X
 
 @test "員工把 chore 檔刪了，close 仍留下可 commit 的記憶" {
   dk-chore frontend "翻譯 README" >/dev/null
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); rm -f "$f"
+  f=$(chore_files); rm -f "$f"
   done_msg chore-frontend-1 "docs/README.en.md"
   run dk-chore-close chore-frontend-1
   [ "$status" -eq 0 ]
@@ -180,7 +183,7 @@ X
   echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
   # 模擬 0.5.0 之前開的雜務：沒有記錄檔，chore 檔是舊版 template 寫的（帶 branch/workspace/pane/leader）
   rm -f "$DK_ROOT/.sessions/chores/chore-frontend-1"
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md)
+  f=$(chore_files)
   cat > "$f" <<'X'
 交代：fix
 成員：chore-frontend-1 (claude / M)
@@ -217,7 +220,7 @@ X
   [ "$(grep -c '| chore | working |' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
   grep -q '^| .* | 同步四個文件位置 | chore | working |' "$DK_ROOT/tasks/INDEX.md"
   ! grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md); grep -q '^(2) roles/frontend.md$' "$f"   # the chore file keeps the full text
+  f=$(chore_files); grep -q '^(2) roles/frontend.md$' "$f"   # the chore file keeps the full text
   done_msg chore-frontend-1 "done"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
   grep -q '| 同步四個文件位置 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
@@ -245,7 +248,7 @@ X
   dk-chore frontend $'同步四個文件位置\n(1) AGENTS.md 第 23 行' --code >/dev/null
   rec="$DK_ROOT/.sessions/chores/chore-frontend-1"
   [ -f "$rec" ]
-  f=$(ls "$DK_ROOT/tasks/_chores/"*.md)
+  f=$(chore_files)
   grep -q "^file=$f$" "$rec"          # 完整路徑，不是「在那個目錄下就算過」
   grep -q '^instr=同步四個文件位置$' "$rec"
   ! grep -q 'AGENTS.md' "$rec"
@@ -265,7 +268,7 @@ X
   echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
   done_msg chore-frontend-1 "第一輪的結果"
   dk-chore-close chore-frontend-1 >/dev/null          # 正常關閉：記錄檔被刪，[DONE] 永遠留在 log 裡
-  rm -f "$DK_ROOT/tasks/_chores/"*.md                 # 有人整理 _chores/ → n 重算回 1
+  rm -f $(chore_files)                 # 有人整理 _chores/（新編號不看這些檔，不再重算）
   dk-chore frontend "fix2" --code >/dev/null          # 又叫 chore-frontend-1，但它還沒回報
   run dk-chore-close chore-frontend-1
   [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
@@ -286,6 +289,92 @@ X
   [ "$status" -ne 0 ]
   [ ! -d "$PROJECT/.worktrees/chore-fix" ]
   ! git -C "$PROJECT" rev-parse --verify -q chore/fix
-  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
+  [ -z "$(chore_files)" ]
   [ ! -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+}
+
+@test "chore 編號回收：關掉的號下一件會拿回去" {
+  # 全域遞增只增不減，是因為編號從「_chores 的檔案數」來。真正的需求只有「同時在跑的不撞」，
+  # 而 .sessions/chores/<agent> 存在 ⟺ 它還在跑 —— 那才是編號該問的地方。
+  dk-chore frontend "a" >/dev/null
+  dk-chore qa "b" >/dev/null
+  [ -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+  [ -e "$DK_ROOT/.sessions/chores/chore-qa-2" ]
+  done_msg chore-frontend-1 "done a"
+  dk-chore-close chore-frontend-1 >/dev/null
+  dk-chore it "c" >/dev/null
+  [ -e "$DK_ROOT/.sessions/chores/chore-it-1" ]
+  [ ! -e "$DK_ROOT/.sessions/chores/chore-it-3" ]
+}
+@test "chore 編號不再受 _chores 檔案數影響" {
+  dk-chore frontend "a" >/dev/null
+  done_msg chore-frontend-1 "x"; dk-chore-close chore-frontend-1 >/dev/null
+  dk-chore qa "b" >/dev/null
+  done_msg chore-qa-1 "x"; dk-chore-close chore-qa-1 >/dev/null
+  dk-chore it "c" >/dev/null
+  [ -e "$DK_ROOT/.sessions/chores/chore-it-1" ]   # 三件雜務檔躺著，號碼仍是 1
+}
+
+@test "雜務檔建在日期資料夾裡，檔名不帶日期前綴" {
+  dk-chore frontend "翻譯 README" >/dev/null
+  d="$DK_ROOT/tasks/_chores/$(date +%F)"
+  [ -d "$d" ]
+  [ "$(ls "$d"/*.md | wc -l)" -eq 1 ]
+  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]   # 根層不再堆 .md
+  f=$(ls "$d"/*.md); grep -q '^交代：翻譯 README$' "$f"
+  case "$(basename "$f")" in "$(date +%F)"-*) false;; esac   # 日期在資料夾上，不在檔名裡
+  grep -q "^file=$f\$" "$DK_ROOT/.sessions/chores/chore-frontend-1"
+}
+@test "同一天同 slug 的雜務不互相覆蓋，即使編號被回收" {
+  # 防撞後綴本來用 $n，而 $n 現在會回收 —— 同 slug 第三件會撞回第二件的 -1 檔名。
+  for i in 1 2 3; do
+    dk-chore frontend "翻譯 README" >/dev/null
+    done_msg chore-frontend-1 "x"; dk-chore-close chore-frontend-1 >/dev/null
+  done
+  [ "$(ls "$DK_ROOT/tasks/_chores/$(date +%F)"/*.md | wc -l)" -eq 3 ]
+}
+
+@test "tidy 把根層舊雜務檔搬進日期資料夾，檔名去掉日期前綴" {
+  mkdir -p "$DK_ROOT/tasks/_chores"
+  echo "交代：舊的" > "$DK_ROOT/tasks/_chores/2026-09-10-commi.md"
+  echo "交代：更舊" > "$DK_ROOT/tasks/_chores/2026-09-11-dkbo.md"
+  run dk-chore-tidy
+  [ "$status" -eq 0 ]
+  [ -f "$DK_ROOT/tasks/_chores/2026-09-10/commi.md" ]
+  [ -f "$DK_ROOT/tasks/_chores/2026-09-11/dkbo.md" ]
+  [ -z "$(ls "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null)" ]
+}
+@test "tidy 把 messages.log 整份歸檔後清空" {
+  mkdir -p "$DK_ROOT/tasks/_chores"
+  printf 'a\nb\n' > "$DK_ROOT/tasks/_chores/messages.log"
+  run dk-chore-tidy
+  [ "$status" -eq 0 ]
+  [ ! -s "$DK_ROOT/tasks/_chores/messages.log" ]   # 還在，但空的：logline=0 才有意義
+  grep -qx a "$DK_ROOT/tasks/_chores/archive/$(date +%Y-%m).log"
+  grep -qx b "$DK_ROOT/tasks/_chores/archive/$(date +%Y-%m).log"
+}
+@test "tidy 有雜務在跑時拒絕，而且什麼都不動" {
+  # 搬檔會讓記錄檔的 file= 失效，截斷 log 會讓 logline= 指錯行 —— 同一道閘門擋住兩種壞法。
+  dk-chore frontend "x" >/dev/null
+  printf 'a\n' > "$DK_ROOT/tasks/_chores/messages.log"
+  echo "交代：舊的" > "$DK_ROOT/tasks/_chores/2026-09-10-commi.md"
+  run dk-chore-tidy
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chore-frontend-1"* ]]
+  grep -qx a "$DK_ROOT/tasks/_chores/messages.log"
+  [ -f "$DK_ROOT/tasks/_chores/2026-09-10-commi.md" ]
+  [ ! -d "$DK_ROOT/tasks/_chores/archive" ]
+}
+@test "tidy 重複跑：archive 是 append 不是覆蓋" {
+  mkdir -p "$DK_ROOT/tasks/_chores"
+  printf 'a\n' > "$DK_ROOT/tasks/_chores/messages.log"; dk-chore-tidy >/dev/null
+  printf 'b\n' > "$DK_ROOT/tasks/_chores/messages.log"; dk-chore-tidy >/dev/null
+  [ "$(wc -l < "$DK_ROOT/tasks/_chores/archive/$(date +%Y-%m).log")" -eq 2 ]
+}
+@test "tidy 把搬動結果 commit 進 git，不留給下一件雜務的 commit 撿走" {
+  mkdir -p "$DK_ROOT/tasks/_chores"
+  echo "交代：舊的" > "$DK_ROOT/tasks/_chores/2026-09-10-commi.md"
+  git -C "$PROJECT" add -A; git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m seed
+  dk-chore-tidy >/dev/null
+  [ -z "$(git -C "$PROJECT" status --porcelain -- .dkbo/tasks/_chores)" ]
 }

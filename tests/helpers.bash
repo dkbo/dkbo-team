@@ -24,6 +24,9 @@ setup_project() {
 }
 teardown_project() { rm -rf "$PROJECT"; }
 stub_calls() { cat "$HERDR_STUB_LOG"; }
+# 雜務檔住在 _chores/<日期>/ 底下；0.5.0 之前開的 legacy 檔還在根層。兩層都算。
+# || true：兩個 glob 通常只有一個命中，ls 對另一個回非零，而 bats 在 set -e 下跑。
+chore_files() { ls "$DK_ROOT/tasks/_chores/"*/*.md "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null || true; }
 # Make a bound task quickly without dk-task-new (for tests of later scripts).
 fixture_task() { # $1=short $2=display
   local d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-$1"
