@@ -16,7 +16,9 @@ teardown() { teardown_project; }
   sed -i 's/^DK_LEADER_KIND=.*/DK_LEADER_KIND="codex"/' "$DK_ROOT/settings.env" || true
   grep -q '^DK_LEADER_KIND=' "$DK_ROOT/settings.env" || echo 'DK_LEADER_KIND="codex"' >> "$DK_ROOT/settings.env"
   run dk-leader pay 金流; [ "$status" -eq 0 ]
-  grep -q '^agent start leader-pay --kind codex --pane wC:p2 -- -m gpt-5.5 -c model_reasoning_effort=high -a never -s workspace-write$' "$HERDR_STUB_LOG"
+  # --add-dir 對領導是冗餘的（它的 cwd 就是主樹），但 kind_args 是領導與員工共用的一支，
+  # 而 claude 那側一直就帶著它 —— 三個 kind 保持一致，不為領導開特例。
+  grep -q "^agent start leader-pay --kind codex --pane wC:p2 -- -m gpt-5.5 -c model_reasoning_effort=high -a never -s workspace-write --add-dir $PROJECT\$" "$HERDR_STUB_LOG"
 }
 
 @test "dk-leader --kind overrides DK_LEADER_KIND and takes the new kind's L tier" {

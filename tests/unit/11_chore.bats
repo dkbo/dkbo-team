@@ -235,7 +235,6 @@ X
   git -C "$PROJECT" rev-parse --verify -q chore/fix
   ! grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
   grep -q '^branch=chore/fix$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
-  [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
   grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "chore's first prompt waits for the worker to start, not for its whole first turn" {
@@ -377,4 +376,20 @@ X
   git -C "$PROJECT" add -A; git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m seed
   dk-chore-tidy >/dev/null
   [ -z "$(git -C "$PROJECT" status --porcelain -- .dkbo/tasks/_chores)" ]
+}
+
+@test "chore 提示告訴員工執行環境是共用的，要動先 ESCALATE" {
+  # chore-qa-21 實跑：一件交代寫著「不改 src/」的唯讀探測雜務，跑去 kill 主樹的 dev server
+  # 進程並重啟（auto mode classifier 擋下，判 Interfere With Workloads —— 它判對了）。
+  # 任務那側 brief.md 有「獨佔資源」欄，雜務沒有 brief，員工從來沒被告知那是全隊共用的。
+  dk-chore frontend "翻譯 README" >/dev/null
+  p=$(grep '^agent prompt chore-frontend-1 ' "$HERDR_STUB_LOG")
+  [[ "$p" == *'共用'* ]]
+  [[ "$p" == *'ESCALATE'* ]]
+}
+@test "PROTOCOL 的雜務段也講明執行環境的邊界" {
+  # 提示是一次性的、會被 /clear 掉；PROTOCOL 是員工每次都讀的那一份。
+  seg=$(sed -n '/^雜務員工/,$p' "$DK_ROOT/PROTOCOL.md")
+  [[ "$seg" == *'共用'* ]]
+  [[ "$seg" == *'ESCALATE'* ]]
 }

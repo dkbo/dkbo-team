@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1 — 2026-09-13
+- fix(chore): 雜務員工現在知道執行環境是全隊共用的。實跑事故：`chore-qa-21`，一件交代明寫「探測切換球種的 API 與 WebSocket 幀序，**不改 src/**」的唯讀 QA 雜務，跑去 `kill` 主樹的 dev server 進程並 `nohup pnpm dev` 重啟，接著去探別的 worktree 的 9001 埠。兩次都被 auto mode classifier 判 `[Interfere With Workloads]` 擋下 —— **它判對了**。主樹上有領導，其他 worktree 裡有同事，而那台 dev server 是所有人共用的。
+- 洞在於：任務那側 `brief.md` 有「獨佔資源」欄（`db`、`port:3000`、`docker`…，模板原話：「worktree 隔離檔案，不隔離執行環境」），而**雜務沒有 brief** —— `dk-chore` 的提示叫員工讀 `roles/<role>.md`、`PROTOCOL.md`、`PROJECT.md`，三份沒有一份提過這件事。員工發現 dev server 卡住就去重啟它，是完全合理的推論；沒有人告訴過它那是共用的，也沒有人給過它一條合法路徑。現在提示與 `PROTOCOL.md` 的雜務段各補一條，並指向 `dk-msg leader "[ESCALATE] …"`。
+- fix(kinds): `codex` 與 `agy` 補上 `--add-dir $DK_PROJECT_ROOT`。員工的 cwd 是 worktree，但切片、state、report、diff pack 全在主樹的 `.dkbo/` 下 —— `claude.sh` 早就寫明這一點並補了旗標，另外兩個漏掉：codex 的 `-s workspace-write` 與 agy 的 `--mode accept-edits`，primary workspace 同樣只有 worktree。三個 CLI 的 `--help` 都有 `--add-dir`。這個缺口一直沒被觸發，是因為 agy 只當過 reviewer（唯讀），而 codex reviewer 在 0.5.2 修掉那個投遞洞之前**一次都沒真的收到過任務**。
+- 為什麼**不**照原始需求「在 init 就把三個 CLI 的權限放寬」：查下去發現被擋的動作本來就該擋。放寬只會讓下一個員工成功 kill 掉領導腳下的 dev server —— 0.3.1 已經因為同類事故丟過一次未 commit 的改動。截圖上那個看似無辜的 `curl localhost:9000` 是同一串的第三次，「3 consecutive actions were blocked」是累積計數要人去看 transcript，不是那條 curl 危險。
+- 查證紀錄進 `decisions.md` 三則：classifier 這次判對了、Claude Code 權限的三個硬事實（`permissions.allow` 擋不住 classifier；專案層 permissions 需要 workspace 被信任過，信任按路徑前綴繼承所以 `DK_WORKTREE_DIR` 設到專案外會靜默失效；`settings.local.json` 常被 gitignore 擋著、worktree 裡不存在）、三個 kind 都要 `--add-dir`。
+- chore(backlog): 清掉 5 筆 —— 自主巡檢那筆移除，4 筆「已裁定不做」的把裁定理由搬進它們該在的位置後刪除（`&` 測試是 tripwire、`$(cat)` 比對今天不可達 → 寫進 `01_common.bats`；六個呼叫點措辭要一起改 → 寫進 `common.sh`；那一行冗餘斷言 → 直接刪掉，比留個註解說它冗餘乾淨）。BACKLOG 從 9 筆降到 3 筆，剩下的每一筆都真的還有事要做。
+- 測試：277 bats（+3）；shellcheck 零警告。
+
 ## 0.6.0 — 2026-09-13
 - feat(chore): 雜務檔改成一天一夾。實跑三天累積 33 個 `.md` 平躺在 `_chores/` 底下，展開就是一面牆；日期本來就寫在每個檔名前面，把它提到資料夾上，檔名就只剩內容（`_chores/2026-09-10/commi.md`）。`dk-chore-close` 的 legacy 反查改掃兩層，0.5.0 之前留在根層的舊檔照樣關得掉。
 - feat(chore): 新增 `dk-chore-tidy`。根層舊檔歸位到日期資料夾、`messages.log` 整份 append 進 `archive/YYYY-MM.log` 後清空。兩件事合成一支指令，是因為它們的前提是同一個：`.sessions/chores/` 非空就拒絕。搬走在途雜務的檔會讓記錄檔的 `file=` 失效，截斷 log 會讓它的 `logline=` 指錯行 —— 一道閘門同時擋住兩種壞法，而閘門成立時「整份歸檔」才是安全的（沒有任何 `logline=` 指著它）。收掉 BACKLOG 那筆「`_chores/` 只增不減、沒有歸檔機制」。

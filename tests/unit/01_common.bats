@@ -87,6 +87,8 @@ teardown() { teardown_project; }
   grep -q '| 使用者登入 | task | done | merged abc123 |' "$DK_ROOT/tasks/INDEX.md"
 }
 
+# 用 $(cat) 比對會吃掉結尾換行，嚴格說要 cmp 才名副其實。不改是因為 dk_index_add 一定寫
+# 換行，"結尾換行被改掉"在今天不可達；哪天有別的寫入路徑進來，這裡要換成 cmp。
 @test "dk_index_set 沒命中時回非零，且 INDEX 一個字都不動" {
   dk_index_add 2026-09-12 使用者登入 task planning —
   before=$(cat "$DK_ROOT/tasks/INDEX.md")
@@ -101,6 +103,8 @@ teardown() { teardown_project; }
   ! grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
 }
 
+# tripwire：printf 與 awk -v 都不把 & 當元字元，所以這條在今天不可能失敗 —— 它守的是
+# 「有人把 dk_render 改回 sed -i」那一天，& 會突然變成「整個比對到的字串」。刻意留著。
 @test "dk_render replaces tokens and tolerates sed metacharacters" {
   printf '# {{DISPLAY}}\nsrc={{SOURCE}}\n' > "$PROJECT/t.md"
   out=$(dk_render "$PROJECT/t.md" 'DISPLAY=登入 & 註冊 #1' 'SOURCE=a/b\\c')
