@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.2 — 2026-09-14
+- feat(watch): 守望改看畫面，不再只信 herdr 的 `agent_status`。實跑事故：`panova2` 的 paramleak 任務，reviewer-c（agy）停在權限審批 UI —— 畫面上白紙黑字寫著 `Requesting permission for: rg …` 與 `Run this command?` —— 而 `herdr agent get` 回的是 **`idle`**；reviewer-b（codex）撞到 `You've hit your usage limit`，回的也是 **`idle`**。dk-watch 的 blocked 偵測唯一的訊號就是 `agent_status == blocked`，於是 `DK_BLOCK_SEC=60` 的安全網、桌面通知、送領導的 `[BLOCKED]` 三個出口對這兩個 kind **全程空轉**，`.blocked/` 底下一個標記檔都沒生出來。領導等了 20 分鐘，等到的是逾時兜底，不是安全網 —— 而它一直以為那兩位還在工作。
+- 根因不在 herdr 壞掉，而在 dkbo 把「卡住」押在一個只認得部分情況的訊號上。herdr 自己的文件寫得很清楚：`blocked` 是「Herdr recognized an approval or question UI」—— 認不認得出來，取決於它有沒有為那個 CLI 寫過 detector。agy 的審批 UI 它沒認出來，codex 的額度畫面根本不是審批 UI。唯一不會騙人的是**畫面上印出來的字**。現在每個 kind 在自己的 `kinds/<k>.sh` 宣告 `KIND_BLOCK_RE` 與 `KIND_QUOTA_RE`（`dk_kind_re` 讀，未知 kind 退回通用式、絕不回空 —— 空式子會讓 `grep -E ''` 命中每一行，把守望變成「所有人都卡住了」），`agent_status` 退成第二訊號：claude 的審批它認得，留著沒壞處。
+- feat(watch): 新增 `dk-watch --events`，走 herdr 的事件訂閱而不是輪詢。`herdr pane wait-output --regex` 底層就是 socket API 的 `pane.output_matched` 訂閱，畫面一冒出審批或額度字樣就回來，不必等下一個 tick。`dk-task-new` 與 `--ensure` 現在起兩條獨立的命脈 —— 30 秒輪詢（`DK_WATCH_PID`）與事件訂閱（`DK_EVENTS_PID`）—— 一條死了另一條還在；`dk-task-close` 兩條都收。
+- 為什麼**不**直接對 herdr 的 unix socket 講 `events.subscribe`：那要新增一個 socket client（python 或 socat），而 dkbo 到今天為止只依賴 bash 3.2／jq／git／herdr 本身。`pane wait-output` 是同一個訂閱的 CLI 包裝，而且測試能用現成的 herdr stub 演。為什麼**輪詢不拿掉**：訂閱是長連線，herdr 一升級重啟它就沒了 —— 事故當下領導 pane 上正掛著 `Update installed · Restart to apply`。推送是快路徑，輪詢是慢但不會消失的底，跟 0.5.2「訊息投遞不再押在一個會掉的名字上」是同一種教訓。
+- fix(watch): 撞額度不必再等 `DK_REVIEW_TIMEOUT_MIN`。額度偵測本來埋在 reviewer 逾時分支裡，要先耗滿 20 分鐘才會去讀畫面 —— 而那行字在撞到的當下就在畫面上了。現在它是獨立的一條，任何員工（不只 reviewer）撞到就當場熔斷該 kind 並推 `[LIMIT]` 給領導。新的訊息型別寫進 `PROTOCOL.md` 與 `LEADER.md`：`[BLOCKED]` 是等人按一下，`[LIMIT]` 是按審批也救不回來，處置不同，不要當成同一件事。
+- fix(watch): reviewer 逾時不再把「在等人按審批」誤判成「這個 kind 掛了」。事故裡活得好好的 agy 被寫進 `DK_KIND_DOWN`，之後的整分支評議只剩 claude 一家 —— 少掉的那兩份意見不是因為沒額度，是因為守望把它斬了。逾時觸發時先讀畫面：命中審批特徵就只報 `[BLOCKED]`，不熔斷。
+- 排進 BACKLOG 三筆（同一場實跑查到、這一版刻意沒做）：dev 與 qa 同波並行導致 qa 對半成品驗收、逾時分支對 `status: done` 的無條件 skip、`.panes` 的 epoch 不隨第二輪派工重置。
+- 測試：294 bats（+17）；shellcheck 零警告。stub 的 `agent_read.json` 預設畫面從「撞額度」改成中性 —— 新的 tick 會讀每一個員工的畫面，預設帶著額度字樣的話，每個測試裡的每個人都會被判成撞額度。三個真的要測額度的測試改成自己講明白（`quota_screen`），不再隱性依賴 stub 的預設值。`teardown_project` 收拾 `--ensure` 起的背景行程，否則它們會在後面的測試裡繼續消耗 pid —— 兩個認 pid 的 `--ensure` 測試就是這樣間歇性紅的。
+
 ## 0.6.1 — 2026-09-13
 - fix(chore): 雜務員工現在知道執行環境是全隊共用的。實跑事故：`chore-qa-21`，一件交代明寫「探測切換球種的 API 與 WebSocket 幀序，**不改 src/**」的唯讀 QA 雜務，跑去 `kill` 主樹的 dev server 進程並 `nohup pnpm dev` 重啟，接著去探別的 worktree 的 9001 埠。兩次都被 auto mode classifier 判 `[Interfere With Workloads]` 擋下 —— **它判對了**。主樹上有領導，其他 worktree 裡有同事，而那台 dev server 是所有人共用的。
 - 洞在於：任務那側 `brief.md` 有「獨佔資源」欄（`db`、`port:3000`、`docker`…，模板原話：「worktree 隔離檔案，不隔離執行環境」），而**雜務沒有 brief** —— `dk-chore` 的提示叫員工讀 `roles/<role>.md`、`PROTOCOL.md`、`PROJECT.md`，三份沒有一份提過這件事。員工發現 dev server 卡住就去重啟它，是完全合理的推論；沒有人告訴過它那是共用的，也沒有人給過它一條合法路徑。現在提示與 `PROTOCOL.md` 的雜務段各補一條，並指向 `dk-msg leader "[ESCALATE] …"`。

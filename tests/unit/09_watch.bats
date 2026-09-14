@@ -147,10 +147,11 @@ cmark="$DK_ROOT/.sessions/chores.blocked"
 }
 
 old=$(( $(date +%s) - 1500 ))   # 25 minutes ago
+quota_screen() { echo '{"result":{"read":{"text":"You have hit your usage limit. Rate limit reached."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"; }
 reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.panes"; echo "2026-09-10T10:00 spawn login-reviewer-b (codex M) override-kind isolated" >> "$d/process.md"; }
 
 @test "reviewer past DK_REVIEW_TIMEOUT_MIN is reported once with (quota?) and its kind goes down" {
-  reviewer_row "$old"
+  quota_screen; reviewer_row "$old"
   dk-watch --once; dk-watch --once
   [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG")" -eq 1 ]
   [ "$(grep -c '^notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
@@ -200,7 +201,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
 }
 
 @test "timeout: the kind goes down and is logged once even when the prompt never lands" {
-  reviewer_row "$old"
+  quota_screen; reviewer_row "$old"
   HERDR_STUB_FAIL="agent wait" dk-watch --once
   grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
   [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
@@ -261,7 +262,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   grep -q '^delivered$' "$d/.blocked/login-qa"
 }
 @test "reviewer timeout falls back to the leader pane id too" {
-  reviewer_row "$old"
+  quota_screen; reviewer_row "$old"
   HERDR_STUB_MISSING="leader-login" dk-watch --once
   grep -q '^agent prompt wB:p1 \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG"
   grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"

@@ -22,7 +22,21 @@ setup_project() {
   unset DK_TASK_DIR DK_ROLE DK_AGENT DK_LEADER DK_ISOLATED
   cd "$PROJECT"
 }
-teardown_project() { rm -rf "$PROJECT"; }
+teardown_project() {
+  # --ensure 起的是背景常駐行程（輪詢一條、訂閱一條）。留著的話它們會在後面的測試裡
+  # 繼續消耗 pid 並寫檔 —— 兩個認 pid 的 --ensure 測試就是這樣間歇性紅的。
+  local f p v
+  for f in "$DK_ROOT"/tasks/*/.task.env; do
+    [ -f "$f" ] || continue
+    for v in DK_WATCH_PID DK_EVENTS_PID; do
+      p=$(sed -n "s/^$v=\"\([0-9]*\)\"$/\1/p" "$f")
+      [ -n "$p" ] && kill "$p" 2>/dev/null || true
+    done
+  done
+  p=$(cat "$DK_ROOT/.sessions/chores.watch.pid" 2>/dev/null || true)
+  [ -n "$p" ] && kill "$p" 2>/dev/null || true
+  rm -rf "$PROJECT"
+}
 stub_calls() { cat "$HERDR_STUB_LOG"; }
 # 雜務檔住在 _chores/<日期>/ 底下；0.5.0 之前開的 legacy 檔還在根層。兩層都算。
 # || true：兩個 glob 通常只有一個命中，ls 對另一個回非零，而 bats 在 set -e 下跑。
@@ -43,6 +57,7 @@ DK_WORKSPACE="wB"
 DK_ROOT_PANE="wB:p1"
 DK_BASE="$(git -C "$PROJECT" rev-parse HEAD)"
 DK_WATCH_PID=""
+DK_EVENTS_PID=""
 DK_WAVE=""
 DK_WAVE_STARTED=""
 DK_KIND_DOWN=""

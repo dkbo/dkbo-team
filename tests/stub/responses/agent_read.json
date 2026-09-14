@@ -1,1 +1,1 @@
-{"id":"cli:agent:read","result":{"type":"pane_read","read":{"pane_id":"wC:p4","workspace_id":"wC","tab_id":"wC:t1","source":"recent","format":"text","text":"Error: You have hit your usage limit. Rate limit reached, try again later.","revision":1,"truncated":false}}}
+{"id": "cli:agent:read", "result": {"type": "pane_read", "read": {"pane_id": "wC:p4", "workspace_id": "wC", "tab_id": "wC:t1", "source": "recent", "format": "text", "text": "thinking...", "revision": 1, "truncated": false}}}
