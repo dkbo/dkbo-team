@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.3 — 2026-09-14
+- fix(spawn): qa 不再對半成品下驗收判定。同一場 `panova2` 實跑：波 1 的 frontend 與 qa 在 07:20 同一秒 spawn，qa 07:27 讀到 helper 收斂只做了一半的 worktree，判定 AC5 沒過、發 `[QUESTION]` 問「現在能開始驗還是等你收斂完」，然後停在那裡——07:39 才收到 frontend 的「你看到的是收斂前快照」。**12 分鐘空轉，外加一份假的驗收失敗**。
+- 根因是三層都沒有人告訴 qa 要等：`templates/brief.md` 的波次表只說「同一波的列相鄰」，沒說 dev 與 qa 不能同波（panova 的 brief 完全照著寫）；`dk-wave-open:17` 的 `for m in $members` 一次把全波 spawn 完，沒有順序概念；`dk_first_prompt` 說的是「讀完後**開始做**分給你的項目」，`roles/qa.md` 說的是「依 brief 驗收標準**逐條驗證**」。qa 對半成品下判定，是完全照著 dkbo 的指示做的。
+- 為什麼**不**照 BACKLOG 原本寫的「延後 spawn `group: review` 的成員」：qa 有一大段不依賴 dev 產出的前置，而且是 role 檔明文要求的——起環境、測試帳號、mobile/桌面兩種 UA、探測腳本骨架。延後 spawn 會把這段時間整個丟掉，而那正是並行的價值。真正錯的只有一件事：**qa 不知道自己的驗收依賴誰、那個人交差了沒**。所以閘門是「知情」不是「延後」：新增 `dk_brief_wave_upstream`（同一波裡 `group: dev` 的成員），`dk-spawn` 把它算出來餵進首輪提示——不擋前置，只擋判定。
+- 為什麼主要載體是**首輪提示**而不是 `roles/qa.md`：更新 dkbo 的指令是 `rsync -a --exclude='roles/*'` 加 `rsync -a --ignore-existing roles/`——**角色檔只補新的、不覆蓋既有**。任何像 panova 那樣把 `roles/qa.md` 擴充成自己版本的專案，升級後永遠拿不到寫在角色檔裡的修正，這個洞會一直留著。`lib/prompt.sh` 在覆蓋範圍內，升級就生效。角色檔骨架同步加了一條，那是給新專案的。
+- reviewer 不受影響：它不在波次表裡（由 `dk-review` 派、`--isolated` 讀收齊後的 diff pack），`dk-spawn` 的條件明確要求該成員真的被排進這一波才帶上游。
+- fix(brief): `dk_brief_wave_upstream` 的迴圈最後一位不是 dev 時，`[ … ] && echo` 會讓函式回非零，呼叫端在 `set -e` 下整支退出——寫測試時當場踩到，結尾補 `return 0`。同型的 `&&` 結尾在這個 repo 裡不只一處，值得下次順手掃。
+- 測試：302 bats（+8）；shellcheck 零警告。
+
 ## 0.6.2 — 2026-09-14
 - feat(watch): 守望改看畫面，不再只信 herdr 的 `agent_status`。實跑事故：`panova2` 的 paramleak 任務，reviewer-c（agy）停在權限審批 UI —— 畫面上白紙黑字寫著 `Requesting permission for: rg …` 與 `Run this command?` —— 而 `herdr agent get` 回的是 **`idle`**；reviewer-b（codex）撞到 `You've hit your usage limit`，回的也是 **`idle`**。dk-watch 的 blocked 偵測唯一的訊號就是 `agent_status == blocked`，於是 `DK_BLOCK_SEC=60` 的安全網、桌面通知、送領導的 `[BLOCKED]` 三個出口對這兩個 kind **全程空轉**，`.blocked/` 底下一個標記檔都沒生出來。領導等了 20 分鐘，等到的是逾時兜底，不是安全網 —— 而它一直以為那兩位還在工作。
 - 根因不在 herdr 壞掉，而在 dkbo 把「卡住」押在一個只認得部分情況的訊號上。herdr 自己的文件寫得很清楚：`blocked` 是「Herdr recognized an approval or question UI」—— 認不認得出來，取決於它有沒有為那個 CLI 寫過 detector。agy 的審批 UI 它沒認出來，codex 的額度畫面根本不是審批 UI。唯一不會騙人的是**畫面上印出來的字**。現在每個 kind 在自己的 `kinds/<k>.sh` 宣告 `KIND_BLOCK_RE` 與 `KIND_QUOTA_RE`（`dk_kind_re` 讀，未知 kind 退回通用式、絕不回空 —— 空式子會讓 `grep -E ''` 命中每一行，把守望變成「所有人都卡住了」），`agent_status` 退成第二訊號：claude 的審批它認得，留著沒壞處。
