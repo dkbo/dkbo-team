@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 — 2026-09-16
+
+- feat(entry)!: **升級後開新 session 不再自動變成領導。** 舊行為是 `AGENTS.md` 的入口行 → `ENTRY.md` → `LEADER.md`，於是任何在專案根目錄開的 session 一啟動就被 61 行領導規範接管，想在同一個專案做別的事得先跟它拔河。現在 `ENTRY.md` 的 `leader` 分支只告訴你「這個專案裝了 dkbo」並列出三個 skill，不再指向規範檔。要開團隊流程得自己叫：`/dkbo-brain`（諮詢、分流、雜務、評議波）、`/dkbo-plan`（開任務到關卡①）、`/dkbo-run`（派工、跑波、審查、結案）。
+- refactor(leader)!: `LEADER.md` 從 61 行瘦身成三階段共用的部分（領導硬邊界、`dk-*` 位置、`settings.env` 八鍵、裁定格式、階段導航、上下文吃緊怎麼辦），階段規範搬進 `skills/{brain,plan,run}/SKILL.md`，每篇第一行都是「先讀 `.dkbo/LEADER.md`」。共用段落只有一份，改一次改一處 —— 0.6.1／0.6.2／0.6.3 動的都是這類段落，抄三份必定不同步。
+- fix(resume): `dk-resume` 的指路從命令句改成條件句（「若你要接手推進，先讀…」）。`ENTRY.md` 聲明它是唯讀看板，它自己就不能反過來命令一個只想看狀態的 session 接管。
+- fix(leader-cmd): `dk-leader` 開第二位領導的第一則提示改成「讀 `.dkbo/LEADER.md` 與 `.dkbo/skills/plan/SKILL.md`」。走 SKILL.md 路徑不走斜線指令 —— 那個 pane 可能是 codex 或 agy。
+- fix(docs): 更新用的 rsync 拿掉 `--exclude=LEADER.md`。該排除的理由是「`/dkbo-init` 已客製過它」，但 init 自 0.2.0 起就不再改寫 `LEADER.md` 的 prose，這條排除會讓升級漏掉新版規範。
+- 測試：304 bats（+2）；shellcheck 零警告。新增兩筆：`ENTRY.md` 的 leader 分支要講明「你不是領導」、`install.sh` 要把五個 skill 都接進兩個 skill 目錄；原本斷言 `LEADER.md` 內容的那幾筆，改成斷言三篇階段規範各自涵蓋自己的命令。
+- 升級：照 README 的 rsync 流程走即可，**最後一步的 `.dkbo/install.sh` 不能省** —— 三個新 symlink 靠它建。`AGENTS.md` 的入口行不用改。跳過這步不會報錯，是安靜失效：新版 `ENTRY.md` 不再自動把人接管成領導，而三個 skill 的 symlink 還沒建，於是 dkbo 什麼都不做、也不告訴你哪裡錯了。
+
 ## 0.6.3 — 2026-09-14
 - fix(spawn): qa 不再對半成品下驗收判定。同一場 `panova2` 實跑：波 1 的 frontend 與 qa 在 07:20 同一秒 spawn，qa 07:27 讀到 helper 收斂只做了一半的 worktree，判定 AC5 沒過、發 `[QUESTION]` 問「現在能開始驗還是等你收斂完」，然後停在那裡——07:39 才收到 frontend 的「你看到的是收斂前快照」。**12 分鐘空轉，外加一份假的驗收失敗**。
 - 根因是三層都沒有人告訴 qa 要等：`templates/brief.md` 的波次表只說「同一波的列相鄰」，沒說 dev 與 qa 不能同波（panova 的 brief 完全照著寫）；`dk-wave-open:17` 的 `for m in $members` 一次把全波 spawn 完，沒有順序概念；`dk_first_prompt` 說的是「讀完後**開始做**分給你的項目」，`roles/qa.md` 說的是「依 brief 驗收標準**逐條驗證**」。qa 對半成品下判定，是完全照著 dkbo 的指示做的。

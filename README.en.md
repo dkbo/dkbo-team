@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.6.3); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.7.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -12,7 +12,7 @@ A multi-model AI development team packaged as one portable directory, `.dkbo/`, 
 
 A single agent working on a medium-sized feature hits three walls: it forgets things once its context fills up, it confirms its own mistakes without a second opinion, and it steps on files that belong to someone else. dkbo answers with three mechanisms:
 
-- **Memory lives on disk.** Everything about a task (brief, process log, each worker's state and report, the message log) is a file. After `/clear` the leader runs `dk-resume` and carries on. A dead worker is re-spawned with `--resume`.
+- **Memory lives on disk.** Everything about a task (brief, process log, each worker's state and report, the message log) is a file. After `/clear`, invoke `/dkbo-run` to carry on (its first step is `dk-resume`). A dead worker is re-spawned with `--resume`.
 - **A multi-model review gate on every wave.** When a wave's implementation is done the leader dispatches one to three read-only reviewers, optionally of different kinds. `dk-wave-close` refuses until a verdict is recorded, every dev report has a filled test section, the project's test command passes, and the real diff stays inside the wave's declared ownership.
 - **File ownership.** Each member's writable globs are declared in the brief and may not overlap. `dk-brief-check` blocks overlaps up front; afterwards `dk-wave-close` compares the worktree's **real git diff** (uncommitted and untracked work included) against those globs and refuses to close a wave that changed a file no member of it owns.
 
@@ -31,7 +31,7 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 
 **Life of a task**
 
-1. You tell the leader: "open task login, display name 'User login', requirements are…".
+1. You invoke `/dkbo-plan` and tell it: "open task login, display name 'User login', requirements are…".
 2. The leader writes `brief.md`: goal, acceptance criteria, file ownership, shared contracts, and a wave table with one row per member tagged S/M/L. It runs `dk-brief-check` and only then asks you to confirm. This is **gate 1**.
 3. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own. When done they write their state and report and send `dk-msg leader "[DONE] …"`.
 4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
@@ -52,7 +52,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.6.3; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.7.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # expected: leader
@@ -97,15 +97,15 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 
 ```
 .dkbo/
-  ENTRY.md            the only entry point: dk-whoami decides between LEADER.md and a role file
-  LEADER.md           leader rules (three gates, running a wave, rulings, failure handling)
+  ENTRY.md            the only entry point: dk-whoami identifies you; the leader must invoke a skill to start
+  LEADER.md           shared leader rules (hard boundaries, settings.env, ruling format)
+  skills/             init, add-role, plus the brain / plan / run stage rules (install.sh symlinks them into .claude/skills and .agents/skills)
   PROTOCOL.md         messaging protocol: types, escalation rules, stop conditions, state / report formats
   PROJECT.md          project facts, ≤40 lines, pre-filled by init
   settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIER, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS, DK_WAVE_TIMEOUT_MIN
   roles/  kinds/      role files; flag mappings per AI CLI
   bin/  lib/          dk-* scripts and shared functions
   templates/          brief, slice, state, report and chore templates
-  skills/             dkbo-init and dkbo-add-role (install.sh symlinks them into .claude/skills and .agents/skills)
   tasks/<date-short>/ all memory for one task
   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   cross-task memory
 tests/                unit (bats, fake herdr), integration (real herdr), smoke (real agents), e2e RUNBOOK
@@ -128,5 +128,5 @@ The unit tests and shellcheck run on every push and pull request via [`.github/w
 ## Documents
 
 - [.dkbo/README.md](.dkbo/README.md): install, verify, daily use, upgrade, troubleshooting (Traditional Chinese)
-- [.dkbo/LEADER.md](.dkbo/LEADER.md), [.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md): the rules the leader and workers actually follow
+- [.dkbo/LEADER.md](.dkbo/LEADER.md) and [.dkbo/skills/{brain,plan,run}/SKILL.md](.dkbo/skills), [.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md): the rules the leader and workers actually follow
 - Design documents are not version-controlled (`docs/` is gitignored): settled conclusions go into `.dkbo/decisions.md`, and work still to be done becomes a task's `plan.md`.

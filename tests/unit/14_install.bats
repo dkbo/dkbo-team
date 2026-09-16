@@ -13,6 +13,16 @@ teardown() { teardown_project; }
   run .dkbo/install.sh; [ "$status" -eq 0 ]
   [ "$(grep -c '^@AGENTS.md$' CLAUDE.md)" -eq 1 ]
 }
+@test "install.sh links all five skills into both skill dirs" {
+  run .dkbo/install.sh
+  [ "$status" -eq 0 ]
+  for d in .claude/skills .agents/skills; do
+    for s in init add-role brain plan run; do
+      [ -L "$d/dkbo-$s" ] || { echo "missing symlink $d/dkbo-$s"; false; }
+      [ -f "$d/dkbo-$s/SKILL.md" ] || { echo "$d/dkbo-$s does not resolve to a SKILL.md"; false; }
+    done
+  done
+}
 @test "install refuses an herdr below the floor and does not require a herdr pane" {
   HERDR_STUB_VERSION=0.8.0 run .dkbo/install.sh
   [ "$status" -ne 0 ]; [[ "$output" == *"older than"* ]]; [ ! -e .claude/skills/dkbo-init ]
@@ -34,7 +44,7 @@ teardown() { teardown_project; }
   [ -f "$REPO_ROOT/README.md" ]; grep -q '.dkbo/README.md' "$REPO_ROOT/README.md"
 }
 @test "skills have agent-skills frontmatter" {
-  for s in init add-role; do
+  for s in init add-role brain plan run; do
     head -1 ".dkbo/skills/$s/SKILL.md" | grep -q '^---$'
     grep -q "^name: dkbo-$s$" ".dkbo/skills/$s/SKILL.md"; grep -q '^description: ' ".dkbo/skills/$s/SKILL.md"
   done

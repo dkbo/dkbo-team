@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.6.3），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.7.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -12,7 +12,7 @@
 
 單一 agent 做中型以上的功能會撞到三個牆：上下文吃緊就開始忘事、沒有第二意見就會自我確認、改到別人的檔就會互相踩。dkbo 用三個機制回應：
 
-- **記憶外置**：任務的全部狀態（brief、process、每位員工的 state 與 report、訊息紀錄）都是檔案。領導 `/clear` 之後執行 `dk-resume` 就能接續，員工掛掉用 `--resume` 重派。
+- **記憶外置**：任務的全部狀態（brief、process、每位員工的 state 與 report、訊息紀錄）都是檔案。領導 `/clear` 之後叫 `/dkbo-run` 就能接續（它第一步就是 `dk-resume`），員工掛掉用 `--resume` 重派。
 - **多模型審查閘**：每一波實作完成，領導派 1 到 3 位不同 kind 的 reviewer 只讀差異包出意見；wave-close 會檢查裁定、每位 dev 的測試段與專案測試指令，缺一不放行。
 - **檔案所有權**：brief 裡每個成員可改的檔案 glob 不得重疊，`dk-brief-check` 事前擋、`dk-wave-close` 事後拿 worktree 的**真實 git diff**（含未 commit 與未追蹤）比對；出現本波沒人擁有的檔就不放行。
 
@@ -31,7 +31,7 @@
 
 **一個任務的生命週期**
 
-1. 你對領導說「開任務 login，顯示名『使用者登入』，需求是…」。
+1. 你叫 `/dkbo-plan`，對它說「開任務 login，顯示名『使用者登入』，需求是…」。
 2. 領導寫 `brief.md`：目標、驗收標準、檔案所有權、共用契約、波次表（每列一位成員，標 S/M/L 難度）。`dk-brief-check` 過了才給你確認。這是**關卡①**。
 3. 每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔，做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
 4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.6.3; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.7.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # 預期印出 leader
@@ -97,15 +97,15 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 
 ```
 .dkbo/
-  ENTRY.md            唯一入口：dk-whoami 決定讀 LEADER.md 還是角色檔
-  LEADER.md           領導規範（三個關卡、跑一波、裁定、故障處理）
+  ENTRY.md            唯一入口：dk-whoami 認身分；領導要自己叫 skill 才啟動
+  LEADER.md           領導共同規範（硬邊界、settings.env、裁定格式）
+  skills/             init、add-role，與大腦／計畫／執行三篇階段規範（install.sh 會 symlink 進 .claude/skills 與 .agents/skills）
   PROTOCOL.md         通訊協定：訊息類型、升報規則、停止條件、state / report 格式
   PROJECT.md          專案事實，≤40 行，init 預填
   settings.env        DK_LEADER_KIND、DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIER、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS、DK_WAVE_TIMEOUT_MIN
   roles/  kinds/      角色檔；各 AI CLI 的旗標對應
   bin/  lib/          dk-* 腳本與共用函式
   templates/          brief、切片、state、report、chore 範本
-  skills/             dkbo-init、dkbo-add-role（install.sh 會 symlink 進 .claude/skills 與 .agents/skills）
   tasks/<日期-短名>/  一個任務的全部記憶
   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   跨任務記憶
 tests/                單元（bats，假 herdr）、整合（真 herdr）、smoke（真 agent）、e2e RUNBOOK
@@ -128,5 +128,5 @@ shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # 目�
 ## 文件
 
 - [.dkbo/README.md](.dkbo/README.md)：安裝、驗證、日常使用、更新、疑難排解
-- [.dkbo/LEADER.md](.dkbo/LEADER.md)、[.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md)：領導與員工實際照著做的規範
+- [.dkbo/LEADER.md](.dkbo/LEADER.md) 與 [.dkbo/skills/{brain,plan,run}/SKILL.md](.dkbo/skills)、[.dkbo/PROTOCOL.md](.dkbo/PROTOCOL.md)：領導與員工實際照著做的規範
 - 設計文件不進版控（`docs/` 已 gitignore）：定案的結論寫進 `.dkbo/decisions.md`，待實作的寫成任務的 `plan.md`。

@@ -11,7 +11,7 @@ teardown() { teardown_project; }
   done
 }
 
-@test "LEADER.md reaches skills by SKILL.md path, not only by slash command" {
-  grep -q '.dkbo/skills/add-role/SKILL.md' "$DK_ROOT/LEADER.md"
+@test "stage docs reach skills by SKILL.md path, not only by slash command" {
+  grep -q '.dkbo/skills/add-role/SKILL.md' "$DK_ROOT/skills/brain/SKILL.md"
   grep -q '.dkbo/skills/init/SKILL.md' "$DK_ROOT/LEADER.md"
 }
