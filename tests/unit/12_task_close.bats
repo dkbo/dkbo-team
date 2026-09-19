@@ -98,3 +98,31 @@ teardown() { teardown_project; }
   printf '# x 結案\n## 未完成 / 遺留\n（未經審查的波；整枝評議 triage 後決定不修的 Minor，一條一行）\n' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"minor"* ]]
 }
+@test "AC9: 結案把 dk-timeline 的時間表填進 report.md 的 ## 時間 段" {
+  cat > "$d/process.md" <<'P'
+2026-09-19T20:39 task-new login
+2026-09-19T20:45 gate1 approved
+2026-09-19T20:45 wave-open 1 base abc1234 members backend
+2026-09-19T21:04 dev-done wave 1 (1: backend)
+2026-09-19T21:04 review 1 spawned login-reviewer-a(claude)
+2026-09-19T21:11 review 1 verdict a: ok
+2026-09-19T21:12 wave-close 1 tests ok (x) 2 agents closed
+P
+  printf '# r 結案\n## 完成\nx\n## 時間\n（由 dk-task-close 填）\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  grep -qx '| 計畫 | 2026-09-19T20:39 | 2026-09-19T20:45 | 6m | — | — |' "$d/report.md"
+  grep -qx '| 波 1 | 2026-09-19T20:45 | 2026-09-19T21:12 | 27m | 19m | 7m |' "$d/report.md"
+  grep -q '^| 任務 | 2026-09-19T20:39 | ' "$d/report.md"   # 結束欄是這次 task-close 的當下
+  refute_grep -F '由 dk-task-close 填' "$d/report.md"      # 範本的指引行被實際內容取代
+  grep -qx '## 完成' "$d/report.md"                         # 其他段落不動
+  git -C "$PROJECT" show --stat HEAD | grep -q report.md    # 填完才 commit 任務記憶
+}
+@test "AC9: --abandon 不附時間表" {
+  echo '2026-09-19T20:39 task-new login' > "$d/process.md"
+  run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
+  refute_grep -F '| 階段 |' "$d/report.md"
+}
+@test "AC9: 範本有 ## 時間 段且註明由 dk-task-close 填" {
+  grep -qx '## 時間' "$REPO_ROOT/.dkbo/templates/report.md"
+  grep -q 'dk-task-close' "$REPO_ROOT/.dkbo/templates/report.md"
+}

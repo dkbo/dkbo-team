@@ -20,15 +20,18 @@ teardown() { teardown_project; }
   [ "$n" -eq 8 ] || { echo "expected 8 version strings across the three READMEs, found $n"; false; }
 }
 @test "READMEs 引用的 herdr 版號都等於 lib/common.sh 的 DK_HERDR_MIN" {
-  min=$(sed -n 's/^DK_HERDR_MIN="\([0-9.]*\)".*/\1/p' "$REPO_ROOT/.dkbo/lib/common.sh")
+  min=$(sed -n 's/^DK_HERDR_MIN="\([0-9.]*\)".*/\1/p' "$REPO_ROOT/.dkbo/lib/common.sh"); n=0
   [ -n "$min" ] || { echo "找不到 DK_HERDR_MIN"; false; }
   for f in README.md README.en.md .dkbo/README.md; do
     found=$(grep -oE 'herdr[^0-9]*[0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
     [ -n "$found" ] || { echo "no herdr version string in $f"; false; }
     while IFS= read -r got; do
       [ "$got" = "$min" ] || { echo "$f: herdr '$got' != DK_HERDR_MIN '$min'"; false; }
+      n=$((n+1))
     done <<< "$found"
   done
+  # 0.9.1 的 docs 那條把六處 herdr 版號誤標成 dkbo 的版號。數字寫死在這裡，少一處或多一處都要有人回來看。
+  [ "$n" -eq 6 ] || { echo "expected 6 herdr version strings across the three READMEs, found $n"; false; }
 }
 @test "dk-version tolerates a missing VERSION file" {
   rm "$DK_ROOT/VERSION"; run dk-version; [ "$status" -eq 0 ]; [ "$output" = "dkbo unknown" ]
@@ -37,4 +40,9 @@ teardown() { teardown_project; }
   v=$(tr -d '[:space:]' < "$REPO_ROOT/.dkbo/VERSION")
   top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/CHANGELOG.md" | awk '{print $2}')
   [ "$top" = "$v" ] || { echo "CHANGELOG top is '$top' but .dkbo/VERSION is '$v'"; false; }
+}
+@test "CHANGELOG 首節列出本版的每一條變更" {
+  sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
+  [[ "$sec" == *"feat(time)"* ]] || { echo "首節缺 feat(time)"; false; }
+  [[ "$sec" == *"fix(watch)"* ]] || { echo "首節缺 fix(watch)"; false; }
 }

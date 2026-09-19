@@ -122,6 +122,16 @@ else
   rm -f "$dir/.blocked/wave-${n:-0}.timeout" "$dir/.blocked/wave-${n:-0}.devdone"
   for m in ${members:-}; do rm -f "$dir/.blocked/wave-${n:-0}.$m.done"; done   # 逐成員的交付 latch
   dk_process "wave-close ${n:-?} tests $tests $closed agents closed"
+  # 本波耗時。dk-resume 給的是「還在跑多久」，這一行留下「跑了多久」，dk-timeline 再從
+  # process.md 的既有 token 把整張表算出來 —— 三支共用 lib/common.sh 的同一份換算。
+  w_open=$(dk_ts_pick "$dir/process.md" wave-open "${n:-}")
+  w_dev=$(dk_ts_pick "$dir/process.md" dev-done wave "${n:-}")
+  r_spawn=$(dk_ts_pick "$dir/process.md" review "${n:-}" spawned)
+  r_verdict=$(dk_ts_pick "$dir/process.md" review "${n:-}" verdict)
+  r_skip=$(dk_ts_pick "$dir/process.md" review "${n:-}" "skipped:")
+  if [ -z "$r_verdict" ] && [ -n "$r_skip" ]; then r_span="skip"; else r_span=$(dk_span "$r_spawn" "$r_verdict"); fi
+  span="wave ${n:-?} 耗時 $(dk_span "$w_open" "$(dk_now)")（dev $(dk_span "$w_open" "$w_dev")、審查 $r_span）"
+  echo "$span"; dk_process "$span"
   for t in $tabs; do if [ "$t" -ge 1 ]; then dk_layout_even "$t" || true; fi; done
 fi
 echo "closed $closed"

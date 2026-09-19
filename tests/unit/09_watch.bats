@@ -88,6 +88,55 @@ wpid() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
   [ ! -f "$d/.blocked/login-qa" ]
 }
 
+# --- AC1/AC2/AC3: agent_status 前提 —— working 時不做畫面判定，狀態未知時照舊判定 ---
+# panova2/highfix 誤判的根因：正在工作時畫面上的字（自己寫的測試字串、殘留輸出）被
+# 當成撞額度或卡審批。agent_status 是比畫面更可信的第一訊號，working 就不必看畫面。
+
+screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$1" > "$HERDR_STUB_RESPONSES/agent_read.json"; }
+set_status() { # AGENT STATUS — 改 agent_list.json 裡單一 agent 的 agent_status
+  sed -i "s/\"name\":\"$1\",\"agent_status\":\"[a-z]*\"/\"name\":\"$1\",\"agent_status\":\"$2\"/" "$HERDR_STUB_RESPONSES/agent_list.json"
+}
+
+@test "AC1: agent_status working 時額度畫面不觸發 LIMIT" {
+  screen "You've hit your usage limit"        # login-frontend 預設就是 working
+  dk-watch --once
+  refute_grep '\[LIMIT\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/login-frontend.limit" ]
+}
+@test "AC1: 同一畫面把狀態改成 idle，LIMIT 照常" {
+  screen "You've hit your usage limit"
+  set_status login-frontend idle
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/login-frontend.limit" ]
+}
+@test "AC2: agent_status working 時審批畫面不觸發 BLOCKED（immediate 路徑）" {
+  screen 'Requesting permission for:\nRun this command?'
+  dk-watch --once
+  [ ! -f "$d/.blocked/login-frontend" ]
+  refute_grep '\[BLOCKED\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
+}
+@test "AC2: 同一畫面把狀態改成 idle，BLOCKED 照常（immediate 路徑）" {
+  screen 'Requesting permission for:\nRun this command?'
+  set_status login-frontend idle
+  dk-watch --once
+  [ -f "$d/.blocked/login-frontend" ]
+  grep -q '\[BLOCKED\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
+}
+@test "AC2: herdr 直接回 blocked 的既有路徑不受前提影響" {
+  screen 'thinking...'   # 畫面乾淨，靠 agent_status=blocked 本身判定
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  dk-watch --once; dk-watch --once
+  grep -q '\[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+}
+@test "AC3 unknown-status: agent 不在 agent list 時照舊做畫面判定" {
+  screen "You've hit your usage limit"
+  printf 'login-mystery wC:p9\n' >> "$d/.panes"
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-mystery' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/login-mystery.limit" ]
+}
+
 chore_rec() { # $1=agent [$2=leader] — 一個執行記錄檔，不跑 dk-chore
   mkdir -p "$DK_ROOT/.sessions/chores" "$DK_ROOT/tasks/_chores"
   { echo "file=$DK_ROOT/tasks/_chores/2026-09-10-$1.md"

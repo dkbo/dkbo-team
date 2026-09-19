@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.2 — 2026-09-19
+
+- fix(watch): assess()/reviewer 逾時判定加 agent_status=working 與 state done 前提，跳過畫面判定不再誤判額度／審批
+- feat(time): 領導看不到時間 —— process.md 每一行都有時間戳，卻沒有任何一支腳本讀它，於是「這一波跑多久了」「該不該催」全憑感覺，結案 report 也說不出時間花在哪。這一版把那些既有時間戳接起來：`lib/common.sh` 新增 `dk_ts_minutes "YYYY-MM-DDTHH:MM"`（純算術的 days_from_civil；`date -d` 是 GNU 限定、`date -j` 是 BSD 限定、`mktime` 是 gawk 限定，三條路各自會在另外兩種機器上斷掉），三支腳本共用同一份換算與同一套「缺來源印 `—`」的政策。`dk-resume` 的「本波」段多兩行（`任務已進行 Xh Ym`、`本波已進行 Ym`），「在線員工」每位附 `等了 N min`（dev 與 reviewer 一致）。`dk-wave-close` 成功關波時印並記一行 `wave N 耗時 Mm（dev Am、審查 Rm）`。新腳本 `dk-timeline [<任務>]` 只讀 process.md 印一張 markdown 表（任務、計畫、每波的開關與 dev／審查、結案），零 token、不寫任何檔；`dk-task-close` 結案時把它填進 `report.md` 的「## 時間」段（`templates/report.md` 同步加這一段）。只認 process.md 既有的行首 token，不新增任何要員工或領導多填的欄位。回歸樣本用真跑過的 log（`tests/fixtures/` 的 highfix 與 flowgap 原樣複製，數字與領導人手算的逐欄一致），外加一份手改成跨午夜的 `crossday-process.md` —— 曆法是自己算的，只在同一天內對的實作在單日樣本上完全看不出來。
+- 測試：426 bats（+27）；shellcheck 零警告。
+
 ## 0.9.1 — 2026-09-19
 
 - fix(watch): dev 完成聚合只看 state 的 `^status: done`，而 state 檔跨波共用、`.devdone` 標記逐波 —— 成員跨兩波時，**開波到員工寫下第一份 state 之間的空窗會被判成「dev 全員完成」**（flowgap 實測兩次），誤發後標記寫成 `delivered`，真正完成時永遠不再通知，領導從此只能手動追蹤。改法：`dk-spawn` 在每次 spawn（含 `--resume`／`--handoff` 重派）當下把 state 內容的 `cksum` 存成 `.blocked/<agent>.spawn`，聚合要求「`status: done` 且內容與快照不同」才算這一輪的交付；認定過就落一個 `.blocked/wave-N.<成員>.done` latch，重派不會把已認定的完成打回未完成。不看 state 的 `wave:` 欄（員工漏填會靜默永不通知，比誤報更糟），也不看 mtime（`date -r` 在 GNU 與 BSD 語義不同）。沒有快照檔的 legacy 任務照舊只看 status。`dk-wave-close` 收波與 `--agent` 關單人時一併清 latch。

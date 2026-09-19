@@ -63,6 +63,59 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   grep -q '\[LIMIT\]' "$HERDR_STUB_LOG"; ! grep -q '\[BLOCKED\]' "$HERDR_STUB_LOG"
 }
 
+# --- AC13: state 已 status: done 的 agent 不做額度與審批的畫面判定（highfix 第二次誤判）---
+
+@test "AC13: state 已 done 的 agent，畫面含 usage limit 不觸發 LIMIT" {
+  screen "You've hit your usage limit"          # login-qa 這裡的 agent_status 是 idle
+  printf 'status: done\n' > "$d/state/qa.md"
+  dk-watch --once
+  refute_grep '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/login-qa.limit" ]
+}
+@test "AC13: 同條件 state working 時 LIMIT 照常" {
+  screen "You've hit your usage limit"
+  printf 'status: working\n' > "$d/state/qa.md"
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/login-qa.limit" ]
+}
+
+# --- AC14: 領導解除熔斷後 .limit 標記留著，同一畫面下一輪不重新熔斷、不重送 [LIMIT] ---
+
+@test "AC14: 解除熔斷後同一畫面下一輪不重新熔斷、不重送 LIMIT" {
+  screen "You've hit your usage limit"
+  dk-watch --once
+  grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
+  [ -f "$d/.blocked/login-qa.limit" ]
+  sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN=""/' "$d/.task.env"
+  dk-watch --once
+  grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
+  [ "$(grep -c '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c '^notification show dkbo: login-qa limit' "$HERDR_STUB_LOG")" -eq 1 ]
+}
+
+# --- AC15: skip_screen_check 的 done 判定比對 .redispatch，跟逾時路徑（dk-watch:219-221）同一條 ---
+
+@test "AC15: state done 但 .redispatch 快照跟現在一致（被重派卻沒交差）LIMIT 照常" {
+  screen "You've hit your usage limit"
+  printf 'status: done\n' > "$d/state/qa.md"
+  mkdir -p "$d/.blocked"; cksum < "$d/state/qa.md" > "$d/.blocked/login-qa.redispatch"
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/login-qa.limit" ]
+  grep -q ' limit login-qa → kind agy down$' "$d/process.md"
+}
+@test "AC15: state 改寫過（cksum 跟 .redispatch 不同）照舊跳過畫面判定" {
+  screen "You've hit your usage limit"
+  mkdir -p "$d/.blocked"
+  printf 'status: working\n' > "$d/state/qa.md"
+  cksum < "$d/state/qa.md" > "$d/.blocked/login-qa.redispatch"
+  printf 'status: done\n' > "$d/state/qa.md"
+  dk-watch --once
+  refute_grep '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/login-qa.limit" ]
+}
+
 # --- timeout：卡審批不該被當成 kind 掛了（panova2 誤熔斷 agy） ---
 
 @test "reviewer 逾時但畫面是審批 UI：報 BLOCKED、不熔斷 kind" {
@@ -103,6 +156,29 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   HERDR_STUB_FAIL="pane wait-output" dk-watch --events --once
   [ ! -f "$d/.blocked/login-qa" ]
   ! grep -q 'BLOCKED\|LIMIT' "$HERDR_STUB_LOG"
+}
+
+# --- AC4: 事件路徑同樣受 agent_status 前提約束 ---
+
+@test "AC4: 事件路徑對 working 的 agent 跳過額度判定" {
+  printf 'login-frontend wC:p2\n' > "$d/.panes"   # 只留一個 pane，agent_list.json 裡它預設是 working
+  printf '{"id":"cli:pane:wait-output","result":{"matched_line":"usage limit","pane_id":"wC:p2"}}\n' \
+    > "$HERDR_STUB_RESPONSES/pane_wait-output.json"
+  screen "You've hit your usage limit"
+  dk-watch --events --once
+  [ ! -f "$d/.blocked/login-frontend.limit" ]
+  refute_grep '\[LIMIT\]' "$HERDR_STUB_LOG"
+}
+@test "AC4: 事件路徑對 idle 的 agent 額度判定照常" {
+  printf 'login-frontend wC:p2\n' > "$d/.panes"
+  sed -i 's/"name":"login-frontend","agent_status":"working"/"name":"login-frontend","agent_status":"idle"/' \
+    "$HERDR_STUB_RESPONSES/agent_list.json"
+  printf '{"id":"cli:pane:wait-output","result":{"matched_line":"usage limit","pane_id":"wC:p2"}}\n' \
+    > "$HERDR_STUB_RESPONSES/pane_wait-output.json"
+  screen "You've hit your usage limit"
+  dk-watch --events --once
+  [ -f "$d/.blocked/login-frontend.limit" ]
+  grep -q '\[LIMIT\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
 }
 @test "--events --ensure 起一個訂閱器並且冪等" {
   unset DK_NO_WATCH
