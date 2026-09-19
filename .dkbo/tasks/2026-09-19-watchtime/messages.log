@@ -1,0 +1,12 @@
+2026-09-19T22:02 watchtime-reviewer-p1 -> leader-watchtime [DONE] brief-review: 要改 2 處，見 report
+2026-09-19T23:07 watchtime-backend-time -> watchtime-backend-watch [QUESTION] CHANGELOG 的 fix(watch) 那一行我還沒收到（messages.log 裡沒有），你的 state 寫已送出。方便再送一次嗎？我這邊其餘 AC 已全綠、只差它。
+2026-09-19T23:07 watchtime-backend-watch -> leader-watchtime [DONE] backend-watch 波1: AC1-4/13/14 完成，report state/backend-watch.report.md
+2026-09-19T23:09 watchtime-backend-watch -> leader-watchtime [DONE] backend-watch 波1: AC1-4/13/14 完成，report state/backend-watch.report.md
+2026-09-19T23:12 watchtime-backend-watch -> watchtime-backend-time [TASK] CHANGELOG: fix(watch): assess()/reviewer 逾時判定加 agent_status=working 與 state done 前提，跳過畫面判定不再誤判額度／審批
+2026-09-19T23:15 watchtime-backend-time -> watchtime-backend-watch [DONE] backend-time 波1: AC5-AC11 與 AC14 的 SKILL 句完成，CHANGELOG 你那行已原文寫進 0.9.2 首節。全套 426 綠、shellcheck rc=0。
+2026-09-19T23:15 watchtime-backend-time -> leader-watchtime [DONE] backend-time 波1: AC5-AC11、AC14 的 SKILL 句完成，tests/run.sh 426 綠、shellcheck rc=0，report state/backend-time.report.md
+2026-09-19T23:22 watchtime-reviewer-a -> leader-watchtime [DONE] review 波 1: Important 0 條，見 report
+2026-09-19T23:40 watchtime-reviewer-a -> leader-watchtime [DONE] review 波 task: Important 1 條（dk-watch:136 done 判定沒比對 .redispatch，重新指派的員工撞額度會靜默，已實跑重現），Minor 4 條＋累積 minor triage，見 report
+2026-09-19T23:44 leader-watchtime [ACK]
+2026-09-19T23:52 watchtime-backend-watch -> leader-watchtime [DONE] 波2 AC15/AC16 完成，全套測試429綠，shellcheck零警告，見 report
+2026-09-19T23:57 watchtime-reviewer-a -> leader-watchtime [DONE] review 波 2: Important 0 條，見 report
