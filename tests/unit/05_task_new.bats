@@ -51,6 +51,7 @@ teardown() { teardown_project; }
 }
 @test "task-new --gate1 flips index to running" {
   dk-task-new login "使用者登入" >/dev/null
+  dk-process "brief-review skipped: 單元測試"
   dk-task-new login --gate1
   grep -q '| 使用者登入 | task | running |' "$DK_ROOT/tasks/INDEX.md"
   grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%Y-%m-%d)-login/process.md"
@@ -61,6 +62,7 @@ teardown() { teardown_project; }
 @test "hyphenated short names do not collide" {
   dk-task-new brand-new x >/dev/null
   run dk-task-new new y; [ "$status" -eq 0 ]
+  dk-process "brief-review skipped: 單元測試"
   run dk-task-new new --gate1; [ "$status" -eq 0 ]
   grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-new/process.md"
   ! grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-brand-new/process.md"
@@ -118,4 +120,36 @@ teardown() { teardown_project; }
 @test "brief 標頭指得到 request.md" {
   d=$(dk-task-new login "使用者登入")
   grep -q 'request.md' "$d/brief.md"
+}
+
+@test "gate1 拒絕沒有計畫審查裁定的任務" {
+  dk-task-new login "使用者登入" >/dev/null
+  run dk-task-new login --gate1
+  [ "$status" -eq 1 ]; [[ "$output" == *"brief-review"* ]]
+  refute_grep 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
+  refute_grep '| 使用者登入 | task | running |' "$DK_ROOT/tasks/INDEX.md"
+}
+@test "gate1 接受 skipped，也接受 verdict" {
+  dk-task-new login "使用者登入" >/dev/null
+  dk-process "brief-review skipped: 純文件任務"
+  run dk-task-new login --gate1; [ "$status" -eq 0 ]
+  grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
+}
+@test "gate1 要求裁定交代每一位真的派出去的 reviewer" {
+  d=$(dk-task-new login "使用者登入")
+  dk-process "brief-review spawned login-reviewer-p1(claude) login-reviewer-p2(codex)"
+  dk-process "brief-review verdict p1: ok"
+  run dk-task-new login --gate1
+  [ "$status" -eq 1 ]; [[ "$output" == *"p2"* ]]
+  dk-process "brief-review verdict p1: ok / p2: skipped (逾時)"
+  run dk-task-new login --gate1; [ "$status" -eq 0 ]
+}
+@test "gate1 拒絕還開著的計畫審查 pane" {
+  d=$(dk-task-new login "使用者登入")
+  dk-process "brief-review skipped: 測試"
+  echo "login-reviewer-p1 wC:p9 $(date +%s) review 1 2" >> "$d/.panes"
+  run dk-task-new login --gate1
+  [ "$status" -eq 1 ]; [[ "$output" == *"login-reviewer-p1"* ]]; [[ "$output" == *"dk-wave-close --agent"* ]]
+  : > "$d/.panes"
+  run dk-task-new login --gate1; [ "$status" -eq 0 ]
 }

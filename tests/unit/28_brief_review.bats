@@ -22,19 +22,19 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
 @test "沒有 request.md 就拒跑，一個 pane 都不開" {
   run dk-brief-review
   [ "$status" -eq 1 ]; [[ "$output" == *"需求原文"* ]]
-  ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 @test "request.md 是空的也拒跑" {
   : > "$d/request.md"
   run dk-brief-review; [ "$status" -eq 1 ]; [[ "$output" == *"需求原文"* ]]
-  ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 @test "dk-brief-check 沒過就不燒 token" {
   have_request
   sed -i '/^- \[ \] /d' "$d/brief.md"          # 拿掉全部驗收標準 → dk-brief-check 必 FAIL
   run dk-brief-review; [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL 驗收標準"* ]]; [[ "$output" == *"dk-brief-check"* ]]
-  ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 @test "正常路徑：別名 p1/p2、切片指向 request 與 brief、process 記一行" {
   have_request; printf 'DK_REVIEW_KINDS="claude codex"\n' >> "$DK_ROOT/settings.env"
@@ -66,13 +66,13 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
   : > "$HERDR_STUB_LOG"
   run dk-brief-review --kinds codex; [ "$status" -eq 1 ]
   [[ "$output" == *'brief-review skipped: all kinds down'* ]]
-  ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 @test "全數 spawn 失敗時退非零，且不留下 spawned 行" {
   have_request
   HERDR_STUB_FAIL="agent start" run dk-brief-review; [ "$status" -eq 1 ]
   [[ "$output" == *"no reviewer spawned"* ]]
-  ! grep -q ' brief-review spawned' "$d/process.md"
+  refute_grep ' brief-review spawned' "$d/process.md"
 }
 @test "首輪提示失敗的 reviewer 仍算派出，但標 prompt-failed" {
   have_request

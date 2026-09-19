@@ -101,3 +101,10 @@ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
 | 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |
 B
 }
+
+# bats 跑在 set -e 下，而 POSIX 規定 `! cmd` 這種形式要豁免 set -e —— 所以
+# `! grep -q x file` 這樣寫的否定斷言永遠不會讓測試變紅，命中了也照樣 ok。
+# 用一個普通函式回非零，set -e 才抓得到。
+refute_grep() { # 用法同 grep；命中即失敗
+  if grep -q "$@"; then echo "refute_grep: 不該命中卻命中了: $*" >&2; return 1; fi
+}
