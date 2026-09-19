@@ -19,6 +19,17 @@ teardown() { teardown_project; }
   # 版本行、安裝 pin ×2、更新 pin、install.sh 與 dk-version 的範例輸出。加減一處請一起改這個數字。
   [ "$n" -eq 8 ] || { echo "expected 8 version strings across the three READMEs, found $n"; false; }
 }
+@test "READMEs 引用的 herdr 版號都等於 lib/common.sh 的 DK_HERDR_MIN" {
+  min=$(sed -n 's/^DK_HERDR_MIN="\([0-9.]*\)".*/\1/p' "$REPO_ROOT/.dkbo/lib/common.sh")
+  [ -n "$min" ] || { echo "找不到 DK_HERDR_MIN"; false; }
+  for f in README.md README.en.md .dkbo/README.md; do
+    found=$(grep -oE 'herdr[^0-9]*[0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+    [ -n "$found" ] || { echo "no herdr version string in $f"; false; }
+    while IFS= read -r got; do
+      [ "$got" = "$min" ] || { echo "$f: herdr '$got' != DK_HERDR_MIN '$min'"; false; }
+    done <<< "$found"
+  done
+}
 @test "dk-version tolerates a missing VERSION file" {
   rm "$DK_ROOT/VERSION"; run dk-version; [ "$status" -eq 0 ]; [ "$output" = "dkbo unknown" ]
 }

@@ -82,3 +82,11 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
   assert_quota claude 'Approaching your usage limit'
   assert_quota codex "You've hit your usage limit. Upgrade to Plus to continue using Codex"
 }
+# --- claude 的裸 approaching your 是「快到了」不是「已耗盡」，違反共用契約第三列 ---
+# （reviewer-a Important 3）：正常畫面只要出現這兩個很常見的英文字就會被判額度已耗盡，
+# 跟被修掉的 agy 裸 quota 是同一類洞。收窄成實測過的耗盡片語。
+@test "claude 的額度式子不再吃裸 approaching your，只認耗盡片語" {
+  refute_quota claude 'approaching your deadline'
+  assert_quota claude "You've hit your usage limit"
+  assert_quota claude 'rate limit'
+}

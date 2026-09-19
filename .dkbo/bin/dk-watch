@@ -171,7 +171,9 @@ chore_tick() {   # chores have no reviewers and no waves: blocked detection only
 dev_delivered() { # AGENT SNAME — 這一波真的交了嗎
   local agent="$1" sname="$2" sf snap latch
   sf="$dir/state/$sname.md"; snap="$dir/.blocked/$agent.spawn"; latch="$dir/.blocked/wave-$DK_WAVE.$sname.done"
-  [ -f "$latch" ] && return 0
+  # latch 只豁免「內容與快照相同」那一關，不豁免 status: done 本身：交過一次之後被退回
+  # working，不能再算已交付（reviewer-a Important 1，qa 退件會重現跟開波空窗一樣的誤發）。
+  [ -f "$latch" ] && { grep -q '^status: done' "$sf" 2>/dev/null; return $?; }
   grep -q '^status: done' "$sf" 2>/dev/null || return 1
   if [ -f "$snap" ] && [ "$(cksum < "$sf")" = "$(cat "$snap")" ]; then return 1; fi
   : > "$latch"
