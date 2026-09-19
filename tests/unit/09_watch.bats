@@ -272,3 +272,56 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   HERDR_STUB_MISSING="leader-login wB:p1" dk-watch --once
   ! grep -q '^delivered$' "$d/.blocked/login-qa"
 }
+
+# --- dev 波聚合：全員完成才推一則，取代員工逐筆的 [DONE] ---
+
+dev_wave() {   # 兩個 dev、一個 qa，波 1 開著；全員 idle、畫面乾淨
+  local now; now=$(date +%s)
+  printf 'login-backend wC:p2 %s dev 1 1\nlogin-frontend wC:p5 %s dev 1 2\nlogin-qa wC:p3 %s review 1 3\n' \
+    "$now" "$now" "$now" > "$d/.panes"
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+}
+all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status: done\n' > "$d/state/frontend.md"; }
+
+@test "dev 波還沒全員完成就不推聚合" {
+  dev_wave; printf 'status: done\n' > "$d/state/backend.md"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
+
+@test "dev 全員完成推一則聚合 [DONE]，不等 qa" {
+  dev_wave; all_dev_done; printf 'status: working\n' > "$d/state/qa.md"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  grep -q '^agent prompt leader-login \[DONE\] from dk-watch: wave 1 dev 全員完成（2 位：backend, frontend）→ dk-review-pack 1$' "$HERDR_STUB_LOG"
+  grep -q '^delivered$' "$d/.blocked/wave-1.devdone"
+}
+
+@test "聚合只推一次" {
+  dev_wave; all_dev_done
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c '全員完成' "$HERDR_STUB_LOG")" -eq 1 ]
+}
+
+@test "聚合送不到時下一 tick 重試" {
+  dev_wave; all_dev_done
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/wave-1.devdone" ]; refute_grep '^delivered$' "$d/.blocked/wave-1.devdone"
+  dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"; grep -q '^delivered$' "$d/.blocked/wave-1.devdone"
+}
+
+@test "沒有 dev 成員的波不推聚合" {
+  dev_wave
+  printf 'login-qa wC:p3 %s review 1 3\n' "$(date +%s)" > "$d/.panes"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+}
+
+@test "沒有開著的波就不推聚合" {
+  dev_wave; all_dev_done; sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+}

@@ -129,3 +129,17 @@ teardown() { teardown_project; }
   echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
   run dk-wave-close; [ "$status" -eq 0 ]
 }
+
+@test "wave-close 清掉本波的 dev 聚合標記" {
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
+
+@test "--agent 關掉一位員工後重置聚合標記：換 kind 重派才不會啞掉" {
+  # dev 撞額度 → dk-wave-close --agent 關它 → 用未熔斷的 kind 重派。
+  # 標記還停在 delivered 的話，補上的那位做完也不會再有人通知領導。
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-wave-close --agent login-backend; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
