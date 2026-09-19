@@ -1,0 +1,8 @@
+2026-09-19T20:43 highfix-reviewer-p1 -> leader-highfix [DONE] brief-review: 可以開工，見 report
+2026-09-19T21:04 highfix-backend -> qa [UNDELIVERED] [DONE] 波 1 三條高缺陷修完，396 測試全綠，可驗；見 state/backend.report.md
+2026-09-19T21:04 highfix-backend -> leader-highfix [DONE] 波 1：三條高缺陷各先紅後綠修完，tests 396 全綠、shellcheck 零警告、0.9.1 已出；qa 不在本波，dk-msg qa 送不到
+2026-09-19T21:11 highfix-reviewer-a -> leader-highfix [DONE] review 波 1: Important 0 條，見 report
+2026-09-19T21:22 highfix-reviewer-a -> leader-highfix [DONE] review 波 task: Important 3 條（dk-watch latch 誤發聚合、README 6 處 herdr 版號誤改成 0.9.1、claude.sh 額度式子違約），Minor 4 條，見 report
+2026-09-19T21:33 highfix-backend -> leader-highfix [FIXED] AC13-15根因：latch短路吞掉退件、README誤把herdr版號當dkbo版號一起改、claude式子收裸approaching your；三條先紅後綠，見report
+2026-09-19T21:33 highfix-backend -> leader-highfix [DONE] 波2 AC13-17 全完成，tests/run.sh 399綠、shellcheck零警告，見report
+2026-09-19T21:37 highfix-reviewer-a -> leader-highfix [DONE] review 波 2: Important 0 條，見 report

@@ -1,0 +1,397 @@
+1..396
+ok 1 stub herdr logs calls and returns canned json
+ok 2 stub herdr can be told to fail
+ok 3 dk_slug makes herdr-safe names
+ok 4 dk_ver_ge compares versions numerically, without sort -V
+ok 5 dk_require_herdr passes in silence on the verified herdr series
+ok 6 dk_require_herdr still dies outside a herdr pane
+ok 7 dk_require_herdr dies when herdr's version cannot be read
+ok 8 dk_require_herdr dies below the floor, passes at exactly the floor
+ok 9 dk_require_herdr warns once when herdr is newer than the verified series
+ok 10 dk_task_dir dies when unbound
+ok 11 dk_process and dk_task_env fail cleanly when unbound
+ok 12 dk_task_dir resolves .sessions binding and env
+ok 13 dk_process appends timestamped line
+ok 14 dk_slug never lets a newline into a file name
+ok 15 index add and set
+ok 16 dk_index_set 命中時回 0
+ok 17 dk_index_set 沒命中時回非零，且 INDEX 一個字都不動
+ok 18 index add flattens newlines so a row never spans lines
+ok 19 dk_render replaces tokens and tolerates sed metacharacters
+ok 20 frontmatter readers
+ok 21 dk_settings: defaults, one warning when missing, file overrides
+ok 22 shipped settings.env has the five keys, all quoted
+ok 23 dk_env_set rewrites or appends a .task.env key
+ok 24 dk_legacy_task detects a task folder without DK_BASE
+ok 25 task.env template carries the new keys
+ok 26 dk_minor_lines/dk_minor_count 是 dk-review 與 dk-task-close 共用的同一套 pattern
+ok 27 dk_env_set survives 20 concurrent writers without losing a key
+ok 28 whoami: leader when DK_ROLE unset
+ok 29 whoami: employee with role/agent/task
+ok 30 claude tier to args uses auto mode and grants the main tree
+ok 31 codex tier to args
+ok 32 agy tier to args passes model and effort as separate flags
+ok 33 every kind declares its efforts per model
+ok 34 rejects an effort the model does not offer
+ok 35 rejects unknown model or effort
+ok 36 available kinds intersects help, PATH and kinds dir
+ok 37 三個 kind 都把主樹加進可寫範圍
+ok 38 沒有任何 kind 把員工留在互動審批上
+ok 39 agy 的額度式子放過啟動橫幅，仍認得實測的耗盡訊息
+ok 40 未知 kind 的通用額度式子也放過啟動橫幅
+ok 41 claude 與 codex 的額度式子放過各自的啟動畫面
+ok 42 all six roles have complete frontmatter with valid tiers
+ok 43 docs exist and are short
+ok 44 templates carry substitution tokens
+ok 45 each stage doc covers its own commands; LEADER.md keeps only the shared ones; PROTOCOL covers report and reviewer rules
+ok 46 PROTOCOL's FIXED row covers the leader-relayed BUG that run 篇 expects
+ok 47 ENTRY.md tells a plain session it is NOT the leader
+ok 48 修復迴圈是兩輪，PROTOCOL 與 run SKILL 一致
+ok 49 roles/*.md 的修復迴圈文字跟 PROTOCOL 一致，不再寫修一次
+ok 50 skills/run/SKILL.md 教領導把 reviewer 的 Minor 寫成 minor process 行
+ok 51 task-new creates folder, env, worktree, binding, index, rename
+ok 52 task-new rejects bad short names and duplicates
+ok 53 task-new tolerates agent rename failure
+ok 54 task-new renames a pane whose agent carries some other name
+ok 55 task-new skips rename when already named leader-<short>
+ok 56 dk-process appends to the bound task
+ok 57 task-new --gate1 flips index to running
+ok 58 task-new --gate1 on unknown short dies cleanly
+ok 59 hyphenated short names do not collide
+ok 60 task-new honours DK_WORKTREE_DIR and refuses an existing branch without creating the folder
+ok 61 task-new --no-worktree still records DK_BASE
+ok 62 task-new removes its worktree and branch when a later step fails
+ok 63 task-new records a rename that reported success but never took effect
+ok 64 task-new stays quiet when the rename did take
+ok 65 task-new 產出 request.md 空殼
+ok 66 --from 指向檔案時把需求原文逐字複製進 request.md
+ok 67 --from 指向不存在的檔時退回空殼，來源欄照舊
+ok 68 brief 標頭指得到 request.md
+ok 69 gate1 拒絕沒有計畫審查裁定的任務
+ok 70 gate1 接受 brief-review skipped
+ok 71 gate1 要求裁定交代每一位真的派出去的 reviewer
+ok 72 gate1 看最後一行決定：verdict 之後補的 skipped 蓋過陳舊 verdict
+ok 73 gate1 不被 skipped 理由裡剛好提到 verdict 這幾個字誤判成裁定
+ok 74 gate1 看最後一行決定：skipped 之後補的 verdict 讓逐別名檢查重新生效
+ok 75 gate1 拒絕還開著的計畫審查 pane
+ok 76 msg from employee to employee: waits, prompts, logs
+ok 77 leader alias resolves and leader sender defaults
+ok 78 refuses >200 chars, unknown type, isolated peer
+ok 79 undelivered when wait fails
+ok 80 ack writes marker
+ok 81 counts characters not bytes even when the caller's LC_ALL=C
+ok 82 chore worker: dk-msg leader resolves DK_LEADER, waits for idle, logs under _chores
+ok 83 chore worker may only message the leader
+ok 84 dk-msg retries a message that does not land before giving up
+ok 85 leader addressing an employee by its short role name reaches the registered agent
+ok 86 falls back to the leader pane id when the leader has no registered agent name
+ok 87 falls back to the employee pane id from .panes when its agent name is gone
+ok 88 still gives up when neither the name nor the pane id can be reached
+ok 89 dev 的 [DONE] 寫進 log 但不投遞給領導
+ok 90 dev 的 state 還不是 done 就送 [DONE]：當場拒收，不落盤也不投遞
+ok 91 dev 連 state 檔都還沒建就送 [DONE]：一樣拒收
+ok 92 dev 送給同波夥伴的 [DONE] 照響（qa 等它才開工）
+ok 93 review 組（qa、reviewer）的 [DONE] 照響
+ok 94 dev 的其他類型不受影響：state 沒 done 也照送 ESCALATE
+ok 95 [TASK] 送達後重設該列的 epoch，其餘欄位與其餘列一字不改
+ok 96 送不到的 [TASK] 不重設 epoch：卡住的員工不能被藏起來
+ok 97 只有 [TASK] 開啟新的一輪：其他類型不動 epoch
+ok 98 [TASK] 存下指派當下的 state cksum，並清掉上一輪的逾時標記
+ok 99 指派時還沒有 state 檔：標記留空，之後出現的 state 就算這一輪寫的
+ok 100 不在 .panes 裡的對象（雜務、已收工）不會憑空生出一列
+ok 101 spawn splits with env, starts agent with tier flags, sends first prompt
+ok 102 spawn defaults tier M, honours --kind and --isolated and --resume
+ok 103 spawn warns on missing mcp but continues
+ok 104 spawn fails on unknown role or tier without S
+ok 105 worktree:false role splits beside the leader in the main tree
+ok 106 spawn records prompt failure but keeps the pane entry
+ok 107 spawn validates agent name before touching herdr
+ok 108 spawn keeps the pane when agent start fails, so the startup prompt survives
+ok 109 spawn --resume closes and dedupes the old pane entry
+ok 110 first prompt points at the member slice when it exists
+ok 111 second employee hangs below the first; review group recorded
+ok 112 --split overrides only the direction
+ok 113 fifth employee opens tab 2 as its root pane and records DK_TABS
+ok 114 tab create failure dies before starting an agent
+ok 115 agent start failure on a new tab keeps the tab so the startup prompt survives
+ok 116 --resume of an overflow tab's only occupant closes the stale tab and keeps one DK_TABS entry
+ok 117 首輪提示帶 TDD 順序與除錯方法檔
+ok 118 --handoff 落 ruling、隱含 resume、用接手版提示
+ok 119 --handoff 不帶原因就死
+ok 120 TDD 那一句只發給 group: dev，reviewer 與 qa 不收到
+ok 121 --handoff 的 ruling 只在 pane 與 agent 真的起來後才落盤
+ok 122 all gates pass: panes closed, DK_WAVE cleared, tests skipped without DK_TEST_CMD
+ok 123 gate 0: a state not done refuses unless --force
+ok 124 gate a: needs a review verdict or a recorded skip
+ok 125 gate b: every dev needs a report with content under ## 測試; review-group members do not
+ok 126 gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail
+ok 127 gate c: --force closes despite failing tests and says so
+ok 128 no open wave refuses
+ok 129 legacy: two-column .panes or no DK_WAVE key → old behaviour with a warning
+ok 130 long state is still reported
+ok 131 越界閘: a real change nobody in the wave owns refuses unless --force
+ok 132 越界閘: an owned change nobody reported warns but still closes
+ok 133 越界閘: a touched path that never really changed is no longer a violation
+ok 134 越界閘: a wave with no recorded base skips the diff gate with a warning
+ok 135 越界閘: a wave member with no state file still gets the normal refusal
+ok 136 越界閘: an unreadable worktree refuses rather than passing the gate silently
+ok 137 commit: the wave is committed in the worktree once the gates pass
+ok 138 commit: -m overrides the message
+ok 139 commit: an unchanged worktree is not committed
+ok 140 an emptied overflow tab is closed after the wave
+ok 141 --agent closes one pane, drops its row, re-balances its tab
+ok 142 ownership matches member names exactly
+ok 143 verdict must account for every reviewer that was spawned
+ok 144 gate b: 缺 ### 紅 或 ### 綠 都不放行，不適用可以過
+ok 145 gate b: 不適用 是單行豁免
+ok 146 gate b: 不適用 全形冒號也算豁免
+ok 147 wave-close 清掉本波的 dev 聚合標記
+ok 148 --agent 關掉一位員工後重置聚合標記：換 kind 重派才不會啞掉
+ok 149 gate c: 測試指令拿到的環境裡沒有任何 DK_*
+ok 150 gate c: 非 DK_* 的環境照舊（PATH、HOME 都還在）
+ok 151 first sighting records marker, no notify
+ok 152 blocked past threshold notifies once
+ok 153 marker clears when unblocked
+ok 154 dk-task-new launches dk-watch and records its pid
+ok 155 --ensure starts the watcher and records its pid
+ok 156 --ensure is a no-op while the watcher is alive
+ok 157 --ensure restarts a watcher whose pid is gone
+ok 158 --ensure does not trust a recycled pid that is not a watcher
+ok 159 --ensure honours DK_NO_WATCH
+ok 160 dk-spawn ensures the watcher is alive
+ok 161 dk-wave-open ensures the watcher is alive
+ok 162 dk-resume prints the watcher's status once
+ok 163 tick survives an agent list without agents array
+ok 164 --chores: first sighting records a marker, no notify
+ok 165 --chores: blocked past the threshold notifies the chore's own leader once
+ok 166 --chores: 記錄檔的 leader 是空的時仍發桌面通知，且不誤標 delivered
+ok 167 --chores: 沒有記錄檔時守望直接退出
+ok 168 --chores: 員工重寫 chore 檔不影響守望名單
+ok 169 --chores --ensure starts one chore watcher and is idempotent
+ok 170 dk-chore records its leader and ensures the chore watcher
+ok 171 reviewer past DK_REVIEW_TIMEOUT_MIN is reported once with (quota?) and its kind goes down
+ok 172 no quota words → no (quota?) tag; kinds accumulate without duplicates
+ok 173 fresh reviewers, done reviewers, qa and legacy rows never time out
+ok 174 a shorter DK_REVIEW_TIMEOUT_MIN is honoured
+ok 175 a reviewer spawned without an alias times out too
+ok 176 blocked: waits for the leader to be idle before prompting
+ok 177 blocked: an undelivered prompt retries next tick without repeating the desktop notification
+ok 178 timeout: the kind goes down and is logged once even when the prompt never lands
+ok 179 --chores: an undelivered prompt retries and only logs the message once it lands
+ok 180 整波逾時：超過 DK_WAVE_TIMEOUT_MIN 推一次 [TIMEOUT] wave 給領導
+ok 181 herdr agent list 失敗時留下痕跡，而不是讓守望靜靜變成 no-op
+ok 182 降級只記一次，不會每個 tick 洗版
+ok 183 blocked notification falls back to the leader pane id when leader-<short> is gone
+ok 184 reviewer timeout falls back to the leader pane id too
+ok 185 still leaves no delivered mark when the pane id is unreachable too
+ok 186 dev 波還沒全員完成就不推聚合
+ok 187 dev 全員完成推一則聚合 [DONE]，不等 qa
+ok 188 聚合只推一次
+ok 189 聚合送不到時下一 tick 重試
+ok 190 沒有 dev 成員的波不推聚合
+ok 191 沒有開著的波就不推聚合
+ok 192 被重新指派後，上一輪留下的 status: done 不再擋住逾時
+ok 193 複看真的交了（state 被重寫）就不報逾時
+ok 194 沒被重新指派過的 reviewer：首輪的 done 照樣擋住逾時
+ok 195 上一輪的 .timeout 已 delivered，複看再卡住仍會重新報一次
+ok 196 開波空窗：上一波留下的 status: done 不算這一波的交付
+ok 197 員工在這一波重寫 state 之後，聚合照常推一次且只推一次
+ok 198 state 漏填 wave: 欄也認得出這一輪的交付
+ok 199 resume_unchanged_stays_done: 重派不把已認定的完成打回未完成
+ok 200 逾時標記：agy 的啟動橫幅不算額度
+ok 201 逾時標記：agy 真的耗盡時仍標 (quota?)
+ok 202 resume prints the recovery pack under 150 lines
+ok 203 resume <task> rebinds the pane
+ok 204 employee ACK does not cut the leader's unprocessed messages
+ok 205 resume trims state and process to stay under 150 lines
+ok 206 no open wave and empty .panes fall back to plain text and the agent list
+ok 207 rulings are trimmed to the last 5 only as the final degradation step
+ok 208 chore without code splits from current pane in project root
+ok 209 chore --code makes a native git worktree branch and numbers agents
+ok 210 chore --code honours DK_WORKTREE_DIR and refuses a live duplicate slug
+ok 211 員工刪掉自己的雜務檔不再撞號：編號跳過還在跑的那一個
+ok 212 chore-close without code: closes pane, marks index done
+ok 213 chore-close --code: merges branch, removes worktree, deletes branch
+ok 214 chore-close --code refuses when the worktree has uncommitted changes
+ok 215 chore-close refuses when not done; --abandon skips merge, removes worktree and branch
+ok 216 legacy chore with a herdr workspace is still removed through herdr and pruned
+ok 217 instruction containing a pipe still round-trips through INDEX
+ok 218 chore closes the pane and removes the chore file when agent start fails
+ok 219 chore-close dies cleanly when no chore file matches
+ok 220 [DONE] 的一句話含 & 時，append 的關閉行原樣帶過去
+ok 221 員工把 chore 檔重寫成自己的格式，close 照常
+ok 222 員工把 chore 檔刪了，close 仍留下可 commit 的記憶
+ok 223 沒有 [DONE] 就拒絕，而且什麼都不動
+ok 224 [DONE] 的閘門錨定在行首，訊息本文裡的偽造 [DONE] 不算數
+ok 225 [UNDELIVERED] 的 [DONE] 也算完成
+ok 226 legacy：沒有記錄檔但有舊格式 chore 檔，仍關得掉
+ok 227 close 在 INDEX 找不到那一列時警告，而不是靜靜成功
+ok 228 chore prompt tells the worker to report through dk-msg, not a raw herdr prompt
+ok 229 multi-line instruction keeps INDEX one row per chore and chore-close still finds it
+ok 230 chore --code keeps the live worker's worktree when the first prompt fails
+ok 231 chore's first prompt waits for the worker to start, not for its whole first turn
+ok 232 chore 寫下執行記錄檔，且 instr 只有交代首行
+ok 233 chore 非 --code 時記錄檔的 branch 是字面的 -
+ok 234 同名雜務撿不到上一輪留在 messages.log 的 [DONE]
+ok 235 dk-chore-close 拒絕不合法的 agent 名
+ok 236 記錄檔寫不進去時 rollback 連雜務檔與記錄檔一起清掉
+ok 237 chore 編號回收：關掉的號下一件會拿回去
+ok 238 chore 編號不再受 _chores 檔案數影響
+ok 239 雜務檔建在日期資料夾裡，檔名不帶日期前綴
+ok 240 同一天同 slug 的雜務不互相覆蓋，即使編號被回收
+ok 241 tidy 把根層舊雜務檔搬進日期資料夾，檔名去掉日期前綴
+ok 242 tidy 把 messages.log 整份歸檔後清空
+ok 243 tidy 有雜務在跑時拒絕，而且什麼都不動
+ok 244 tidy 重複跑：archive 是 append 不是覆蓋
+ok 245 tidy 把搬動結果 commit 進 git，不留給下一件雜務的 commit 撿走
+ok 246 chore 提示告訴員工執行環境是共用的，要動先 ESCALATE
+ok 247 PROTOCOL 的雜務段也講明執行環境的邊界
+ok 248 refuses without report or with live panes
+ok 249 merges, removes worktree, clears binding and index
+ok 250 conflict aborts with exit 3 and keeps binding
+ok 251 abandon writes report, deletes branch, marks index
+ok 252 in-tree task (no worktree) closes without merge
+ok 253 task-close closes overflow tabs listed in DK_TABS
+ok 254 legacy task (no DK_BASE) falls back to herdr worktree remove with a warning
+ok 255 task-close deletes the merged task branch
+ok 256 task-close refuses when the worktree has uncommitted changes
+ok 257 task-close commits the task's memory in the main tree
+ok 258 task-close leaves unrelated working-tree changes alone
+ok 259 有 minor 但 report 沒提到只警告，不擋結案
+ok 260 report.md 只留著範本的指引行不算提到 minor，警告不會被消掉
+ok 261 dk-leader opens a named leader pane
+ok 262 dk-leader validates short name
+ok 263 dk-leader rejects a display name with backslash/quote/dollar/backtick
+ok 264 dk-leader rejects unknown model/effort and unknown kind
+ok 265 dk-leader dies cleanly when pane split fails
+ok 266 dk-leader's first prompt waits for the leader to start, and a failure keeps the pane
+ok 267 install creates symlinks, entry files, gitignore; idempotent
+ok 268 install.sh links all five skills into both skill dirs
+ok 269 install refuses an herdr below the floor and does not require a herdr pane
+ok 270 install appends to an existing CLAUDE.md and AGENTS.md
+ok 271 install skips CLAUDE.md line when it symlinks AGENTS.md
+ok 272 README carries the one-shot install and update commands
+ok 273 skills have agent-skills frontmatter
+ok 274 install appends cleanly to files without a trailing newline
+ok 275 install leaves a pre-existing real directory alone
+ok 276 owners: header, separator and （範例） rows dropped, fields trimmed
+ok 277 waves: members per wave with tier, review column of the wave
+ok 278 sections and acceptance
+ok 279 member → role/alias/group
+ok 280 templates: brief has 審查 column and example rows; member/report templates carry tokens; state has report line
+ok 281 readers fail loudly on a missing brief
+ok 282 constraints: 段落讀得到，範本帶著它
+ok 283 interfaces: 共用契約表格的資料列讀得到
+ok 284 rows: 欄內的 \| 是字面管線，不切欄
+ok 285 a good brief prints OK, exit 0, touches nothing
+ok 286 overlapping 可改 globs fail (** prefix vs literal, ** vs **)
+ok 287 unknown role, duplicate member, empty 可改
+ok 288 wave table: tier, contiguity, review column, unknown kind, missing review
+ok 289 全域約束: 段落不存在只警告，段落在但沒填要擋
+ok 290 acceptance and contract must be present
+ok 291 more dev members than DK_TAB1_SLOTS in one wave is a WARN, exit 0
+ok 292 dies cleanly without a bound task or brief
+ok 293 同一波兩位成員不得宣告同一個獨佔資源
+ok 294 不同波宣告同一個獨佔資源是可以的
+ok 295 沒有獨佔資源欄的舊 brief 照常通過
+ok 296 共用契約: 表格的擁有者與消費者都要在所有權表
+ok 297 共用契約: 只有表頭是合法的「無契約」，自由文字只警告
+ok 298 共用契約: 欄內 \| 不錯位（形狀欄與契約欄各一），裸管線要擋
+ok 299 slot table: tab 1 has 4 cells, tabs 2+ have 6, anchors and shares per spec §6.3
+ok 300 DK_TAB1_SLOTS=6 splits tab 1 columns in thirds; tab-0 rows (pm) are ignored
+ok 301 a closed anchor cell falls back to hanging below the highest live cell
+ok 302 legacy two-column .panes counts as no occupied cells
+ok 303 dk_layout_ratio_arg converts the anchor share to herdr's --ratio per DK_RATIO_MEANS
+ok 304 dk_layout_even: equalises widths in a row, leaves spanning panes and heights alone
+ok 305 dk_layout_even: an emptied tab ≥2 is closed and dropped from DK_TABS
+ok 306 dk_layout_even: herdr failure is swallowed; legacy rows are ignored
+ok 307 wave-open sets DK_WAVE, records base, renders one slice per member
+ok 308 refuses a second open, an open with live panes, and a wave without members
+ok 309 只剩計畫審查 pane 時指得出路：dk-wave-close --agent
+ok 310 a tab-0 advisor pane (pm) does not block wave-open; a grid pane does
+ok 311 wave-open 記下這一波的開始時間
+ok 312 pack holds commits, stat and -U10 diff, including uncommitted and untracked work
+ok 313 no changes: file still written, warning on stderr
+ok 314 unknown wave or no open wave dies
+ok 315 --task diffs the whole branch from DK_BASE; legacy task dies
+ok 316 default kinds come from settings.env; aliases a/b; slice points at the diff
+ok 317 wave table kinds: beat settings; --kinds beats both; cap is 3
+ok 318 downed kinds are skipped; all down exits 1 with the skip hint
+ok 319 --task reviews the whole branch pack
+ok 320 refuses without a diff pack, with a skip: column, or a bad tier
+ok 321 a reviewer whose first prompt failed is counted but tagged prompt-failed
+ok 322 every spawn failing exits 1 without a spawn-failed process line
+ok 323 reviewer tier defaults to DK_REVIEW_TIER (ships as M)
+ok 324 DK_REVIEW_TIER=L lifts reviewers to the L tier without touching roles/reviewer.md
+ok 325 --tier still overrides DK_REVIEW_TIER
+ok 326 a DK_REVIEW_TIER that is not M or L is refused, naming settings.env
+ok 327 整枝評議帶累積的 Minor，逐波審查不帶
+ok 328 VERSION is semver and dk-version prints it
+ok 329 every dkbo version string in the READMEs matches .dkbo/VERSION
+ok 330 dk-version tolerates a missing VERSION file
+ok 331 the newest CHANGELOG section matches .dkbo/VERSION
+ok 332 dk_wave_base reads the sha dk-wave-open recorded; empty for an unknown or non-numeric wave
+ok 333 dk_wave_base takes the last line when a wave was recorded twice
+ok 334 dk_changed_files lists committed, dirty and untracked work since the base
+ok 335 dk_changed_files skips ignored files and leaves non-ASCII paths unescaped
+ok 336 dk_changed_files reports nothing when the worktree is untouched
+ok 337 dk_settings provides and exports DK_LEADER_KIND, defaulting to claude
+ok 338 settings.env ships DK_LEADER_KIND as the sixth key
+ok 339 dk-leader takes its kind from DK_LEADER_KIND and that kind's L tier
+ok 340 dk-leader --kind overrides DK_LEADER_KIND and takes the new kind's L tier
+ok 341 init skill asks for the leader kind
+ok 342 the three READMEs state the leader CLI is selectable
+ok 343 settings.env 有整波逾時這個鍵
+ok 344 dk_settings provides and exports DK_REVIEW_TIER, defaulting to M
+ok 345 settings.env ships DK_REVIEW_TIER as the eighth key
+ok 346 no bash 4+ syntax anywhere in .dkbo (and the scan has teeth)
+ok 347 the three READMEs state the real dependency floors, not bash 5
+ok 348 docs/ is out of version control and nothing tracked links into it
+ok 349 stage docs reach skills by SKILL.md path, not only by slash command
+ok 350 dk_kind_re 給出各 kind 的審批與額度特徵，未知 kind 退回通用式
+ok 351 審批 UI 在畫面上、herdr 卻回 idle：仍偵測得到
+ok 352 畫面乾淨時 marker 照樣清掉，不會卡住不放
+ok 353 撞額度的畫面當場熔斷並送 [LIMIT]，不等逾時
+ok 354 [LIMIT] 只送一次、桌面通知也只響一次
+ok 355 沒送到的 [LIMIT] 下一 tick 重試，熔斷本身不等領導
+ok 356 額度優先於審批：兩種字樣同時在畫面上時判額度
+ok 357 reviewer 逾時但畫面是審批 UI：報 BLOCKED、不熔斷 kind
+ok 358 reviewer 逾時且畫面沒話說：維持原本的熔斷
+ok 359 --events --once 為每個 pane 掛上 wait-output 訂閱
+ok 360 --events 訂閱命中審批就當場處理，不必等 tick
+ok 361 --events 訂閱逾時（沒命中）不留下任何痕跡
+ok 362 --events --ensure 起一個訂閱器並且冪等
+ok 363 --ensure 同時把訂閱器帶起來
+ok 364 --events 認得 DK_NO_WATCH
+ok 365 dk-task-new 起輪詢也起訂閱，兩個 pid 都記進 .task.env
+ok 366 dk-task-close 兩條都收，訂閱器不會變成沒人管的常駐行程
+ok 367 dk_brief_wave_upstream 只挑出同波裡 group=dev 的成員
+ok 368 第 2 波的上游是那一波的 dev，不是第 1 波的
+ok 369 qa 的首輪提示指名本波的 dev，並擋住對半成品下判定
+ok 370 dev 自己的提示不帶這段：它不等任何人
+ok 371 reviewer 不在波次表裡，不該被塞上游
+ok 372 沒綁波次時 qa 照常起得來，只是沒有上游那段
+ok 373 波次表裡沒有 dev 的一波（純 qa）不會生出空的上游句
+ok 374 roles/qa.md 把「等 dev 交差再判定」寫成硬性做法
+ok 375 roles/reviewer.md 認得計畫審查，且格式以切片為準
+ok 376 計畫審查範本問的是計畫，不是程式碼
+ok 377 沒有 request.md 就拒跑，一個 pane 都不開
+ok 378 request.md 是空的也拒跑
+ok 379 request.md 是 dk-task-new 沒填的空殼也拒跑
+ok 380 dk-brief-check 沒過就不燒 token
+ok 381 正常路徑：別名 p1/p2、切片指向 request 與 brief、process 記一行
+ok 382 --kinds 與 --tier 覆寫；最多三位
+ok 383 熔斷的 kind 被跳過；全滅回非零並給出該記的 process 行
+ok 384 全數 spawn 失敗時退非零，且不留下 spawned 行
+ok 385 首輪提示失敗的 reviewer 仍算派出，但標 prompt-failed
+ok 386 不吃位置參數（波號是執行階段的概念）
+ok 387 plan SKILL 把兩道閘與 pane 收尾都寫清楚
+ok 388 全域約束進成員切片
+ok 389 全域約束進波審查切片
+ok 390 全域約束進計畫審查切片
+ok 391 setup_project 洗掉繼承來的 DK_*，測試不會碰到別的 repo
+ok 392 setup_project 之後環境裡只剩 harness 自己設的 DK_*
+ok 393 setup_project 不讓 fixture 吃源碼倉自己的 DK_TEST_CMD
+ok 394 除錯方法檔存在，PROTOCOL 指得到它
+ok 395 PROTOCOL 的 FIXED 列要求附根因（AC16）
+ok 396 方法檔講方法不講次數上限

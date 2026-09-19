@@ -1,0 +1,356 @@
+# BACKLOG 三條高嚴重度缺陷 — wave 2 since db9c2c2 — 2026-09-19T21:34
+# files changed: 9 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/README.md            |  4 ++--
+ .dkbo/bin/dk-watch         |  4 +++-
+ .dkbo/kinds/claude.sh      |  2 +-
+ CHANGELOG.md               |  6 ++++--
+ README.en.md               |  4 ++--
+ README.md                  |  4 ++--
+ tests/unit/03_kinds.bats   |  8 ++++++++
+ tests/unit/09_watch.bats   | 28 ++++++++++++++++++++++++++++
+ tests/unit/21_version.bats | 11 +++++++++++
+ 9 files changed, 61 insertions(+), 10 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/README.md b/.dkbo/README.md
+index 11b4e83..676d502 100644
+--- a/.dkbo/README.md
++++ b/.dkbo/README.md
+@@ -1,16 +1,16 @@
+ # dkbo
+ 
+ 以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件見原始 repo 的 docs/。
+ 
+ ## 前置需求
+-- herdr ≥ 0.9.1（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。版本不是只寫在文件上：`install.sh` 與每支 dk-* 都會驗。
++- herdr ≥ 0.9.0（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。版本不是只寫在文件上：`install.sh` 與每支 dk-* 都會驗。
+ - git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的就夠）。`flock` 是軟依賴：缺了 `dk_env_set` 退化成無鎖寫入，不會崩。
+ - 至少一個 AI CLI：`claude` / `codex` / `agy`。領導這一側用哪個由 `settings.env` 的 `DK_LEADER_KIND` 決定（預設 `claude`，`/dkbo-init` 會問）；其餘當員工與第二、第三意見。
+ - 目標專案是 git repo，且工作樹乾淨。
+ 
+ ## 給 AI 的一鍵安裝
+ 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code（或任何能跑 bash 的 agent）：
+ 
+ > 請在目前專案安裝 dkbo。依序執行以下指令，任何一步失敗就停下回報，不要自行變通：
+ >
+ > ```bash
+@@ -79,18 +79,18 @@ rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='
+ rsync -a --ignore-existing "$tmp/.dkbo/roles/" ./.dkbo/roles/   # 只補新角色，不覆蓋既有
+ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update dkbo"
+ ```
+ 
+ ## 疑難排解
+ | 症狀 | 原因 / 處理 |
+ |---|---|
+ | `dk: not running inside herdr` | 不是從 herdr 的 pane 執行。`herdr` 開啟終端後再試。 |
+ | 員工 pane 說找不到 `.dkbo/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
+ | 員工卡住不動 | 卡在審批對話框。dk-watch 會通知（任務員工與雜務員工都會）；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
+-| `herdr 0.8.x is older than the 0.9.1 dkbo needs` | dkbo 對 herdr 的 JSON 形狀與 `--ratio`／`--amount` 語義是實測 0.9.1 得到的，舊版會讓版面歪掉、watcher 靜靜失效，所以直接拒跑。升級 herdr。 |
++| `herdr 0.8.x is older than the 0.9.0 dkbo needs` | dkbo 對 herdr 的 JSON 形狀與 `--ratio`／`--amount` 語義是實測 0.9.0 得到的，舊版會讓版面歪掉、watcher 靜靜失效，所以直接拒跑。升級 herdr。 |
+ | `herdr X is newer than the 0.9.x series dkbo verified` | 只是提醒，照跑。跑一次 `tests/integration/herdr-real.sh`（零 token）確認形狀沒變，沒問題就把 `.dkbo/lib/common.sh` 的 `DK_HERDR_VERIFIED` 往上調。 |
+ | 想確認守望還在 | 跑 `dk-resume` 看 `watch:` 那行，或 `dk-watch --ensure`（幂等，死了就重啟）。雜務那一側是 `dk-watch --chores --ensure`，pid 記在 `.dkbo/.sessions/chores.watch.pid`。 |
+ | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
+ | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md` 與當前階段那篇（`skills/{brain,plan,run}/SKILL.md`）；必要時 `/clear` 後重新叫該 skill。 |
+ | 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 `skills/run/SKILL.md` 補位。 |
+ | `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗、`unowned change`（本波改了沒人擁有的檔）。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |
+ | 跑了 `git clean -xdf` 之後雜務關不掉 | `.dkbo/.sessions/chores/<agent>` 是正在跑的雜務的身分證，因為是 gitignored 所以 `git clean -xdf` 會把它連同其他忽略檔一起清掉；雜務本身（pane、worktree、branch）沒事，但 `dk-chore-close` 從此找不到它。復原：`dk-chore-close <agent> --abandon`（清掉 pane、worktree、branch，不 merge）。 |
+diff --git a/.dkbo/bin/dk-watch b/.dkbo/bin/dk-watch
+index 350951b..1ff0e56 100755
+--- a/.dkbo/bin/dk-watch
++++ b/.dkbo/bin/dk-watch
+@@ -164,21 +164,23 @@ chore_tick() {   # chores have no reviewers and no waves: blocked detection only
+ # 只看 `^status: done` 的話，開波到員工動筆之間的空窗就會被判成「dev 全員完成」——
+ # 誤發之後標記寫成 delivered，真完成時永遠不再通知（BACKLOG 2026-09-19，flowgap 波 3／4 實測）。
+ # 判準不用 state 的 `wave:` 欄：員工漏填會靜默永不通知，比誤報更糟。改比 dk-spawn 當下存的
+ # 內容快照（cksum；不用 mtime，`date -r` 在 GNU 與 BSD 語義不同）。
+ # 認定過就落一個逐波的 latch：重派會以當下內容重取快照，沒有 latch 的話已完成的成員會被打回
+ # 未完成，同波其他人交齊了也沒人通知領導。沒有快照檔（legacy 任務、手寫的 .panes）就照舊只看
+ # status，不平白讓整波啞掉。
+ dev_delivered() { # AGENT SNAME — 這一波真的交了嗎
+   local agent="$1" sname="$2" sf snap latch
+   sf="$dir/state/$sname.md"; snap="$dir/.blocked/$agent.spawn"; latch="$dir/.blocked/wave-$DK_WAVE.$sname.done"
+-  [ -f "$latch" ] && return 0
++  # latch 只豁免「內容與快照相同」那一關，不豁免 status: done 本身：交過一次之後被退回
++  # working，不能再算已交付（reviewer-a Important 1，qa 退件會重現跟開波空窗一樣的誤發）。
++  [ -f "$latch" ] && { grep -q '^status: done' "$sf" 2>/dev/null; return $?; }
+   grep -q '^status: done' "$sf" 2>/dev/null || return 1
+   if [ -f "$snap" ] && [ "$(cksum < "$sf")" = "$(cat "$snap")" ]; then return 1; fi
+   : > "$latch"
+ }
+ 
+ tick() {
+   [ -f "$dir/.panes" ] || exit 0
+   local now list; now=$(date +%s); list=$(dk_h_soft agent list) || return 0
+   mkdir -p "$dir/.blocked"
+   while read -r agent _pane; do
+diff --git a/.dkbo/kinds/claude.sh b/.dkbo/kinds/claude.sh
+index 604be37..3028a4c 100644
+--- a/.dkbo/kinds/claude.sh
++++ b/.dkbo/kinds/claude.sh
+@@ -3,13 +3,13 @@
+ # 每個 model 各自宣告它真的支援的 effort（不是 models × efforts 的笛卡兒積）。
+ KIND_MODEL_EFFORTS="opus:low,medium,high sonnet:low,medium,high"
+ KIND_DEFAULT_TIERS="S=sonnet/low M=sonnet/medium L=opus/high"
+ KIND_PROMPT_QUEUES=unknown   # layer-3 smoke updates this: does a prompt sent while working queue?
+ # auto 而非 acceptEdits：員工的 cwd 是 worktree，但切片、state、report 都在主樹的 .dkbo/ 下，
+ # acceptEdits 不放行工作區外的讀寫，也不放行任何 shell —— 實跑時每位員工都卡在第一個動作。
+ # --add-dir 明示主樹，讓「讀自己的切片、寫自己的 state」本來就在授權範圍內。
+ 
+ # claude 的審批 herdr 認得（會回 blocked），這兩行是第二道訊號，不是唯一依據。
+ KIND_BLOCK_RE='Do you want|Allow this|❯ 1\. Yes'
+-KIND_QUOTA_RE='usage limit|rate limit|approaching your'
++KIND_QUOTA_RE='usage limit|rate limit'
+ kind_args() { echo "--model $1 --effort $2 --permission-mode auto --add-dir $DK_PROJECT_ROOT"; }
+ kind_mcp_list() { claude mcp list 2>/dev/null | awk -F: 'NF>1{print $1}'; }
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a850e2b..2ea1900 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,18 +1,20 @@
+ # Changelog
+ 
+ ## 0.9.1 — 2026-09-19
+ 
+ - fix(watch): dev 完成聚合只看 state 的 `^status: done`，而 state 檔跨波共用、`.devdone` 標記逐波 —— 成員跨兩波時，**開波到員工寫下第一份 state 之間的空窗會被判成「dev 全員完成」**（flowgap 實測兩次），誤發後標記寫成 `delivered`，真正完成時永遠不再通知，領導從此只能手動追蹤。改法：`dk-spawn` 在每次 spawn（含 `--resume`／`--handoff` 重派）當下把 state 內容的 `cksum` 存成 `.blocked/<agent>.spawn`，聚合要求「`status: done` 且內容與快照不同」才算這一輪的交付；認定過就落一個 `.blocked/wave-N.<成員>.done` latch，重派不會把已認定的完成打回未完成。不看 state 的 `wave:` 欄（員工漏填會靜默永不通知，比誤報更糟），也不看 mtime（`date -r` 在 GNU 與 BSD 語義不同）。沒有快照檔的 legacy 任務照舊只看 status。`dk-wave-close` 收波與 `--agent` 關單人時一併清 latch。
+ - fix(wave-close): gate c 用 `bash -c "$DK_TEST_CMD"` 跑測試，把領導整包 `DK_*` 環境餵給子行程；專案的測試只要 source 到會寫 `${DK_X:-預設}` 的東西就會照繼承值打到真 repo（2026-09-19 領導在自己 session 跑 gate c，在源碼倉建了 7 個 worktree 與 8 個分支）。改成以 `env -u` 逐一剝掉所有 `DK_*` 再執行，`PATH`、`HOME` 等非 `DK_*` 照舊；仍在 `DK_WORKTREE` 內跑，測試非零仍拒絕關波，`--force` 照舊放行。
+-- fix(kinds): `kinds/agy.sh` 的 `KIND_QUOTA_RE` 收了裸 `quota`，而 agy 的啟動橫幅就叫 `bal@host (Antigravity Starter Quota)` —— 每個 agy 員工一 spawn 就被判撞額度、該 kind 當場熔斷。改成只收耗盡的說法（`quota reached|quota exceeded|rate limit|usage limit|resource exhausted`；實測原文 `Individual quota reached, Resets in 102h11m1s`），`lib/kinds.sh` 的通用回退式 `DK_RE_QUOTA_ANY` 同步收窄。`dk-watch` 對 reviewer `[TIMEOUT]` 附加 `(quota?)` 的那條另寫的寬鬆式子（`rate limit|quota|429|usage limit`）廢除，改走該 kind 的 `KIND_QUOTA_RE` 同一條路徑。
+-- 測試：396 bats（+11）；shellcheck 零警告。
++- fix(kinds): `kinds/agy.sh` 的 `KIND_QUOTA_RE` 收了裸 `quota`，而 agy 的啟動橫幅就叫 `bal@host (Antigravity Starter Quota)` —— 每個 agy 員工一 spawn 就被判撞額度、該 kind 當場熔斷。改成只收耗盡的說法（`quota reached|quota exceeded|rate limit|usage limit|resource exhausted`；實測原文 `Individual quota reached, Resets in 102h11m1s`），`lib/kinds.sh` 的通用回退式 `DK_RE_QUOTA_ANY` 同步收窄。`dk-watch` 對 reviewer `[TIMEOUT]` 附加 `(quota?)` 的那條另寫的寬鬆式子（`rate limit|quota|429|usage limit`）廢除，改走該 kind 的 `KIND_QUOTA_RE` 同一條路徑。`kinds/claude.sh` 的 `KIND_QUOTA_RE` 同一波再收窄一次：移除裸 `approaching your`（「快到了」不是「已耗盡」，且是極常見英文片語，員工畫面上出現這兩個字就會被誤判熔斥），只留實測過的耗盡片語 `usage limit|rate limit`。
++- fix(watch): `dev_delivered()` 的 latch 原本一旦落下就無條件視為「已交付」，qa 把某位 dev 退回 `status: working` 之後，只要同波其他人交齊，仍會被判成全員完成並推出聚合 `[DONE]`——跟開波空窗那條誤發是同一個洞，只是觸發條件換成「退件」。改成 latch 只豁免「內容與快照相同」那一關，`status: done` 本身仍要每輪重新確認。
++- docs: 三份 README 的 herdr 版號誤標成 0.9.1（含疑難排解那列的錯誤訊息原文），與 `lib/common.sh` 的 `DK_HERDR_MIN="0.9.0"` 不符；改回 0.9.0，六處。新增 `21_version.bats` 測試守住兩者一致。
++- 測試：399 bats（+14）；shellcheck 零警告。
+ 
+ ## 0.9.0 — 2026-09-19
+ 
+ - feat(brief)!: brief 新增 `## 全域約束` 段（橫切所有波的硬要求，一行一條），流進三份切片模板（成員、波審查、計畫審查）的 `{{CONSTRAINTS}}` token。`dk_brief_constraints()` 有 reader 與測試。
+ - feat(brief): 共用契約段改成表格（契約｜擁有者｜消費者｜形狀／簽名｜變更流程），`dk_brief_interfaces()` 有 reader 與測試；`dk-brief-check` 驗表格的擁有者與消費者都在檔案所有權表內。**`dk-brief-check` 對 0.9.0 之後建立的 brief 多兩道 FAIL（全域約束為空、共用契約表格的擁有者／消費者不在所有權表）；進行中的舊任務只拿到 WARN**，判別器是段落與表頭存不存在，不看內容。
+ - feat(report)!: report 的 `## 測試` 分成 `### 紅`／`### 綠` 兩節，`dk-wave-close` 的 gate b 要求每節至少兩行非空內容（指令列與輸出）；首行 `不適用: <理由>` 是單行豁免。**沒有測試的波兩節都寫「不適用: <理由>」**。
+ - feat(methods): 新增 `.dkbo/methods/debugging.md`（六段除錯方法：先重現、往回找第一個說謊的地方、一次改一件事、二分法縮範圍、寫下排除了什麼、修好的定義）。`PROTOCOL.md` 的 BUG 列指向它；首輪提示帶 TDD 順序（先寫失敗測試、跑它確認失敗、再寫最小實作）與除錯指路。
+ - feat(review): 整枝評議（`dk-review --task`）的 reviewer 切片帶本任務累積的 Minor（來自 `process.md` 的 `minor` 列），逐條 triage；逐波審查不帶，避免同一條風格意見在每一波都被重讀一次。`dk-task-close` 對「有 minor 但 report 沒提」只警告不阻擋結案。
+ - feat(spawn): 新增 `dk-spawn --handoff "<原因>"`——修復迴圈換腦袋的正式入口，隱含 `--resume`，自己落 `ruling:` 一行進 `process.md`，首輪提示改用接手版文案（讀上一位的 state／report、不要照它的路再走一次）。不帶原因 exit 非零。修復迴圈上限從一次改成兩輪：BUG → FIXED → 再驗仍失敗 → 換腦袋（`--handoff`）→ 再驗仍失敗才 ESCALATE。`PROTOCOL.md` 與 `skills/run/SKILL.md` 同步。
+ - fix(protocol): `[FIXED]` 列要求內文附一句根因，有測試守著。
+diff --git a/README.en.md b/README.en.md
+index 30f8723..3035432 100644
+--- a/README.en.md
++++ b/README.en.md
+@@ -38,21 +38,21 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
+ 5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
+ 6. Once qa is done and the review has a verdict, `dk-wave-close` applies four gates — the verdict line, every dev's `## 測試` section, `DK_TEST_CMD`, and an ownership check against the worktree's real diff — then closes the panes and commits the wave inside the worktree (`-m` sets the message).
+ 7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
+ 
+ **Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
+ 
+ **Layout.** The leader owns the left column of tab 1; workers fill a 2×2 or 3×2 grid on the right. From the fifth worker a new tab is opened automatically, and closed panes trigger a re-balance.
+ 
+ ## Quick start
+ 
+-Prerequisites: herdr ≥ 0.9.1 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git >= 2.17, jq >= 1.5, bash 3.2+ (the version macOS ships is enough; `flock` is a soft dependency and its absence degrades to unlocked writes), and at least one of the three AI CLIs (`claude`, `codex`, `agy`). Which one drives the leader is set by `DK_LEADER_KIND` (default `claude`); the rest serve as workers and second/third opinions. The target project must be a clean git repo.
++Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git >= 2.17, jq >= 1.5, bash 3.2+ (the version macOS ships is enough; `flock` is a soft dependency and its absence degrades to unlocked writes), and at least one of the three AI CLIs (`claude`, `codex`, `agy`). Which one drives the leader is set by `DK_LEADER_KIND` (default `claude`); the rest serve as workers and second/third opinions. The target project must be a clean git repo.
+ 
+ Paste this into a Claude Code session running inside herdr at the project root:
+ 
+ ```bash
+ test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
+ git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
+ VER=v0.9.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+ .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+ .dkbo/bin/dk-whoami   # expected: leader
+@@ -110,21 +110,21 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use
+   tasks/<date-short>/ all memory for one task
+   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   cross-task memory
+ tests/                unit (bats, fake herdr), integration (real herdr), smoke (real agents), e2e RUNBOOK
+ example/              minimal Node project used by the e2e RUNBOOK
+ ```
+ 
+ ## Development and testing
+ 
+ ```bash
+ tests/run.sh                          # unit tests; clones bats-core into tests/lib on first run; uses the fake herdr in tests/stub
+-tests/integration/herdr-real.sh       # verifies the JSON shapes the stub assumes against a real herdr 0.9.1; zero tokens
++tests/integration/herdr-real.sh       # verifies the JSON shapes the stub assumes against a real herdr 0.9.0; zero tokens
+ tests/smoke/kind-smoke.sh             # verifies each kind's flags and prompt behaviour against real AI CLIs
+ shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # target: zero warnings
+ ```
+ 
+ `tests/e2e/RUNBOOK.md` walks a full task by hand with `example/` as the target project. Every script change starts with a failing bats test.
+ 
+ The unit tests and shellcheck run on every push and pull request via [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (version-string consistency is one of the bats tests). Pushing a `v*` tag additionally checks that the tag matches `.dkbo/VERSION` and that CHANGELOG.md has an entry for it.
+ 
+ ## Documents
+ 
+diff --git a/README.md b/README.md
+index 9eb5ddc..bad19e7 100644
+--- a/README.md
++++ b/README.md
+@@ -38,21 +38,21 @@
+ 5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；不能判的問你。這是**關卡②**。
+ 6. qa DONE 且審查裁定完成，`dk-wave-close`：四道閘 —— 裁定行、每位 dev 的 `## 測試`、`DK_TEST_CMD`、真實 diff 的越界比對 —— 缺一不放行，然後關 pane 並在 worktree 內 commit（`-m` 可指定訊息）。
+ 7. 所有波結束，領導先做整分支評議，再寫 `report.md` 給你拍板。這是**關卡③**。`dk-task-close` 合併回主分支、移除 worktree、INDEX 記 done。
+ 
+ **雜務**：「翻譯 README 成英文」「先修登入頁那個 bug」這類不屬於任務的小事，領導用 `dk-chore` 派一位員工，`--code` 的會在獨立 worktree 分支工作並於 `dk-chore-close` 時合併回來。雜務員工用 `dk-msg leader` 回報，腳本會等領導閒置再送，不會漏訊。
+ 
+ **版面**：領導佔 tab 1 左欄，員工填右側 2×2 或 3×2；第 5 位起自動開新 tab，關 pane 後自動均分。
+ 
+ ## 快速開始
+ 
+-前置：herdr ≥ 0.9.1 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的版本就夠；`flock` 是軟依賴，缺了退化成無鎖寫入）、三種 AI CLI 至少一種（`claude` / `codex` / `agy`）。領導這一側用哪個由 `DK_LEADER_KIND` 決定（預設 `claude`），其餘當員工與第二三意見。目標專案要是乾淨的 git repo。
++前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的版本就夠；`flock` 是軟依賴，缺了退化成無鎖寫入）、三種 AI CLI 至少一種（`claude` / `codex` / `agy`）。領導這一側用哪個由 `DK_LEADER_KIND` 決定（預設 `claude`），其餘當員工與第二三意見。目標專案要是乾淨的 git repo。
+ 
+ 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code：
+ 
+ ```bash
+ test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
+ git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
+ VER=v0.9.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+ .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+ .dkbo/bin/dk-whoami   # 預期印出 leader
+@@ -110,21 +110,21 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet
+   tasks/<日期-短名>/  一個任務的全部記憶
+   tasks/INDEX.md  tasks/BACKLOG.md  decisions.md   跨任務記憶
+ tests/                單元（bats，假 herdr）、整合（真 herdr）、smoke（真 agent）、e2e RUNBOOK
+ example/              給 e2e RUNBOOK 用的最小 Node 專案
+ ```
+ 
+ ## 開發與測試
+ 
+ ```bash
+ tests/run.sh                          # 單元測試，bats-core 會自動 clone 進 tests/lib；用 tests/stub 的假 herdr
+-tests/integration/herdr-real.sh       # 對真 herdr 0.9.1 驗證 stub 假設的 JSON 形狀，零 token
++tests/integration/herdr-real.sh       # 對真 herdr 0.9.0 驗證 stub 假設的 JSON 形狀，零 token
+ tests/smoke/kind-smoke.sh             # 對真 AI CLI 驗證各 kind 的旗標與提示行為
+ shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh   # 目標零警告
+ ```
+ 
+ `tests/e2e/RUNBOOK.md` 是人工走一次完整任務的腳本，用 `example/` 當目標專案。所有腳本改動都先寫失敗的 bats 測試再實作。
+ 
+ 單元測試與 shellcheck 由 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在每次 push 與 PR 上跑（版本字串一致性是其中一個 bats 測試）；推 `v*` tag 時另驗 tag 等於 `.dkbo/VERSION` 且 CHANGELOG 有該版條目。
+ 
+ ## 文件
+ 
+diff --git a/tests/unit/03_kinds.bats b/tests/unit/03_kinds.bats
+index 357e3bb..1f5a6c3 100644
+--- a/tests/unit/03_kinds.bats
++++ b/tests/unit/03_kinds.bats
+@@ -75,10 +75,18 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
+   refute_quota '' 'bal@host (Antigravity Starter Quota)'
+   assert_quota '' 'Individual quota reached, Resets in 102h11m1s'
+   assert_quota '' 'usage limit'
+ }
+ @test "claude 與 codex 的額度式子放過各自的啟動畫面" {
+   refute_quota claude '✻ Welcome to Claude Code!  /help for help, /status for your current setup'
+   refute_quota codex 'OpenAI Codex (v0.31.0)  model: gpt-5.5  approval: never'
+   assert_quota claude 'Approaching your usage limit'
+   assert_quota codex "You've hit your usage limit. Upgrade to Plus to continue using Codex"
+ }
++# --- claude 的裸 approaching your 是「快到了」不是「已耗盡」，違反共用契約第三列 ---
++# （reviewer-a Important 3）：正常畫面只要出現這兩個很常見的英文字就會被判額度已耗盡，
++# 跟被修掉的 agy 裸 quota 是同一類洞。收窄成實測過的耗盡片語。
++@test "claude 的額度式子不再吃裸 approaching your，只認耗盡片語" {
++  refute_quota claude 'approaching your deadline'
++  assert_quota claude "You've hit your usage limit"
++  assert_quota claude 'rate limit'
++}
+diff --git a/tests/unit/09_watch.bats b/tests/unit/09_watch.bats
+index 1c2710d..1a111f8 100644
+--- a/tests/unit/09_watch.bats
++++ b/tests/unit/09_watch.bats
+@@ -416,31 +416,59 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
+   dk-spawn backend >/dev/null; dk-spawn frontend >/dev/null
+   sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+   printf 'status: done\nwave: 2\n' > "$d/state/backend.md"   # backend 交了波 2
+   dk-watch --once; refute_grep '全員完成' "$HERDR_STUB_LOG"   # frontend 還沒，不該推
+   dk-spawn backend --resume >/dev/null                        # 重派；它的 state 從此不再變動
+   printf 'status: done\nwave: 2\n' > "$d/state/frontend.md"
+   dk-watch --once
+   grep -q '全員完成' "$HERDR_STUB_LOG"
+ }
+ 
++# --- latch 只豁免「內容與快照相同」，不豁免 status: done 本身 -----------------
++# reviewer-a Important 1：dev_delivered() 原本是 `[ -f "$latch" ] && return 0`，一旦某位 dev
++# 交過一次，latch 落下之後不論它的 state 變成什麼都算「已交付」。A 交件 → qa 退件 A 改回
++# working → B 才交齊，這樣也會被判成全員完成 —— 跟 BACKLOG 那條開波空窗的洞同一個症狀，
++# 只是觸發條件換成「qa 退件」。
++
++@test "latch 落下後被退回 working，不再算已交付；同波夥伴交齊也不推聚合" {
++  printf 'status: done\nwave: 1\n' > "$d/state/backend.md"
++  printf 'status: done\nwave: 1\n' > "$d/state/frontend.md"
++  sed -i 's/^DK_WAVE=.*/DK_WAVE="2"/' "$d/.task.env"
++  : > "$d/.panes"
++  dk-spawn backend >/dev/null; dk-spawn frontend >/dev/null
++  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
++  printf 'status: done\nwave: 2\n' > "$d/state/backend.md"   # A 交件，latch 落下
++  dk-watch --once; refute_grep '全員完成' "$HERDR_STUB_LOG"
++  printf 'status: working\nwave: 2\n' > "$d/state/backend.md"   # qa 退件，A 改回 working
++  printf 'status: done\nwave: 2\n' > "$d/state/frontend.md"     # B 交齊
++  dk-watch --once
++  refute_grep '全員完成' "$HERDR_STUB_LOG"
++  refute_grep ' dev-done wave 2' "$d/process.md"
++  [ ! -f "$d/.blocked/wave-2.devdone" ]
++  printf 'status: done\nwave: 2\n' > "$d/state/backend.md"     # A 再改回 done 才推
++  dk-watch --once
++  grep -q '全員完成' "$HERDR_STUB_LOG"
++}
++
+ # --- 逾時訊息的 (quota?) 標記走該 kind 的額度式子，不再自己寫一條寬鬆的 ---------
+ # dk-watch 原本另寫 'rate limit|quota|429|usage limit'：裸 quota 讓 agy 的啟動橫幅
+ # `bal@host (Antigravity Starter Quota)` 被標成疑似撞額度，領導會去換 kind 而不是去看它為什麼卡住。
+ 
+ @test "逾時標記：agy 的啟動橫幅不算額度" {
+   echo '{"result":{"read":{"text":"bal@host (Antigravity Starter Quota)\nthinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+   printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"
+   echo "2026-09-10T10:00 spawn login-reviewer-b (agy M) override-kind isolated" >> "$d/process.md"
+   dk-watch --once
+   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+   refute_grep 'quota?' "$HERDR_STUB_LOG"
+   refute_grep 'LIMIT' "$HERDR_STUB_LOG"
+ }
+ 
+ @test "逾時標記：agy 真的耗盡時仍標 (quota?)" {
+   echo '{"result":{"read":{"text":"Individual quota reached, Resets in 102h11m1s"}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+   printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"
+   echo "2026-09-10T10:00 spawn login-reviewer-b (agy M) override-kind isolated" >> "$d/process.md"
+   dk-watch --once
+   grep -q '\[LIMIT\] from dk-watch: login-reviewer-b 撞額度' "$HERDR_STUB_LOG"
++  # reviewer-a Minor 1：AC8 改動的 dk-watch:212 只有反向（不該標）被守著，正向拿掉整行也不會紅。
++  grep -q '\[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)' "$HERDR_STUB_LOG"
+ }
+diff --git a/tests/unit/21_version.bats b/tests/unit/21_version.bats
+index 2150876..0adf99b 100644
+--- a/tests/unit/21_version.bats
++++ b/tests/unit/21_version.bats
+@@ -12,18 +12,29 @@ teardown() { teardown_project; }
+     found=$(grep -vF herdr "$REPO_ROOT/$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)   # herdr 有自己的版號
+     [ -n "$found" ] || { echo "no version string in $f"; false; }
+     while IFS= read -r got; do
+       [ "$got" = "$v" ] || { echo "$f: '$got' != .dkbo/VERSION '$v'"; false; }
+       n=$((n+1))
+     done <<< "$found"
+   done
+   # 版本行、安裝 pin ×2、更新 pin、install.sh 與 dk-version 的範例輸出。加減一處請一起改這個數字。
+   [ "$n" -eq 8 ] || { echo "expected 8 version strings across the three READMEs, found $n"; false; }
+ }
++@test "READMEs 引用的 herdr 版號都等於 lib/common.sh 的 DK_HERDR_MIN" {
++  min=$(sed -n 's/^DK_HERDR_MIN="\([0-9.]*\)".*/\1/p' "$REPO_ROOT/.dkbo/lib/common.sh")
++  [ -n "$min" ] || { echo "找不到 DK_HERDR_MIN"; false; }
++  for f in README.md README.en.md .dkbo/README.md; do
++    found=$(grep -oE 'herdr[^0-9]*[0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/$f" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
++    [ -n "$found" ] || { echo "no herdr version string in $f"; false; }
++    while IFS= read -r got; do
++      [ "$got" = "$min" ] || { echo "$f: herdr '$got' != DK_HERDR_MIN '$min'"; false; }
++    done <<< "$found"
++  done
++}
+ @test "dk-version tolerates a missing VERSION file" {
+   rm "$DK_ROOT/VERSION"; run dk-version; [ "$status" -eq 0 ]; [ "$output" = "dkbo unknown" ]
+ }
+ @test "the newest CHANGELOG section matches .dkbo/VERSION" {
+   v=$(tr -d '[:space:]' < "$REPO_ROOT/.dkbo/VERSION")
+   top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/CHANGELOG.md" | awk '{print $2}')
+   [ "$top" = "$v" ] || { echo "CHANGELOG top is '$top' but .dkbo/VERSION is '$v'"; false; }
+ }
