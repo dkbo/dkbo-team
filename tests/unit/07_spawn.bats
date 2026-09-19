@@ -119,3 +119,16 @@ teardown() { teardown_project; }
   grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
   grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
 }
+@test "--handoff 落 ruling、隱含 resume、用接手版提示" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  grep -qE '^[^ ]+ ruling: 換 codex/M 接手 login-backend 的修復 — claude 修一次沒好，換 codex — ' "$d/process.md"
+  grep -q '上一位修過一次沒成功' "$HERDR_STUB_LOG"
+  grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
+}
+@test "--handoff 不帶原因就死" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend --handoff; [ "$status" -ne 0 ]; [[ "$output" == *"--handoff"* ]]
+}

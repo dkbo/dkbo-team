@@ -86,3 +86,8 @@ teardown() { teardown_project; }
   run dk-task-close; [ "$status" -eq 0 ]
   [ -n "$(git -C "$PROJECT" status --porcelain -- unrelated.txt)" ]
 }
+@test "有 minor 但 report 沒提到只警告，不擋結案" {
+  echo "2026-09-19T10:00 minor 1: 命名不一致" >> "$d/process.md"
+  printf '# x 結案\n## 完成\n做完了\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"minor"* ]]
+}

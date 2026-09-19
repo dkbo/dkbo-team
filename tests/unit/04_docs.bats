@@ -69,3 +69,9 @@ teardown() { teardown_project; }
   grep -q 'roles/<角色>.md' "$DK_ROOT/ENTRY.md"
   grep -q 'PROTOCOL.md' "$DK_ROOT/ENTRY.md"
 }
+
+@test "修復迴圈是兩輪，PROTOCOL 與 run SKILL 一致" {
+  grep -q 'handoff' "$DK_ROOT/PROTOCOL.md"
+  grep -q 'handoff' "$DK_ROOT/skills/run/SKILL.md"
+  refute_grep '修復迴圈上限一次' "$DK_ROOT/PROTOCOL.md"
+}

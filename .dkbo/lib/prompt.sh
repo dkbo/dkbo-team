@@ -1,6 +1,8 @@
 # shellcheck shell=bash
-dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME BRIEF_FILE REPORT_FILE [UPSTREAM]
+dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME BRIEF_FILE REPORT_FILE [UPSTREAM] [HANDOFF]
   local resume=""; [ "${5:-0}" = 1 ] && resume="你是重新啟動的員工：先讀 $4，從 state 檔續作，不要重做已完成的項目。"
+  # 接手與續作是兩件事：續作的人要接著往下做，接手的人要重做，只是不能重走死路。
+  [ -z "${9:-}" ] || resume="你是接手的員工（換人原因：${9}）。上一位修過一次沒成功 —— 先讀 $4 與 $7，看它試過什麼、排除了什麼，再讀 \$DK_ROOT/methods/debugging.md，然後自己重新判斷根因。不要照著它的路再走一次。"
   # 上游還沒交差時 worktree 裡是半成品，對它下判定只會產出假結論（見 lib/brief.sh 的
   # dk_brief_wave_upstream）。不擋前置工作，只擋判定。
   local wait_for=""; [ -n "${8:-}" ] && wait_for="本波的 dev 成員是：${8}。在它們的 state 檔（$3/state/<成員>.md）出現 status: done、或它們送來 [DONE] 之前，worktree 裡是半成品 —— 這段時間你只做不依賴它們產出的前置（環境、測試帳號、探測腳本骨架），不要下驗收判定、不要發 [BUG]、不要把中途看到的狀態寫進報告。"
