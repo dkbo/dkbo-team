@@ -35,3 +35,12 @@ teardown() { teardown_project; rm -rf "$BAIT"; }
   done
   [ -z "$leaked" ] || { echo "洩漏的變數:$leaked" >&2; false; }
 }
+
+@test "setup_project 不讓 fixture 吃源碼倉自己的 DK_TEST_CMD" {
+  # 源碼倉的 settings.env 是給 dogfood 任務的 gate c 用的（tests/run.sh）；fixture 整包 cp 進來
+  # 之後若原樣保留，每一條「閘全過」的 wave-close 測試都會在假 worktree 裡去跑一個不存在的
+  # 測試指令。2026-09-19 把 DK_TEST_CMD 設成 tests/run.sh 那個 commit，就這樣紅了 16 條。
+  grep -Eq '^DK_TEST_CMD=""( |$)' "$DK_ROOT/settings.env"
+  # 對照：源碼倉那份是什麼都無所謂，fixture 一律是空
+  ( . "$DK_ROOT/lib/common.sh"; dk_settings; [ -z "$DK_TEST_CMD" ] )
+}

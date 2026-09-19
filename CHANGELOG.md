@@ -13,7 +13,11 @@
 - fix(roles): `roles/backend.md`、`roles/frontend.md`、`roles/qa.md` 的修復迴圈文字改成兩輪，跟 `PROTOCOL.md` 一致（原本仍寫「修一次」，員工首輪提示第一項讀到的正是角色檔）。
 - fix(prompt): 首輪提示的 TDD 那一句只發給 `group: dev` 的成員；`dk-spawn --handoff` 的 ruling 改到 pane 與 agent 真的起來之後才落盤，spawn 失敗不再留下假裁定。
 - fix(wave-close): `不適用` 豁免同時接受半形 `:` 與全形 `：`。
-- 測試：384 bats（+7）；shellcheck 零警告。
+- fix(tests): 測試的 `setup_project` 整包 `cp -r .dkbo` 進 fixture，連源碼倉自己的 `settings.env` 一起帶走。源碼倉為了 dogfood 任務的 gate c 把 `DK_TEST_CMD` 設成 `tests/run.sh` 之後，每一條「閘全過」的 wave-close 測試都在假 worktree 裡去跑一個不存在的指令，16 條紅。現在 fixture 的 `DK_TEST_CMD` 一律清空，要測 gate c 的測試自己 append 一行蓋掉；`30_isolation.bats` 多一條守著。
+- **已知問題**（flowgap 實跑打出來的八條全記在 `.dkbo/tasks/BACKLOG.md`，這一版沒有修，兩條要先知道）：
+  - `dk-watch` 的 dev 完成聚合只看 state 的 `status: done`，但 state 檔跨波共用。**任何成員跨兩波以上，第二波一開波就可能收到假的「dev 全員完成」**（開波到員工寫下第一份 state 之間的競態，實測兩次），而且誤發後 `.devdone` 標記寫成 delivered，**真正完成時不再通知**。領導收到聚合先看 `dk-resume` 的 state 對不對得上本波，別直接打差異包；四道閘擋不住零產出的波（report 跨波留存、空 diff、測試照綠）。0.8.0 起就存在，不是這一版造成的。
+  - `dk-wave-close` 的 gate c 用 `bash -c "$DK_TEST_CMD"` 跑測試，繼承領導整包 `DK_*` 環境。專案的測試若會讀 `DK_*`（目前只有 dkbo 自己），會在真實 repo 上動手。測試端已在這一版修掉，腳本端的 `env -u` 留到下一版。
+- 測試：385 bats（+8）；shellcheck 零警告。
 - 升級：照 README 的 rsync 流程走即可。這一版沒有新依賴、沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink。`roles/` 是 `--ignore-existing`，既有專案不會拿到「碰到 bug 先讀 methods/debugging.md」那一行——真正對既有專案生效的載體是首輪提示，升級後立刻生效。
 
 ## 0.8.1 — 2026-09-19

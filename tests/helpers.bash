@@ -13,6 +13,10 @@ setup_project() {
   PROJECT="$(mktemp -d)"
   cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
+  # 源碼倉自己的 settings.env 是 dogfood 任務在用的（DK_TEST_CMD=tests/run.sh 給 gate c），
+  # fixture 不能原樣繼承：gate c 會在假 worktree 裡跑一個不存在的指令，每條「閘全過」的
+  # wave-close 測試都紅。要測 gate c 的測試自己往 settings.env append 一行蓋掉即可。
+  sed -i 's/^DK_TEST_CMD=.*/DK_TEST_CMD=""/' "$PROJECT/.dkbo/settings.env"
   git -C "$PROJECT" init -q
   git -C "$PROJECT" config user.name t; git -C "$PROJECT" config user.email t@t
   git -C "$PROJECT" commit -q --allow-empty -m init
