@@ -94,6 +94,28 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   [ "$(grep -c '^notification show dkbo: login-qa limit' "$HERDR_STUB_LOG")" -eq 1 ]
 }
 
+# --- AC15: skip_screen_check 的 done 判定比對 .redispatch，跟逾時路徑（dk-watch:219-221）同一條 ---
+
+@test "AC15: state done 但 .redispatch 快照跟現在一致（被重派卻沒交差）LIMIT 照常" {
+  screen "You've hit your usage limit"
+  printf 'status: done\n' > "$d/state/qa.md"
+  mkdir -p "$d/.blocked"; cksum < "$d/state/qa.md" > "$d/.blocked/login-qa.redispatch"
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ -f "$d/.blocked/login-qa.limit" ]
+  grep -q ' limit login-qa → kind agy down$' "$d/process.md"
+}
+@test "AC15: state 改寫過（cksum 跟 .redispatch 不同）照舊跳過畫面判定" {
+  screen "You've hit your usage limit"
+  mkdir -p "$d/.blocked"
+  printf 'status: working\n' > "$d/state/qa.md"
+  cksum < "$d/state/qa.md" > "$d/.blocked/login-qa.redispatch"
+  printf 'status: done\n' > "$d/state/qa.md"
+  dk-watch --once
+  refute_grep '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/login-qa.limit" ]
+}
+
 # --- timeout：卡審批不該被當成 kind 掛了（panova2 誤熔斷 agy） ---
 
 @test "reviewer 逾時但畫面是審批 UI：報 BLOCKED、不熔斷 kind" {

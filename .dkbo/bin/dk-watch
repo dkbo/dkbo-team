@@ -128,12 +128,15 @@ handle_limit() { # agent — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：那�
 # 不看畫面；agent_status 拿不到（不在名單裡、herdr 失敗）時寧可誤報也不可漏掉真卡住，照舊判定。
 # state 已 status: done 的 agent 同理跳過：這一輪它已交差，畫面殘留的字樣不該再判它
 # （highfix 第二次誤判：reviewer 交報告後被自己引用的 usage limit 字樣熔斷）。
+# 但 done 認定跟逾時路徑（tick() 的 reviewer timeout 區塊）同一條：被 [TASK]／[BUG] 重新
+# 指派過（存在 .redispatch）而 state 內容跟指派當下一模一樣，代表它沒有交差，不能豁免（AC15）。
 skip_screen_check() { # agent [list]
-  local agent="$1" list="${2:-}" sname sf
+  local agent="$1" list="${2:-}" sname sf rd
   [ -n "$list" ] || list=$(dk_h_soft agent list 2>/dev/null) || list=""
   [ "$(agent_status "$agent" "$list")" = working ] && return 0
-  sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
-  [ -f "$sf" ] && grep -q '^status: done' "$sf" 2>/dev/null && return 0
+  sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"; rd="$dir/.blocked/$agent.redispatch"
+  if [ -f "$sf" ] && grep -q '^status: done' "$sf" 2>/dev/null \
+     && { [ ! -f "$rd" ] || [ "$(cksum < "$sf")" != "$(cat "$rd")" ]; }; then return 0; fi
   return 1
 }
 

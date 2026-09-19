@@ -178,12 +178,20 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
   [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
 }
 
-@test "只有 [TASK] 開啟新的一輪：其他類型不動 epoch" {
+@test "TASK／BUG 以外不動 epoch：[ANSWER] 不開新一輪" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
   run dk-msg login-reviewer-a "[ANSWER] 用現有 users 表"
   [ "$status" -eq 0 ]
   [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
   [ ! -f "$d/.blocked/login-reviewer-a.redispatch" ]
+}
+
+@test "AC16: [BUG] 也開啟新的一輪（領導轉 reviewer Important 給 dev）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-reviewer-a "[BUG] 重現方式見 report"
+  [ "$status" -eq 0 ]
+  now=$(date +%s); [ "$(epoch_of "$d" login-reviewer-a)" -ge "$((now - 10))" ]
+  [ -f "$d/.blocked/login-reviewer-a.redispatch" ]
 }
 
 @test "[TASK] 存下指派當下的 state cksum，並清掉上一輪的逾時標記" {
