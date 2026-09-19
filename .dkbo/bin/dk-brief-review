@@ -24,22 +24,11 @@ tier=$(dk_review_tier "$tier")
 [ -n "$kinds" ] || kinds="$DK_REVIEW_KINDS"
 use=$(dk_review_kinds "$kinds" dk-brief-review "brief-review") || exit 1
 
-aliases=(p1 p2 p3); i=0; spawned=""; failed=""
+aliases=$(dk_review_aliases "p1 p2 p3" "$use")
 mkdir -p "$dir/briefs" "$dir/state"
-for k in $use; do
-  alias="${aliases[$i]}"; i=$((i+1)); sname="reviewer-$alias"
+for a in $aliases; do
+  sname="reviewer-$a"
   dk_render "$DK_ROOT/templates/brief-reviewer-plan.md" "DISPLAY=$DK_DISPLAY" "REQUEST=$req" \
     "BRIEF=$dir/brief.md" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
-  if out=$("$DK_ROOT/bin/dk-spawn" reviewer "$alias" --isolated --kind "$k" --tier "$tier"); then rc=0; else rc=$?; fi
-  if [ -n "$out" ] && [ "$rc" = 0 ]; then
-    spawned="$spawned ${out%% *}($k)"
-  elif [ -n "$out" ]; then
-    spawned="$spawned ${out%% *}($k,prompt-failed)"
-    echo "dk-brief-review: first prompt to ${out%% *} failed; herdr agent read it, then re-prompt" >&2
-  else
-    echo "dk-brief-review: could not spawn reviewer $alias ($k)" >&2; failed="$failed $k"
-  fi
 done
-[ -n "$spawned" ] || dk_die "no reviewer spawned (dk-spawn failed for:$failed); check herdr, then retry dk-brief-review or record: dk-process \"brief-review skipped: <理由>\""
-dk_process "brief-review spawned$spawned"
-echo "brief-review:$spawned"
+dk_review_spawn "$use" "$aliases" "$tier" dk-brief-review brief-review
