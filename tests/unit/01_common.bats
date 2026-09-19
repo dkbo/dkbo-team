@@ -159,6 +159,21 @@ R
 @test "task.env template carries the new keys" {
   for k in DK_BASE DK_WAVE DK_KIND_DOWN DK_TABS; do grep -q "^$k=" "$DK_ROOT/templates/task.env"; done
 }
+@test "dk_minor_lines/dk_minor_count 是 dk-review 與 dk-task-close 共用的同一套 pattern" {
+  # Minor 5：兩支腳本各養一份正規表示式，漏冒號的 process 行一邊算一邊不算，
+  # 領導看到的 minor 數跟 reviewer 切片實際帶的內容對不上。抽進 lib/ 共用一份。
+  d=$(fixture_task login x)
+  cat > "$d/process.md" <<'P'
+2026-09-19T10:00 minor 1: 變數命名不一致 src/a.sh:12
+2026-09-19T10:01 minor: 沒有編號也算
+2026-09-19T10:02 minor 命名不一致
+2026-09-19T10:03 something else
+P
+  [ "$(dk_minor_lines "$d/process.md" | wc -l)" -eq 2 ]
+  [ "$(dk_minor_count "$d/process.md")" -eq 2 ]
+  dk_minor_lines "$d/process.md" | grep -q '變數命名不一致'
+  refute_grep '^2026-09-19T10:02' <<< "$(dk_minor_lines "$d/process.md")"   # 第三行漏冒號，兩邊都不該算
+}
 @test "dk_env_set survives 20 concurrent writers without losing a key" {
   d=$(fixture_task login x)
   for i in $(seq 1 20); do ( dk_env_set "DK_K$i" "$i" ) & done; wait

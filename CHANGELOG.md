@@ -9,7 +9,11 @@
 - feat(review): 整枝評議（`dk-review --task`）的 reviewer 切片帶本任務累積的 Minor（來自 `process.md` 的 `minor` 列），逐條 triage；逐波審查不帶，避免同一條風格意見在每一波都被重讀一次。`dk-task-close` 對「有 minor 但 report 沒提」只警告不阻擋結案。
 - feat(spawn): 新增 `dk-spawn --handoff "<原因>"`——修復迴圈換腦袋的正式入口，隱含 `--resume`，自己落 `ruling:` 一行進 `process.md`，首輪提示改用接手版文案（讀上一位的 state／report、不要照它的路再走一次）。不帶原因 exit 非零。修復迴圈上限從一次改成兩輪：BUG → FIXED → 再驗仍失敗 → 換腦袋（`--handoff`）→ 再驗仍失敗才 ESCALATE。`PROTOCOL.md` 與 `skills/run/SKILL.md` 同步。
 - fix(protocol): `[FIXED]` 列要求內文附一句根因，有測試守著。
-- 測試：377 bats（+27）；shellcheck 零警告。
+- fix(minor)!: `minor` process 行原本沒有生產者，換一個任務就靜默失效；`skills/run/SKILL.md` 第 4 步補教領導逐條 `dk-process "minor N: <一句> <file:line>"`。`dk-review` 與 `dk-task-close` 對 minor process 行共用同一個 pattern（`lib/common.sh` 的 `dk_minor_lines`/`dk_minor_count`），不再各養一份互相看不見的正規表示式；`dk-task-close` 比對 report.md 是否提到 minor 時也忽略範本自己的指引行（`^（` 開頭），否則那行的「Minor」三個字會把警告永遠消掉。
+- fix(roles): `roles/backend.md`、`roles/frontend.md`、`roles/qa.md` 的修復迴圈文字改成兩輪，跟 `PROTOCOL.md` 一致（原本仍寫「修一次」，員工首輪提示第一項讀到的正是角色檔）。
+- fix(prompt): 首輪提示的 TDD 那一句只發給 `group: dev` 的成員；`dk-spawn --handoff` 的 ruling 改到 pane 與 agent 真的起來之後才落盤，spawn 失敗不再留下假裁定。
+- fix(wave-close): `不適用` 豁免同時接受半形 `:` 與全形 `：`。
+- 測試：384 bats（+7）；shellcheck 零警告。
 - 升級：照 README 的 rsync 流程走即可。這一版沒有新依賴、沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink。`roles/` 是 `--ignore-existing`，既有專案不會拿到「碰到 bug 先讀 methods/debugging.md」那一行——真正對既有專案生效的載體是首輪提示，升級後立刻生效。
 
 ## 0.8.1 — 2026-09-19

@@ -91,3 +91,10 @@ teardown() { teardown_project; }
   printf '# x 結案\n## 完成\n做完了\n' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"minor"* ]]
 }
+@test "report.md 只留著範本的指引行不算提到 minor，警告不會被消掉" {
+  # Minor 3：templates/report.md 的「未完成 / 遺留」段本身就有一行括號開頭的指引，
+  # 那行含 Minor 三個字，會讓 grep -qi minor 永遠命中、警告永遠沉默。
+  echo "2026-09-19T10:00 minor 1: 命名不一致" >> "$d/process.md"
+  printf '# x 結案\n## 未完成 / 遺留\n（未經審查的波；整枝評議 triage 後決定不修的 Minor，一條一行）\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"minor"* ]]
+}

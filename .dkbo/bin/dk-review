@@ -29,7 +29,7 @@ use=$(dk_review_kinds "$kinds" dk-review "review $n") || exit 1
 members=$(dk_brief_wave_members "$dir/brief.md" "$n" | tr '\n' ' ' | sed 's/ $//')
 constraints=$(dk_brief_constraints "$dir/brief.md")
 if [ "$task" = 1 ]; then   # 整枝評議才 triage：一條風格意見不該在每一波都被重讀一次
-  minors=$(grep -E '^[^ ]+ minor: |^[^ ]+ minor [0-9]+: ' "$dir/process.md" 2>/dev/null | sed 's/^[^ ]* /- /' || true)
+  minors=$(dk_minor_lines "$dir/process.md" | sed 's/^[^ ]* /- /')
   [ -n "$minors" ] || minors="（本任務沒有累積的 Minor）"
 else
   minors="（逐波審查不 triage 累積的 Minor；整枝評議才做）"

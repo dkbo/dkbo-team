@@ -132,3 +132,22 @@ teardown() { teardown_project; }
   fixture_brief "$d"; dk-wave-open 1 >/dev/null
   run dk-spawn backend --handoff; [ "$status" -ne 0 ]; [[ "$output" == *"--handoff"* ]]
 }
+@test "TDD 那一句只發給 group: dev，reviewer 與 qa 不收到" {
+  # Minor 6：reviewer 依角色定義不寫任何碼，報告格式另由切片規定成規格合規／Important／
+  # Minor，收到「兩次的指令與輸出貼進報告的紅綠」跟自己的切片矛盾。
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  refute_grep '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+}
+@test "--handoff 的 ruling 只在 pane 與 agent 真的起來後才落盤" {
+  # Minor 7：ruling 原本在 pane split／agent start 之前就落盤，agent start 失敗時
+  # process.md 會留下一行「換人」的假裁定，而那次換手其實沒發生。
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  HERDR_STUB_FAIL="agent start" run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 1 ]
+  refute_grep 'ruling: 換 codex' "$d/process.md"
+}

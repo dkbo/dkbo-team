@@ -16,4 +16,4 @@ mcp: []
 ## 完成定義
 所有驗收項通過，state 記錄每條的驗證方式，`status: done`，`dk-msg leader "[DONE] ..."`。
 ## 交接對象
-dev 修；同一 bug FIXED 後再驗仍失敗 → `dk-msg leader "[ESCALATE] ..."`。
+dev 修；同一 bug 修復迴圈兩輪（見 PROTOCOL.md，領導會視情況換人），仍不過 → `dk-msg leader "[ESCALATE] ..."`。

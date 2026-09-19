@@ -75,3 +75,18 @@ teardown() { teardown_project; }
   grep -q 'handoff' "$DK_ROOT/skills/run/SKILL.md"
   refute_grep '修復迴圈上限一次' "$DK_ROOT/PROTOCOL.md"
 }
+
+@test "roles/*.md 的修復迴圈文字跟 PROTOCOL 一致，不再寫修一次" {
+  # 整枝評議 Important 2：員工首輪提示第一項讀的是角色檔，角色檔還停在一輪的話
+  # PROTOCOL 的兩輪換腦袋在實務上永遠不會觸發。
+  refute_grep '修一次' "$DK_ROOT/roles/backend.md"
+  refute_grep '修一次' "$DK_ROOT/roles/frontend.md"
+  refute_grep '修一次' "$DK_ROOT/roles/qa.md"
+  for r in backend.md frontend.md qa.md; do grep -q '兩輪' "$DK_ROOT/roles/$r"; done
+}
+
+@test "skills/run/SKILL.md 教領導把 reviewer 的 Minor 寫成 minor process 行" {
+  # 整枝評議 Important 1：dk-review --task 與 dk-task-close 都讀 process.md 的
+  # minor 行，但沒有任何一處告訴領導要寫它 —— {{MINORS}} 對其他任務永遠是空的。
+  grep -q 'dk-process "minor N: ' "$DK_ROOT/skills/run/SKILL.md"
+}

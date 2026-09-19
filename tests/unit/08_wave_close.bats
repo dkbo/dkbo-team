@@ -153,6 +153,11 @@ teardown() { teardown_project; }
   printf '# backend 報告\n## 測試\n### 紅\n不適用: 純文件波\n### 綠\n不適用: 純文件波\n' > "$d/state/backend.report.md"
   run dk-wave-close; [ "$status" -eq 0 ]
 }
+@test "gate b: 不適用 全形冒號也算豁免" {
+  # Minor 4：文案是繁體中文，員工打成全形冒號是很自然的事，錯誤訊息看不出真正原因。
+  printf '# backend 報告\n## 測試\n### 紅\n不適用：純文件波\n### 綠\n不適用：純文件波\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}
 
 @test "wave-close 清掉本波的 dev 聚合標記" {
   mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
