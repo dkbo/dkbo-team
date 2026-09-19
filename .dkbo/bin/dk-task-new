@@ -46,6 +46,8 @@ vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=$wt_path" "SO
 dk_render "$DK_ROOT/templates/brief.md"   "${vars[@]}" > "$dir/brief.md"
 dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"
 dk_render "$DK_ROOT/templates/task.env"   "${vars[@]}" > "$dir/.task.env"
+if [ -f "$from" ]; then cp "$from" "$dir/request.md"      # --from 指向真的檔案：逐字複製，不是塞路徑
+else dk_render "$DK_ROOT/templates/request.md" "${vars[@]}" > "$dir/request.md"; fi
 : > "$dir/messages.log"
 mkdir -p "$DK_ROOT/.sessions"; echo "$name" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
 

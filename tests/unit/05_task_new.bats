@@ -97,3 +97,25 @@ teardown() { teardown_project; }
   [ "$status" -eq 0 ]
   ! grep -q 'rename' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
 }
+
+@test "task-new 產出 request.md 空殼" {
+  d=$(dk-task-new login "使用者登入")
+  [ -s "$d/request.md" ]
+  grep -q '使用者登入' "$d/request.md"
+  grep -q '逐字' "$d/request.md"
+}
+@test "--from 指向檔案時把需求原文逐字複製進 request.md" {
+  printf '第一行需求\n第二行需求\n' > "$PROJECT/req.txt"
+  d=$(dk-task-new login "使用者登入" --from "$PROJECT/req.txt")
+  [ "$(cat "$d/request.md")" = "$(cat "$PROJECT/req.txt")" ]
+  grep -q '來源：.*req.txt' "$d/brief.md"
+}
+@test "--from 指向不存在的檔時退回空殼，來源欄照舊" {
+  d=$(dk-task-new login "使用者登入" --from "人在會議上口述")
+  [ -s "$d/request.md" ]
+  grep -q '來源：人在會議上口述' "$d/brief.md"
+}
+@test "brief 標頭指得到 request.md" {
+  d=$(dk-task-new login "使用者登入")
+  grep -q 'request.md' "$d/brief.md"
+}

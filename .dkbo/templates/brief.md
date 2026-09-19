@@ -1,5 +1,5 @@
 # {{DISPLAY}}
-來源：{{SOURCE}}
+來源：{{SOURCE}}   需求原文：request.md
 分支：{{BRANCH}}   worktree：{{WORKTREE}}
 
 ## 目標（≤3 行）
