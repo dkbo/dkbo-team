@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — 2026-09-19
+
+- fix(watch): dev 完成聚合只看 state 的 `^status: done`，而 state 檔跨波共用、`.devdone` 標記逐波 —— 成員跨兩波時，**開波到員工寫下第一份 state 之間的空窗會被判成「dev 全員完成」**（flowgap 實測兩次），誤發後標記寫成 `delivered`，真正完成時永遠不再通知，領導從此只能手動追蹤。改法：`dk-spawn` 在每次 spawn（含 `--resume`／`--handoff` 重派）當下把 state 內容的 `cksum` 存成 `.blocked/<agent>.spawn`，聚合要求「`status: done` 且內容與快照不同」才算這一輪的交付；認定過就落一個 `.blocked/wave-N.<成員>.done` latch，重派不會把已認定的完成打回未完成。不看 state 的 `wave:` 欄（員工漏填會靜默永不通知，比誤報更糟），也不看 mtime（`date -r` 在 GNU 與 BSD 語義不同）。沒有快照檔的 legacy 任務照舊只看 status。`dk-wave-close` 收波與 `--agent` 關單人時一併清 latch。
+- fix(wave-close): gate c 用 `bash -c "$DK_TEST_CMD"` 跑測試，把領導整包 `DK_*` 環境餵給子行程；專案的測試只要 source 到會寫 `${DK_X:-預設}` 的東西就會照繼承值打到真 repo（2026-09-19 領導在自己 session 跑 gate c，在源碼倉建了 7 個 worktree 與 8 個分支）。改成以 `env -u` 逐一剝掉所有 `DK_*` 再執行，`PATH`、`HOME` 等非 `DK_*` 照舊；仍在 `DK_WORKTREE` 內跑，測試非零仍拒絕關波，`--force` 照舊放行。
+- fix(kinds): `kinds/agy.sh` 的 `KIND_QUOTA_RE` 收了裸 `quota`，而 agy 的啟動橫幅就叫 `bal@host (Antigravity Starter Quota)` —— 每個 agy 員工一 spawn 就被判撞額度、該 kind 當場熔斷。改成只收耗盡的說法（`quota reached|quota exceeded|rate limit|usage limit|resource exhausted`；實測原文 `Individual quota reached, Resets in 102h11m1s`），`lib/kinds.sh` 的通用回退式 `DK_RE_QUOTA_ANY` 同步收窄。`dk-watch` 對 reviewer `[TIMEOUT]` 附加 `(quota?)` 的那條另寫的寬鬆式子（`rate limit|quota|429|usage limit`）廢除，改走該 kind 的 `KIND_QUOTA_RE` 同一條路徑。
+- 測試：396 bats（+11）；shellcheck 零警告。
+
 ## 0.9.0 — 2026-09-19
 
 - feat(brief)!: brief 新增 `## 全域約束` 段（橫切所有波的硬要求，一行一條），流進三份切片模板（成員、波審查、計畫審查）的 `{{CONSTRAINTS}}` token。`dk_brief_constraints()` 有 reader 與測試。
