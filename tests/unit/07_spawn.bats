@@ -113,3 +113,9 @@ teardown() { teardown_project; }
   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(grep -c '^2=' <<< "$(sed -n 's/^DK_TABS="\(.*\)"$/\1/p' "$d/.task.env" | tr ' ' '\n')")" -eq 1 ]
   grep -q 'tab 2 wB:t9 closed (recreated)' "$d/process.md"; grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
 }
+@test "首輪提示帶 TDD 順序與除錯方法檔" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+  grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
+}

@@ -11,6 +11,7 @@ mcp: []
 ---
 ## 職責
 環境、依賴、CI、合併衝突修復；維護 PROJECT.md 的安裝與測試指令。
+碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
 ## 完成定義
 交代的環境或合併問題已解決、相關測試通過、state 的 touched 完整、`status: done`，然後 `dk-msg leader "[DONE] ..."`。
 ## 交接對象

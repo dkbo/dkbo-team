@@ -10,8 +10,8 @@
 |---|---|---|
 | TASK | 領導→員工 | 補充派工、要求補 report、請 reviewer 複看 |
 | DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done`、report 已寫好。dev 送給領導的這一則只落盤，見下 |
-| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report |
-| FIXED | 員工→員工、dev→領導 | 修好了，請重驗。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
+| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report。收到 BUG 先讀 `$DK_ROOT/methods/debugging.md` 再動手 |
+| FIXED | 員工→員工、dev→領導 | 修好了，請重驗，**內文帶一句根因**。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
 | QUESTION / ANSWER | 任意 | 釐清介面、契約 |
 | ESCALATE | 員工→領導 | 需要決策、想動不屬於自己的檔、修一次未好、上下文吃緊（寫 `[ESCALATE] context`）、碰到停止條件 |
 | DECISION | 領導→員工 | 決策結果 |

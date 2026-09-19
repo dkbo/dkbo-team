@@ -4,7 +4,7 @@ setup() {
   printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
   printf 'status: done\nwave: 1\ntouched:\n  - src/api/login.ts\nreport: state/backend.report.md\n' > "$d/state/backend.md"
   printf 'status: done\nwave: 1\ntouched:\n  - tests/login.test.ts\n' > "$d/state/qa.md"
-  printf '# backend 報告\n## 做了什麼\nlogin\n## 測試\nnpm test → 3 passed\n## 自我審查\n## 疑慮\n' > "$d/state/backend.report.md"
+  printf '# backend 報告\n## 做了什麼\nlogin\n## 測試\n### 紅\n$ npm test -- login\nFAIL login not defined\n### 綠\n$ npm test -- login\n3 passed\n## 自我審查\n## 疑慮\n' > "$d/state/backend.report.md"
   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
   echo "$(date +%Y-%m-%dT%H:%M) wave-open 1 base $(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD) members backend qa" >> "$d/process.md"
   echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
@@ -31,8 +31,9 @@ teardown() { teardown_project; }
 @test "gate b: every dev needs a report with content under ## 測試; review-group members do not" {
   rm "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"no report"*"backend.report.md"* ]]
   printf '# r\n## 測試\n（必填）\n\n## 自我審查\nok\n' > "$d/state/backend.report.md"
-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"lacks content under '## 測試'"* ]]
-  printf '# r\n## 測試\nbats 12 ok\n' > "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 0 ]
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"的 '## 測試' 缺證據"* ]]
+  printf '# r\n## 測試\n### 紅\n$ bats\nFAIL 12\n### 綠\n$ bats\n12 ok\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
 }
 @test "gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail" {
   echo 'DK_TEST_CMD="cat tests/marker.txt"' >> "$DK_ROOT/settings.env"
@@ -127,6 +128,29 @@ teardown() { teardown_project; }
   run dk-wave-close                      # setup 已寫了 "review 1 verdict a: ok"，缺 b
   [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
   echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}
+
+@test "gate b: 缺 ### 紅 或 ### 綠 都不放行，不適用可以過" {
+  # 錯誤訊息同時提到兩個小節名，所以不能拿訊息裡有沒有「### 紅」來分辨是哪一邊缺 ——
+  # 斷言改成「這份 report 被擋下來了」，並用 refute_grep 確認沒有其他 gate 一起叫。
+  printf '# backend 報告\n## 測試\n### 綠\n3 passed\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
+  refute_grep 'unowned change' <<< "$output"
+  printf '# backend 報告\n## 測試\n### 紅\nFAIL\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
+  # 兩節都在、但各只有一行（沒有輸出）：這正是 AC5 要擋的
+  printf '# backend 報告\n## 測試\n### 紅\n跑過了會失敗\n### 綠\n跑過了會過\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"兩行以上"* ]]
+  # 指令列＋輸出：放行
+  printf '# backend 報告\n## 測試\n### 紅\n$ npm test -- login\nFAIL not defined\n### 綠\n$ npm test -- login\n3 passed\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}
+@test "gate b: 不適用 是單行豁免" {
+  printf '# backend 報告\n## 測試\n### 紅\n不適用: 純文件波\n### 綠\n不適用: 純文件波\n' > "$d/state/backend.report.md"
   run dk-wave-close; [ "$status" -eq 0 ]
 }
 
