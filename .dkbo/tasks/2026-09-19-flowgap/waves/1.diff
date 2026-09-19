@@ -1,0 +1,656 @@
+# 流程缺口補齊 — wave 1 since 63e5c2f — 2026-09-19T17:11
+# files changed: 15 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/bin/dk-brief-check               | 32 +++++++++++++++++++++++++-
+ .dkbo/bin/dk-brief-review              |  5 +++--
+ .dkbo/bin/dk-review                    |  3 ++-
+ .dkbo/bin/dk-wave-open                 |  2 ++
+ .dkbo/lib/brief.sh                     | 19 ++++++++++++++--
+ .dkbo/templates/brief-member.md        |  3 +++
+ .dkbo/templates/brief-reviewer-plan.md |  3 +++
+ .dkbo/templates/brief-reviewer.md      |  3 +++
+ .dkbo/templates/brief.md               |  8 ++++++-
+ tests/helpers.bash                     | 16 +++++++++++--
+ tests/unit/15_brief_lib.bats           | 29 ++++++++++++++++++++++--
+ tests/unit/16_brief_check.bats         | 41 +++++++++++++++++++++++++++++++++-
+ tests/unit/18_wave_open.bats           |  2 +-
+ tests/unit/29_constraints.bats         | 20 +++++++++++++++++
+ tests/unit/30_isolation.bats           | 37 ++++++++++++++++++++++++++++++
+ 15 files changed, 210 insertions(+), 13 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/bin/dk-brief-check b/.dkbo/bin/dk-brief-check
+index 60b6b44..e3d2e14 100755
+--- a/.dkbo/bin/dk-brief-check
++++ b/.dkbo/bin/dk-brief-check
+@@ -67,16 +67,46 @@ for w in $(printf '%s\n' "$waves" | cut -d'|' -f1 | grep -E '^[0-9]+$' | sort -u
+     for r in $(printf '%s\n' "$owners" | awk -F'|' -v mm="$m" '$1==mm{print $4}' \
+                | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -vE '^(|—)$' || true); do
+       prev=$(printf '%s' "$claimed" | awk -F'\t' -v rr="$r" '$1==rr{print $2; exit}')
+       if [ -n "$prev" ]; then fail "波次表 $w" "獨佔資源 $r 同時被 $prev 與 $m 宣告（同一波不得共用）"
+       else claimed="$claimed$r	$m
+ "; fi
+     done
+   done
+ done
+ 
++# ── 全域約束（0.9.0 新增）
++# 判別器是「段落存不存在」：不存在＝0.9.0 之前建立的 brief，升級後不該把進行中的任務卡死；
++# 存在但沒填＝新範本產出來的，那是真的漏填。同一招 0.8.0 在 request.md 的空殼 sentinel 用過。
++if ! grep -q '^## 全域約束' "$brief"; then
++  warn 全域約束 "段落不存在（0.9.0 之後建立的任務必填；沒有約束就寫「無」）"
++elif [ -z "$(dk_brief_constraints "$brief" | grep -v '^（' | grep -v '^[[:space:]]*$' || true)" ]; then
++  fail 全域約束 "段落為空（沒有約束請寫「無」）"
++fi
++
+ # ── 驗收與契約
+ [ -n "$(dk_brief_acceptance "$brief")" ] || fail 驗收標準 "至少一條 '- [ ] …'"
+-[ -n "$(dk_brief_section "$brief" "## 共用契約" | grep -v '^（' | grep -v '^[[:space:]]*$' || true)" ] || fail 共用契約 "段落為空（無契約請寫「無」）"
++ct=$(dk_brief_section "$brief" "## 共用契約")
++if [ -z "$(printf '%s\n' "$ct" | grep -v '^（' | grep -v '^[[:space:]]*$' || true)" ]; then
++  fail 共用契約 "段落為空（無契約請保留表頭；舊格式請寫「無」）"
++elif ! printf '%s\n' "$ct" | grep -qE '^\| *契約 *\|'; then
++  # 判別器是表頭而不是資料列：新格式底下「沒有任何契約」就是只有表頭、沒有資料列，
++  # 那是合法的。拿資料列當判別器會把這個合法狀態誤判成舊 brief，它從此拿不到欄位檢查。
++  warn 共用契約 "非表格格式（0.9.0 之後建立的任務請用 契約｜擁有者｜消費者｜形狀／簽名｜變更流程 五欄）"
++else
++  # dk_brief_interfaces 的輸出把欄內的字面管線留成 \|，所以這裡也要跳脫感知地切：
++  # 先換哨兵再讓 IFS 切，切完還原。少了這一步，形狀欄寫個正規表示式就會多切出一欄。
++  esc=$(printf '\034')
++  while IFS='|' read -r c owner consumers _shape _flow extra; do
++    [ -n "$c" ] || continue
++    cname=$(printf '%s' "$c" | sed "s/$esc/\\\\|/g")
++    # 裸管線在 markdown 裡就是欄位分隔，切出第六欄 —— 那是真的寫錯了，不能靜默錯位下去
++    [ -z "$extra" ] || fail "共用契約 $cname" "欄數超過五欄（欄位內容裡的字面管線要寫成 \\|）"
++    [ "$owner" = "—" ] || [[ "$members" == *" $owner "* ]] || fail "共用契約 $cname" "擁有者 $owner 不在檔案所有權表"
++    for cs in $(printf '%s' "$consumers" | tr ',' ' '); do
++      [ "$cs" = "—" ] || [[ "$members" == *" $cs "* ]] || fail "共用契約 $cname" "消費者 $cs 不在檔案所有權表"
++    done
++  done <<< "$(dk_brief_interfaces "$brief" | sed "s/\\\\|/$esc/g")"
++fi
+ 
+ if [ "$fails" -gt 0 ]; then echo "$fails FAIL"; exit 1; fi
+ [ "$warns" -gt 0 ] || echo OK
+diff --git a/.dkbo/bin/dk-brief-review b/.dkbo/bin/dk-brief-review
+index 8470bf2..c9f3952 100755
+--- a/.dkbo/bin/dk-brief-review
++++ b/.dkbo/bin/dk-brief-review
+@@ -1,15 +1,15 @@
+ #!/usr/bin/env bash
+ # dk-brief-review [--kinds "k1 k2 k3"] [--tier M|L] — 開工前的計畫審查：派 1–3 位隔離 reviewer
+ # 讀 request.md + brief.md 出意見。與 dk-brief-check 同一層：那一支驗形狀，這一支看內容。
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/review.sh"
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/review.sh"
+ dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
+ kinds=""; tier=""
+ while [ $# -gt 0 ]; do case "$1" in
+   --kinds) kinds="$2"; shift 2;; --tier) tier="$2"; shift 2;;
+   --*) dk_die "unknown flag $1";; *) dk_die "unexpected argument $1（計畫審查不分波；波號是執行階段的概念）";; esac; done
+ 
+ req="$dir/request.md"
+ [ -s "$req" ] || dk_die "缺需求原文 $req —— 先把人的原話逐字抄進去。reviewer 少了它只能在 brief 的自我一致性裡打轉，看不出 brief 漏掉了什麼。"
+ # dk-task-new 沒給 --from 真檔時一定會 render 出這份空殼；[ -s ] 在這條最常見的路徑上恆真。
+ # 空殼的最後一行是 sentinel，一個字都沒補上去的話它還在最後一行。
+@@ -17,18 +17,19 @@ req="$dir/request.md"
+   || dk_die "$req 還是空殼（「（原文從這裡開始）」後面一個字都沒有）—— 先把人的原話逐字抄進去再回來"
+ # 零 token 的機械閘沒過就燒三個 kind 的 token，是這個設計裡最蠢的失敗模式。順序由程式保證，不靠領導記得。
+ # 成功時吞掉 dk-brief-check 的 OK；失敗時把它的 FAIL 清單印出來再死，領導不用另外重跑一次。
+ check_out=$("$DK_ROOT/bin/dk-brief-check" 2>&1) || { printf '%s\n' "$check_out"; dk_die "dk-brief-check 沒過（上面那幾條 FAIL），先修 brief 再回來"; }
+ [ "$check_out" = OK ] || printf '%s\n' "$check_out"   # 成功時才會是 WARN；OK 不印，維持既有逐字比對測試不受影響
+ 
+ tier=$(dk_review_tier "$tier")
+ [ -n "$kinds" ] || kinds="$DK_REVIEW_KINDS"
+ use=$(dk_review_kinds "$kinds" dk-brief-review "brief-review") || exit 1
+ 
++constraints=$(dk_brief_constraints "$dir/brief.md")
+ aliases=$(dk_review_aliases "p1 p2 p3" "$use")
+ mkdir -p "$dir/briefs" "$dir/state"
+ for a in $aliases; do
+   sname="reviewer-$a"
+   dk_render "$DK_ROOT/templates/brief-reviewer-plan.md" "DISPLAY=$DK_DISPLAY" "REQUEST=$req" \
+-    "BRIEF=$dir/brief.md" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
++    "BRIEF=$dir/brief.md" "CONSTRAINTS=$constraints" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
+ done
+ dk_review_spawn "$use" "$aliases" "$tier" dk-brief-review brief-review
+diff --git a/.dkbo/bin/dk-review b/.dkbo/bin/dk-review
+index c319b0b..d36e610 100755
+--- a/.dkbo/bin/dk-review
++++ b/.dkbo/bin/dk-review
+@@ -20,18 +20,19 @@ if [ -z "$kinds" ] && [ "$task" = 1 ]; then kinds="$DK_REVIEW_KINDS"; fi
+ if [ -z "$kinds" ]; then
+   col=$(dk_brief_wave_review "$dir/brief.md" "$n")
+   case "$col" in
+     kinds:*) kinds="${col#kinds:}";;
+     skip:*)  dk_die "wave $n review column is '$col'; record it with: dk-process \"review $n skipped: ${col#skip: }\"";;
+     *)       kinds="$DK_REVIEW_KINDS";;
+   esac
+ fi
+ use=$(dk_review_kinds "$kinds" dk-review "review $n") || exit 1
+ members=$(dk_brief_wave_members "$dir/brief.md" "$n" | tr '\n' ' ' | sed 's/ $//')
++constraints=$(dk_brief_constraints "$dir/brief.md")
+ aliases=$(dk_review_aliases "a b c" "$use")
+ mkdir -p "$dir/briefs"
+ for a in $aliases; do
+   sname="reviewer-$a"
+   dk_render "$DK_ROOT/templates/brief-reviewer.md" "DISPLAY=$DK_DISPLAY" "WAVE=$n" "DIFF=$diff" "BRIEF=$dir/brief.md" \
+-    "MEMBERS=$members" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
++    "MEMBERS=$members" "CONSTRAINTS=$constraints" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
+ done
+ dk_review_spawn "$use" "$aliases" "$tier" dk-review "review $n"
+diff --git a/.dkbo/bin/dk-wave-open b/.dkbo/bin/dk-wave-open
+index 3f67946..c29ca5c 100755
+--- a/.dkbo/bin/dk-wave-open
++++ b/.dkbo/bin/dk-wave-open
+@@ -13,23 +13,25 @@ if [ "$live" -ne 0 ]; then
+     dk_die "計畫審查的 pane 還開著（$agents）：先逐個 dk-wave-close --agent <agent> 關掉，再 dk-task-new $DK_SHORT --gate1 過關卡①（見 .dkbo/skills/plan/SKILL.md 第 6 步）"
+   fi
+   dk_die "live panes remain ($live); run dk-wave-close first"
+ fi
+ [ -z "${DK_WAVE:-}" ] || dk_die "wave $DK_WAVE is open; run dk-wave-close first"
+ ! grep -q " wave-open $n " "$dir/process.md" || dk_die "wave $n was already opened (see process.md)"
+ brief="$dir/brief.md"
+ members=$(dk_brief_wave_members "$brief" "$n"); [ -n "$members" ] || dk_die "wave $n has no members in the 波次表 of $brief"
+ base=$(git -C "$DK_WORKTREE" rev-parse HEAD)
+ goal=$(dk_brief_section "$brief" "## 目標"); contract=$(dk_brief_section "$brief" "## 共用契約"); acc=$(dk_brief_section "$brief" "## 驗收標準")
++constraints=$(dk_brief_constraints "$brief")
+ peers=$(echo "$members" | tr '\n' ' ' | sed 's/ $//')
+ mkdir -p "$dir/briefs"
+ for m in $members; do m="${m%%(*}"
+   rows=$(dk_brief_waves "$brief" | awk -F'|' -v m="$m" -v n="$n" '$1==n && $3==m {printf "| %s | %s | %s | %s | %s | %s | %s |\n", $1,$2,$3,$4,$5,$6,$7}')
+   own=$(dk_brief_owners "$brief" | awk -F'|' -v m="$m" '$1==m {printf "| %s | %s | %s |\n", $1,$2,$3}')
+   [ -n "$own" ] || echo "dk-wave-open: $m has no row in 檔案所有權 (run dk-brief-check)" >&2
+   dk_render "$DK_ROOT/templates/brief-member.md" "DISPLAY=$DK_DISPLAY" "MEMBER=$m" "WAVE=$n" "BRIEF=$brief" "GOAL=$goal" \
++    "CONSTRAINTS=$constraints" \
+     "WAVE_ROWS=$rows" "OWNER_ROWS=$own" "CONTRACT=$contract" "ACCEPTANCE=$acc" "PEERS=$peers" > "$dir/briefs/$m.md"
+ done
+ dk_env_set DK_WAVE "$n"; dk_env_set DK_WAVE_STARTED "$(date +%s)"
+ dk_process "wave-open $n base ${base:0:7} members $peers"
+ "$DK_ROOT/bin/dk-watch" --ensure >/dev/null 2>&1 || true   # a pane just appeared; make sure the safety net is alive
+ echo "wave $n open (base ${base:0:7}); slices in $dir/briefs/"
+diff --git a/.dkbo/lib/brief.sh b/.dkbo/lib/brief.sh
+index 3077ec8..19d32f3 100644
+--- a/.dkbo/lib/brief.sh
++++ b/.dkbo/lib/brief.sh
+@@ -1,28 +1,43 @@
+ # shellcheck shell=bash
+ # Readers for brief.md. Needs common.sh and frontmatter.sh sourced first.
+ # Tables: rows start with '|'; the header row, '|---' separator rows and rows whose first cell starts with （範例） are dropped.
+ dk_brief_section() { # BRIEF "## heading prefix" → body lines until the next '## '
+   [ -f "$1" ] || { echo "dk: no brief at $1" >&2; return 1; }
+   awk -v h="$2" 'index($0, h)==1 {s=1; next} s && /^## / {exit} s {print}' "$1"
+ }
+ dk__brief_rows() { # BRIEF HEADING → data rows as trimmed "|"-joined cells (outer pipes removed)
+   [ -f "$1" ] || { echo "dk: no brief at $1" >&2; return 1; }
+-  dk_brief_section "$1" "$2" | awk -F'|' '/^\|/ && !/^\|[- |]*$/ {
+-    out=""; for (i=2; i<NF; i++) { f=$i; gsub(/^ +| +$/, "", f); out = out (i>2 ? "|" : "") f } print out }' \
++  # 欄位內容裡的字面管線在 markdown 裡寫成 \|（形狀／簽名欄最常見：正規表示式、shell pipe、
++  # 或是在描述某個回傳值本身用 | 分隔）。awk -F'|' 看不懂那個跳脫，會把一列切成多出來的欄，
++  # 後面每一欄跟著錯位 —— 而且不報錯。先把 \| 換成哨兵再切，切完還原。
++  # 還原刻意保留 \| 而不是還原成裸 |：輸出仍然是「以未跳脫的 | 分隔」，下游才切得回來，
++  # 而 dk-wave-open 會把這些欄位再拼回 markdown 表格，跳脫留著才是對的 markdown。
++  # 還原用 split 加字串串接而不是 gsub —— POSIX 沒有規定替換字串裡 \ 接非 & 字元的行為。
++  dk_brief_section "$1" "$2" | awk '/^\|/ && !/^\|[- |]*$/ {
++    line = $0; gsub(/\\\|/, SUBSEP, line); n = split(line, a, "|"); out = ""
++    for (i = 2; i < n; i++) {
++      f = a[i]; gsub(/^ +| +$/, "", f)
++      m = split(f, p, SUBSEP); f = p[1]; for (j = 2; j <= m; j++) f = f "\\|" p[j]
++      out = out (i > 2 ? "|" : "") f
++    } print out }' \
+     | tail -n +2 | grep -v '^（範例）' || true
+ }
+ dk_brief_owners() { dk__brief_rows "$1" "## 檔案所有權"; }   # member|globs|readonly
+ dk_brief_waves()  { dk__brief_rows "$1" "## 波次表"; }       # wave|type|member|what|tier|done|review
+ dk_brief_wave_members() { dk_brief_waves "$1" | awk -F'|' -v n="$2" '$1==n {print $3 "(" $5 ")"}'; }
+ dk_brief_wave_review()  { dk_brief_waves "$1" | awk -F'|' -v n="$2" '$1==n && $7!="" {print $7; exit}'; }
+ dk_brief_acceptance()   { [ -f "$1" ] || { echo "dk: no brief at $1" >&2; return 1; }; dk_brief_section "$1" "## 驗收標準" | grep -E '^- \[.\] ' || true; }
++# 橫切所有波的硬要求（版本下限、命名規則、平台要求）。段落不存在＝0.9.0 之前建立的 brief。
++dk_brief_constraints() { dk_brief_section "$1" "## 全域約束"; }
++# 契約|擁有者|消費者|形狀／簽名|變更流程。0.9.0 之前的 brief 這一段是自由文字，回空。
++dk_brief_interfaces() { dk__brief_rows "$1" "## 共用契約"; }
+ # 同一波的成員是同時 spawn 的，所以 group: review 的成員（qa）會在 dev 還在寫的時候就
+ # 讀到 worktree。panova2 的 paramleak 實跑：qa 07:27 對著寫到一半的 helper 收斂判定 AC5
+ # 沒過、發 [QUESTION]，然後停在那裡等到 07:39 才收到「你看到的是收斂前快照」。12 分鐘
+ # 空轉，外加一份假的驗收失敗。閘門不該是「延後 spawn」（qa 有一大段不依賴 dev 產出的
+ # 前置：起環境、測試帳號、探測腳本骨架），該是讓它知道自己在等誰。
+ dk_brief_wave_upstream() { # BRIEF WAVE → 這一波裡 group=dev 的成員短名，一行一個
+   local m r rf g
+   for m in $(dk_brief_wave_members "$1" "$2"); do
+     m="${m%%(*}"
+     r=$(dk_member_role "$m" 2>/dev/null) || continue
+diff --git a/.dkbo/templates/brief-member.md b/.dkbo/templates/brief-member.md
+index 861adcc..2aac79f 100644
+--- a/.dkbo/templates/brief-member.md
++++ b/.dkbo/templates/brief-member.md
+@@ -1,16 +1,19 @@
+ # {{DISPLAY}} — 給 {{MEMBER}} 的切片（波 {{WAVE}}）
+ 由 dk-wave-open 產生，只讀。完整 brief 在 {{BRIEF}}。
+ 
+ ## 目標
+ {{GOAL}}
+ 
++## 全域約束（全文）
++{{CONSTRAINTS}}
++
+ ## 你的波次
+ | 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |
+ |---|---|---|---|---|---|---|
+ {{WAVE_ROWS}}
+ 
+ ## 你的檔案所有權
+ | 成員 | 可改 | 只讀 |
+ |---|---|---|
+ {{OWNER_ROWS}}
+ 
+diff --git a/.dkbo/templates/brief-reviewer-plan.md b/.dkbo/templates/brief-reviewer-plan.md
+index 44a2aac..a6310d1 100644
+--- a/.dkbo/templates/brief-reviewer-plan.md
++++ b/.dkbo/templates/brief-reviewer-plan.md
+@@ -1,18 +1,21 @@
+ # {{DISPLAY}} — 計畫審查（reviewer 切片）
+ 你審的是**還沒開工的計畫**，不是程式碼，也不是差異包。只讀、不改任何檔（包含 brief）、
+ 不派工、不寫程式。意見只給領導（dk-msg leader），不要直接對任何人說。
+ 
+ ## 要讀的（就這兩份，依序）
+ 1. 需求原文 {{REQUEST}} —— 人講的原話，領導逐字抄下來的
+ 2. brief {{BRIEF}} —— 領導的轉換產物
+ 
++## 全域約束（全文）
++{{CONSTRAINTS}}
++
+ 你不需要讀專案程式碼。你要回答的是「這份計畫做出來會不會是人要的東西」，
+ 不是「這段碼寫得好不好」。每條意見都要指名 brief 的哪一段或波次表的哪一列。
+ 
+ ## 報告寫到 {{REPORT}}，格式固定
+ ## 需求覆蓋
+ （逐條對照 request：人要的每一件事，brief 有沒有對應的驗收標準？
+   漏的列出來，指明 request 的哪一段沒有被接住）
+ ## 驗收標準可驗證性
+ （逐條 AC：能不能明確判定過或不過？不能的指出來，並給一個可驗證的改寫）
+ ## 檔案所有權
+diff --git a/.dkbo/templates/brief-reviewer.md b/.dkbo/templates/brief-reviewer.md
+index b0266ce..5cad000 100644
+--- a/.dkbo/templates/brief-reviewer.md
++++ b/.dkbo/templates/brief-reviewer.md
+@@ -1,18 +1,21 @@
+ # {{DISPLAY}} — 波 {{WAVE}} 審查（reviewer 切片）
+ 你是本波的 reviewer：只讀、不改碼、不跑會寫入的指令。意見只給領導（`dk-msg leader`），不直接對 dev 說。
+ 
+ ## 要讀的
+ 1. 差異包 {{DIFF}}（commit 清單、stat、-U10 diff；含未 commit 的工作樹）
+ 2. 完整 brief {{BRIEF}}（驗收標準、共用契約、所有權）
+ 3. 本波成員：{{MEMBERS}}
+ 
++## 全域約束（全文，逐條當硬要求檢查）
++{{CONSTRAINTS}}
++
+ ## 報告寫到 {{REPORT}}，格式固定
+ ## 規格合規
+ （逐條驗收標準 ✅/❌，缺漏寫明）
+ ## Important
+ （會出錯、違反 brief 或契約、越界改檔；每條附 file:line）
+ ## Minor
+ （風格、可讀性；每條附 file:line）
+ 
+ ## 完成
+ state 檔 `status: done`，然後 `dk-msg leader "[DONE] review 波 {{WAVE}}: Important N 條，見 report"`。
+diff --git a/.dkbo/templates/brief.md b/.dkbo/templates/brief.md
+index 3381723..83c6004 100644
+--- a/.dkbo/templates/brief.md
++++ b/.dkbo/templates/brief.md
+@@ -1,23 +1,29 @@
+ # {{DISPLAY}}
+ 來源：{{SOURCE}}   需求原文：request.md
+ 分支：{{BRANCH}}   worktree：{{WORKTREE}}
+ 
+ ## 目標（≤3 行）
+ 
++## 全域約束
++（橫切所有波的硬要求，一行一條，值逐字：版本下限、命名與文案規則、平台要求。沒有就寫「無」）
++
+ ## 驗收標準
+ - [ ] AC1
+ 
+ ## 檔案所有權
+ 獨佔資源欄填同一波內不能共用的執行環境（`db`、`port:3000`、`docker`…），逗號分隔，沒有就留空或 `—`。worktree 隔離檔案，不隔離執行環境。
+ | 成員 | 可改 | 只讀 | 獨佔資源 |
+ |---|---|---|---|
+ | （範例）backend | src/api/**, db/** | src/web/** | db, port:3000 |
+ 
+ ## 共用契約
+-（誰定稿、放哪、變更流程）
++（一列一個契約。擁有者填一個成員短名；消費者填一個或多個、逗號分隔；沒有就填 —。完全沒有契約時只留表頭）
++| 契約 | 擁有者 | 消費者 | 形狀／簽名 | 變更流程 |
++|---|---|---|---|---|
++| （範例）login API | backend | frontend, qa | `POST /login {user,pw} → {token,exp}` | 動它要先 ESCALATE |
+ 
+ ## 波次表
+ 一列一位成員；同一波的列相鄰、波號從 1 連續。審查欄只填在該波第一列：`預設`（用 settings.env 的 kind）、`skip: <理由>`（純文件波）、`kinds: <k1> [k2] [k3]`。
+ | 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |
+ |---|---|---|---|---|---|---|
+ | （範例）1 | 實作 | backend | POST /login | M | 測試過 | 預設 |
+diff --git a/tests/helpers.bash b/tests/helpers.bash
+index 0fe70a8..c11bb91 100644
+--- a/tests/helpers.bash
++++ b/tests/helpers.bash
+@@ -1,32 +1,39 @@
+ # shellcheck shell=bash
+ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ 
+ setup_project() {
++  # 繼承來的 DK_* 一律洗掉，再設 harness 自己要的那兩個。
++  # common.sh 幾乎每個變數都寫成 ${DK_X:-<預設>}，繼承值優先 —— 只覆寫 DK_ROOT 不夠：
++  # DK_PROJECT_ROOT 會留著指向呼叫者的 repo，而 dk-task-new 是 git -C "$DK_PROJECT_ROOT"
++  # worktree add。2026-09-19 領導在自己 session 跑 gate c，就這樣在真 repo 建了 7 個
++  # worktree 與 8 個分支；員工手動跑全綠，因為員工的 shell 沒 source 過 common.sh。
++  # 逐一列舉會隨新變數再度過時，所以整片清 —— 回歸測試在 tests/unit/30_isolation.bats。
++  local v
++  for v in ${!DK_@}; do unset "$v"; done
+   PROJECT="$(mktemp -d)"
+   cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
+   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
+   git -C "$PROJECT" init -q
+   git -C "$PROJECT" config user.name t; git -C "$PROJECT" config user.email t@t
+   git -C "$PROJECT" commit -q --allow-empty -m init
+   git -C "$PROJECT" branch -M main
+   HERDR_STUB_LOG="$PROJECT/.herdr-calls.log"; : > "$HERDR_STUB_LOG"
+   HERDR_STUB_RESPONSES="$PROJECT/.herdr-responses"
+   cp -r "$REPO_ROOT/tests/stub/responses" "$HERDR_STUB_RESPONSES"
+   WORKTREE_PATH="$PROJECT/.worktrees/login"
+   sed -i "s#__WORKTREE__#$WORKTREE_PATH#; s#__PROJECT__#$PROJECT#" "$HERDR_STUB_RESPONSES"/*.json
+   export HERDR_STUB_LOG HERDR_STUB_RESPONSES PROJECT WORKTREE_PATH
+   export PATH="$REPO_ROOT/tests/stub:$REPO_ROOT/tests/stub/cli:$PROJECT/.dkbo/bin:$PATH"
+   export HERDR_ENV=1 HERDR_PANE_ID=wB:p1 HERDR_WORKSPACE_ID=wB HERDR_TAB_ID=wB:t1
+   export DK_ROOT="$PROJECT/.dkbo"
+   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
+-  unset DK_TASK_DIR DK_ROLE DK_AGENT DK_LEADER DK_ISOLATED
+   cd "$PROJECT"
+ }
+ teardown_project() {
+   # --ensure 起的是背景常駐行程（輪詢一條、訂閱一條）。留著的話它們會在後面的測試裡
+   # 繼續消耗 pid 並寫檔 —— 兩個認 pid 的 --ensure 測試就是這樣間歇性紅的。
+   local f p v
+   for f in "$DK_ROOT"/tasks/*/.task.env; do
+     [ -f "$f" ] || continue
+     for v in DK_WATCH_PID DK_EVENTS_PID; do
+       p=$(sed -n "s/^$v=\"\([0-9]*\)\"$/\1/p" "$f")
+@@ -70,34 +77,39 @@ E
+ }
+ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
+   cat > "$1/brief.md" <<'B'
+ # 使用者登入
+ 來源：test
+ 分支：dk/login   worktree：/tmp/x
+ 
+ ## 目標（≤3 行）
+ 登入 API 與表單。
+ 
++## 全域約束
++bash 3.2+；不得使用 bash 4 語法
++
+ ## 驗收標準
+ - [ ] POST /login 空密碼回 400
+ - [ ] renderLogin 產出 user/pass 欄位
+ 
+ ## 檔案所有權
+ | 成員 | 可改 | 只讀 |
+ |---|---|---|
+ | （範例）backend | src/api/**, db/** | src/web/** |
+ | backend | src/api/** | src/web/** |
+ | frontend-cart | src/web/** | src/api/types.ts |
+ | qa | tests/** | — |
+ 
+ ## 共用契約
+-無
++| 契約 | 擁有者 | 消費者 | 形狀／簽名 | 變更流程 |
++|---|---|---|---|---|
++| login API | backend | frontend-cart, qa | POST /login {user,pw} → {token} | 動它要先 ESCALATE |
+ 
+ ## 波次表
+ | 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |
+ |---|---|---|---|---|---|---|
+ | （範例）1 | 實作 | backend | API | M | 測試過 | 預設 |
+ | 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |
+ | 1 | 實作 | qa | 驗 API | S | 全過 | |
+ | 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |
+ B
+ }
+diff --git a/tests/unit/15_brief_lib.bats b/tests/unit/15_brief_lib.bats
+index 42e66dc..b2771d5 100644
+--- a/tests/unit/15_brief_lib.bats
++++ b/tests/unit/15_brief_lib.bats
+@@ -9,29 +9,54 @@ teardown() { teardown_project; }
+ }
+ @test "waves: members per wave with tier, review column of the wave" {
+   [ "$(dk_brief_wave_members "$b" 1 | tr '\n' ' ')" = "backend(M) qa(S) " ]
+   [ "$(dk_brief_wave_members "$b" 2)" = "frontend-cart(S)" ]
+   [ -z "$(dk_brief_wave_members "$b" 3)" ]
+   [ "$(dk_brief_wave_review "$b" 1)" = "預設" ]; [ "$(dk_brief_wave_review "$b" 2)" = "kinds: claude codex" ]
+   [ "$(dk_brief_waves "$b" | wc -l)" -eq 3 ]
+ }
+ @test "sections and acceptance" {
+   [ "$(dk_brief_section "$b" "## 目標" | tr -d '\n')" = "登入 API 與表單。" ]
+-  [ "$(dk_brief_section "$b" "## 共用契約" | tr -d '\n')" = "無" ]
++  [ "$(dk_brief_section "$b" "## 共用契約" | grep -c '^|')" = 3 ]
+   [ "$(dk_brief_acceptance "$b" | wc -l)" -eq 2 ]
+ }
+ @test "member → role/alias/group" {
+   [ "$(dk_member_role frontend-cart)" = "frontend cart" ]
+   [ "$(dk_member_role qa)" = "qa " ]
+   run dk_member_role designer; [ "$status" -eq 1 ]
+   [ "$(dk_member_group qa)" = review ]; [ "$(dk_member_group reviewer-a)" = review ]; [ "$(dk_member_group backend)" = dev ]
+ }
+ @test "templates: brief has 審查 column and example rows; member/report templates carry tokens; state has report line" {
+   grep -q '| 審查 |' "$DK_ROOT/templates/brief.md"; grep -q '^| （範例）1 |' "$DK_ROOT/templates/brief.md"
+-  for t in MEMBER WAVE WAVE_ROWS OWNER_ROWS CONTRACT ACCEPTANCE PEERS BRIEF GOAL; do grep -q "{{$t}}" "$DK_ROOT/templates/brief-member.md"; done
++  for t in MEMBER WAVE WAVE_ROWS OWNER_ROWS CONTRACT CONSTRAINTS ACCEPTANCE PEERS BRIEF GOAL; do grep -q "{{$t}}" "$DK_ROOT/templates/brief-member.md"; done
+   grep -q '^## 測試' "$DK_ROOT/templates/report-employee.md"; grep -q '{{AGENT}}' "$DK_ROOT/templates/report-employee.md"
+   grep -q '^report:' "$DK_ROOT/templates/state.md"
+ }
+ @test "readers fail loudly on a missing brief" {
+   run dk_brief_owners /nonexistent/brief.md; [ "$status" -eq 1 ]; [[ "$output" == *"no brief at"* ]]
+   run dk_brief_acceptance /nonexistent/brief.md; [ "$status" -eq 1 ]
+ }
++
++@test "constraints: 段落讀得到，範本帶著它" {
++  [ "$(dk_brief_constraints "$b" | grep -v '^[[:space:]]*$' | tr -d '\n')" = "bash 3.2+；不得使用 bash 4 語法" ]
++  grep -q '^## 全域約束$' "$DK_ROOT/templates/brief.md"
++}
++
++@test "interfaces: 共用契約表格的資料列讀得到" {
++  run dk_brief_interfaces "$b"; [ "$status" -eq 0 ]
++  [ "${#lines[@]}" -eq 1 ]
++  [ "${lines[0]}" = "login API|backend|frontend-cart, qa|POST /login {user,pw} → {token}|動它要先 ESCALATE" ]
++}
++
++@test "rows: 欄內的 \| 是字面管線，不切欄" {
++  # 鑑別點是 \| 兩側的空白：錯切之後每一段都會各自被 trim 一次，\| 後面的空白被吃掉。
++  # （純看拼回來的字串分不出好壞 —— 錯切的碎片用 | 接回去剛好還原成同一個字串。）
++  cat > "$d/t.md" <<'T'
++## 共用契約
++| 契約 | 擁有者 | 消費者 | 形狀／簽名 | 變更流程 |
++|---|---|---|---|---|
++| a \| b | backend | qa | x \| y | 動它要先 ESCALATE |
++T
++  run dk_brief_interfaces "$d/t.md"; [ "$status" -eq 0 ]
++  [ "${#lines[@]}" -eq 1 ]
++  [ "${lines[0]}" = 'a \| b|backend|qa|x \| y|動它要先 ESCALATE' ]
++}
+diff --git a/tests/unit/16_brief_check.bats b/tests/unit/16_brief_check.bats
+index 9391adb..c32b2f8 100644
+--- a/tests/unit/16_brief_check.bats
++++ b/tests/unit/16_brief_check.bats
+@@ -21,23 +21,34 @@ teardown() { teardown_project; }
+   run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"可改欄為空"* ]]
+ }
+ @test "wave table: tier, contiguity, review column, unknown kind, missing review" {
+   sed -i 's#| S | 全過 | |#| X | 全過 | |#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"難度只能 S/M/L"* ]]
+   fixture_brief "$d"; sed -i 's#^| 2 | 實作 | frontend-cart#| 3 | 實作 | frontend-cart#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"波號不連續"* ]]
+   fixture_brief "$d"; sed -i 's#| 測試過 | 預設 |#| 測試過 | always |#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"審查欄須為"* ]]
+   fixture_brief "$d"; sed -i 's#kinds: claude codex#kinds: claude nope#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"未知 kind nope"* ]]
+   fixture_brief "$d"; sed -i 's#kinds: claude codex#kinds: claude codex agy claude#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"kinds 須 1 至 3 個"* ]]
+   fixture_brief "$d"; sed -i 's#| 測試過 | 預設 |#| 測試過 | |#' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 波次表 1: 審查欄未填"* ]]
+ }
++@test "全域約束: 段落不存在只警告，段落在但沒填要擋" {
++  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
++  sed -i '/^## 全域約束$/,+1d' "$b"        # 舊 brief：整段不存在
++  run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" == *"WARN 全域約束"* ]]; [ "$output" != OK ]
++  fixture_brief "$d"                        # 新 brief：段落在，只剩指引行
++  sed -i 's/^bash 3.2+；不得使用 bash 4 語法$/（橫切所有波的硬要求）/' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 全域約束"* ]]; [[ "$output" == *"1 FAIL"* ]]
++}
+ @test "acceptance and contract must be present" {
+   sed -i '/^- \[ \] /d' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 驗收標準"* ]]
+-  fixture_brief "$d"; sed -i 's/^無$/（誰定稿、放哪、變更流程）/' "$b"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 共用契約"* ]]
++  # 表格化之後「段落為空」＝連表頭都沒有；只留指引行也算空
++  fixture_brief "$d"; sed -i '/^| /d; /^|---|---|---|---|---|$/d' "$b"
++  sed -i 's/^## 共用契約$/## 共用契約\n（誰定稿、放哪、變更流程）/' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 共用契約"* ]]
+ }
+ @test "more dev members than DK_TAB1_SLOTS in one wave is a WARN, exit 0" {
+   for m in a b c d; do printf '| backend-%s | db/%s/** | — |\n' "$m" "$m" | sed -i '/^| qa | tests/r /dev/stdin' "$b"; done
+   for m in a b c d; do printf '| 1 | 實作 | backend-%s | 表 | S | 過 | |\n' "$m" | sed -i '/^| 1 | 實作 | qa/r /dev/stdin' "$b"; done   # keep wave 1 rows contiguous
+   run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" == *"WARN 波次表 1: dev 成員 5 位超過 tab 1 的 4 格"* ]]; [[ "$output" != OK ]]
+   echo 'DK_TAB1_SLOTS="6"' >> "$DK_ROOT/settings.env"; run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+ }
+ @test "dies cleanly without a bound task or brief" {
+   rm "$DK_ROOT/.sessions/wB:p1"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
+   run dk-brief-check /nonexistent.md; [ "$status" -eq 1 ]; [[ "$output" == *"no brief"* ]]
+@@ -52,10 +63,38 @@ teardown() { teardown_project; }
+   [ "$status" -eq 1 ]; [[ "$output" == *"獨佔資源"* ]]; [[ "$output" == *"db"* ]]
+ }
+ @test "不同波宣告同一個獨佔資源是可以的" {
+   sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db |#' "$b"
+   sed -i 's#^| frontend-cart | src/web/\*\* | src/api/types.ts |$#| frontend-cart | src/web/** | src/api/types.ts | db |#' "$b"
+   run dk-brief-check "$b"; [ "$status" -eq 0 ]   # backend 在波 1、frontend-cart 在波 2
+ }
+ @test "沒有獨佔資源欄的舊 brief 照常通過" {
+   run dk-brief-check "$b"; [ "$status" -eq 0 ]
+ }
++
++@test "共用契約: 表格的擁有者與消費者都要在所有權表" {
++  sed -i 's/^| login API | backend |/| login API | nobody |/' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]
++  [[ "$output" == *"FAIL 共用契約 login API: 擁有者 nobody 不在檔案所有權表"* ]]
++  fixture_brief "$d"; sed -i 's/frontend-cart, qa/frontend-cart, ghost/' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"消費者 ghost 不在檔案所有權表"* ]]
++}
++@test "共用契約: 只有表頭是合法的「無契約」，自由文字只警告" {
++  sed -i '/^| login API |/d' "$b"            # 只留表頭
++  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
++  fixture_brief "$d"
++  sed -i '/^| 契約 | 擁有者 |/d; /^|---|---|---|---|---|$/d; /^| login API |/d' "$b"
++  sed -i 's/^## 共用契約$/## 共用契約\n無/' "$b"
++  run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" == *"WARN 共用契約"* ]]
++}
++
++@test "共用契約: 欄內 \| 不錯位（形狀欄與契約欄各一），裸管線要擋" {
++  # 形狀欄寫 \| 很常見：描述回傳格式、正規表示式、shell pipe
++  sed -i 's#POST /login {user,pw} → {token}#每列 `契約\\|擁有者\\|消費者`#' "$b"
++  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
++  # \| 在更前面的欄位時，錯位會直接汙染擁有者／消費者判定
++  fixture_brief "$d"; sed -i 's#^| login API |#| login\\|API |#' "$b"
++  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
++  # 裸管線在 markdown 裡就是欄位分隔，切出第六欄 —— 要擋，不能靜默錯位
++  fixture_brief "$d"; sed -i 's#POST /login {user,pw} → {token}#契約|擁有者#' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"欄數"* ]]
++}
+diff --git a/tests/unit/18_wave_open.bats b/tests/unit/18_wave_open.bats
+index 1d8cbfc..c18051f 100644
+--- a/tests/unit/18_wave_open.bats
++++ b/tests/unit/18_wave_open.bats
+@@ -5,21 +5,21 @@ teardown() { teardown_project; }
+ 
+ @test "wave-open sets DK_WAVE, records base, renders one slice per member" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]
+   grep -q '^DK_WAVE="1"$' "$d/.task.env"
+   sha=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+   grep -q " wave-open 1 base $sha members backend(M) qa(S)$" "$d/process.md"
+   [ -f "$d/briefs/backend.md" ]; [ -f "$d/briefs/qa.md" ]; [ ! -f "$d/briefs/frontend-cart.md" ]
+   grep -q '^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$' "$d/briefs/backend.md"
+   ! grep -q 'frontend-cart |' "$d/briefs/backend.md"
+   grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; ! grep -q '^| qa |' "$d/briefs/backend.md"
+-  grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^無$' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
++  grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^| login API | backend | frontend-cart, qa |' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
+   grep -q "$d/brief.md" "$d/briefs/backend.md"; grep -q '登入 API 與表單' "$d/briefs/qa.md"
+ }
+ @test "refuses a second open, an open with live panes, and a wave without members" {
+   dk-wave-open 1 >/dev/null
+   run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"wave 1 is open"* ]]
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]
+   echo "login-qa wC:p3 0 review 1 1" > "$d/.panes"
+   run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"live panes"* ]]
+   : > "$d/.panes"; run dk-wave-open 9; [ "$status" -eq 1 ]; [[ "$output" == *"no members"* ]]
+diff --git a/tests/unit/29_constraints.bats b/tests/unit/29_constraints.bats
+new file mode 100644
+index 0000000..487203a
+--- /dev/null
++++ b/tests/unit/29_constraints.bats
+@@ -0,0 +1,20 @@
++load ../helpers
++setup() { setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"; }
++teardown() { teardown_project; }
++
++@test "全域約束進成員切片" {
++  run dk-wave-open 1; [ "$status" -eq 0 ]
++  grep -q '^## 全域約束（全文）$' "$d/briefs/backend.md"
++  grep -q 'bash 3.2+' "$d/briefs/backend.md"
++  grep -q 'bash 3.2+' "$d/briefs/qa.md"
++}
++@test "全域約束進波審查切片" {
++  dk-wave-open 1 >/dev/null; mkdir -p "$d/waves"; echo diff > "$d/waves/1.diff"
++  run dk-review 1; [ "$status" -eq 0 ]
++  grep -q 'bash 3.2+' "$d/briefs/reviewer-a.md"
++}
++@test "全域約束進計畫審查切片" {
++  printf '把登入做出來\n（原文從這裡開始）\n人的原話在這裡\n' > "$d/request.md"
++  run dk-brief-review; [ "$status" -eq 0 ]
++  grep -q 'bash 3.2+' "$d/briefs/reviewer-p1.md"
++}
+diff --git a/tests/unit/30_isolation.bats b/tests/unit/30_isolation.bats
+new file mode 100644
+index 0000000..7a85097
+--- /dev/null
++++ b/tests/unit/30_isolation.bats
+@@ -0,0 +1,37 @@
++load ../helpers
++
++# 事故回放（2026-09-19）：領導 session 的 shell source 過 common.sh，所以環境裡帶著
++# DK_PROJECT_ROOT；helpers.bash 當時只覆寫 DK_ROOT、沒清掉繼承來的 DK_*，而 common.sh:5
++# 是 ${DK_PROJECT_ROOT:-…} —— 繼承值優先。結果同一份測試，誰跑決定它動哪個 repo：
++# 員工手動跑全綠（shell 沒 source 過 common.sh），領導跑就在真 repo 建了 7 個 worktree。
++# 這一條把「帶著領導的環境變數」做成前提，setup_project 必須把它洗乾淨。
++setup() {
++  BAIT="$(mktemp -d)"
++  git -C "$BAIT" init -q
++  git -C "$BAIT" config user.name t; git -C "$BAIT" config user.email t@t
++  git -C "$BAIT" commit -q --allow-empty -m init
++  BAIT_BEFORE="$(git -C "$BAIT" worktree list | wc -l):$(git -C "$BAIT" branch | wc -l)"
++  # 領導環境的三個代表：會寫到別的 repo、會改 worktree 落點、會被 gate c 執行
++  export DK_PROJECT_ROOT="$BAIT" DK_WORKTREE_DIR="$BAIT/wt" DK_TEST_CMD="touch $BAIT/pwned"
++  setup_project
++}
++teardown() { teardown_project; rm -rf "$BAIT"; }
++
++@test "setup_project 洗掉繼承來的 DK_*，測試不會碰到別的 repo" {
++  [ -z "${DK_PROJECT_ROOT:-}" ]; [ -z "${DK_WORKTREE_DIR:-}" ]; [ -z "${DK_TEST_CMD:-}" ]
++  run dk-task-new login 使用者登入; [ "$status" -eq 0 ]
++  # 正面：worktree 真的建出來了，而且落在測試專案裡（不是靜默沒做事）
++  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
++  # 反面：誘餌 repo 一個 worktree、一個分支、一個檔案都沒多
++  [ "$(git -C "$BAIT" worktree list | wc -l):$(git -C "$BAIT" branch | wc -l)" = "$BAIT_BEFORE" ]
++  refute_grep -q . <(git -C "$BAIT" status --porcelain)
++  [ ! -e "$BAIT/pwned" ]; [ ! -e "$BAIT/wt" ]; [ ! -e "$BAIT/.worktrees" ]
++}
++
++@test "setup_project 之後環境裡只剩 harness 自己設的 DK_*" {
++  leaked=""
++  for v in $(compgen -v | grep '^DK_' || true); do
++    case "$v" in DK_ROOT|DK_NO_WATCH) ;; *) leaked="$leaked $v";; esac
++  done
++  [ -z "$leaked" ] || { echo "洩漏的變數:$leaked" >&2; false; }
++}

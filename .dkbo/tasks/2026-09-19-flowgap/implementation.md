@@ -485,6 +485,15 @@ Expected: shellcheck 無輸出、bats 全綠。`15_brief_lib.bats` 有一條在�
   printf '# backend 報告\n## 測試\n### 紅\nFAIL\n' > "$d/state/backend.report.md"
   run dk-wave-close; [ "$status" -eq 1 ]
   [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
+  # 兩節都在、但各只有一行（沒有輸出）：這正是 AC5 要擋的
+  printf '# backend 報告\n## 測試\n### 紅\n跑過了會失敗\n### 綠\n跑過了會過\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"兩行以上"* ]]
+  # 指令列＋輸出：放行
+  printf '# backend 報告\n## 測試\n### 紅\n$ npm test -- login\nFAIL not defined\n### 綠\n$ npm test -- login\n3 passed\n' > "$d/state/backend.report.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}
+@test "gate b: 不適用 是單行豁免" {
   printf '# backend 報告\n## 測試\n### 紅\n不適用: 純文件波\n### 綠\n不適用: 純文件波\n' > "$d/state/backend.report.md"
   run dk-wave-close; [ "$status" -eq 0 ]
 }
@@ -512,12 +521,19 @@ Expected: FAIL，缺小節的兩條拿到 exit 0（目前只驗 `## 測試` 非�
       t && /^## /{exit}
       t && /^### 紅/{s="r"; next}
       t && /^### 綠/{s="g"; next}
-      t && s!="" && /^[^[:space:]（]/{have[s]=1}
-      END{exit !(have["r"] && have["g"])}' "$rf"; then
-      problems="$problems\n  report $rf 的 '## 測試' 缺 '### 紅' 或 '### 綠' 的證據（沒有測試的波兩節都寫「不適用: <理由>」）"
+      t && s!="" && /^[^[:space:]（]/{
+        n[s]++
+        if (n[s]==1 && $0 ~ /^不適用:/) ok[s]=1   # 沒有測試的波：首行就是豁免宣告
+        if (n[s]>=2) ok[s]=1                      # 指令列＋輸出，至少兩行
+      }
+      END{exit !(ok["r"] && ok["g"])}' "$rf"; then
+      problems="$problems\n  report $rf 的 '## 測試' 缺證據：'### 紅' 與 '### 綠' 各要指令列與輸出兩行以上（沒有測試的波首行寫「不適用: <理由>」）"
 ```
 
-`不適用: <理由>` 是普通的非空行，所以自動被算成證據 —— 不需要為它寫特例分支。
+為什麼是「兩行」而不是比對 `$` 開頭的指令列：人的裁定要的是「命令列與輸出」，而要求字面上的
+`$` 前綴等於規定員工怎麼貼終端機內容，換個 shell 或換個貼法就誤擋。「至少兩行」抓得到同一件事
+（一行指令、一行輸出），又不綁死格式。`不適用: <理由>` 只有一行，所以要一條明確的豁免分支 ——
+它不能像「非空即算數」那樣被順便接住。
 
 - [ ] **Step 4: 改範本**
 
@@ -533,9 +549,9 @@ Expected: FAIL，缺小節的兩條拿到 exit 0（目前只驗 `## 測試` 非�
 ```markdown
 ## 測試
 ### 紅
-（先寫的那條測試、跑它的指令、失敗輸出。沒有測試的波寫「不適用: <理由>」）
+（先寫的那條測試：跑它的指令一行、失敗輸出一行，至少兩行。沒有測試的波首行寫「不適用: <理由>」）
 ### 綠
-（實作之後同一條指令的通過輸出。沒有測試的波寫「不適用: <理由>」）
+（實作之後同一條指令一行、通過輸出一行，至少兩行。沒有測試的波首行寫「不適用: <理由>」）
 ```
 
 - [ ] **Step 5: 跑測試確認通過**
@@ -574,6 +590,9 @@ teardown() { teardown_project; }
 @test "除錯方法檔存在，PROTOCOL 指得到它" {
   [ -f "$DK_ROOT/methods/debugging.md" ]
   grep -q 'methods/debugging.md' "$DK_ROOT/PROTOCOL.md"
+}
+@test "PROTOCOL 的 FIXED 列要求附根因（AC16）" {
+  grep -qE '^\| FIXED \|.*根因' "$DK_ROOT/PROTOCOL.md"
 }
 @test "方法檔講方法不講次數上限" {
   grep -q '重現' "$DK_ROOT/methods/debugging.md"
@@ -1094,8 +1113,8 @@ Expected: bats 全綠、shellcheck 無輸出
 
 | 波 | Task | 對應驗收標準 |
 |---|---|---|
-| 1 | 1–5 | AC1–AC4 |
-| 2 | 6–8 | AC5–AC8 |
+| 1 | 1–5 | AC1–AC4、AC15 |
+| 2 | 6–8 | AC5–AC8、AC16 |
 | 3 | 9–13 | AC9–AC14 |
 
 `dk-wave-close` 會在每一波結束時於 worktree 內自己 commit，所以計畫裡沒有逐 task 的 commit 步驟 ——

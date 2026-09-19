@@ -1,0 +1,369 @@
+# 流程缺口補齊 — wave 2 since ae24f02 — 2026-09-19T17:26
+# files changed: 12 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/PROTOCOL.md                  |  4 ++--
+ .dkbo/bin/dk-wave-close            | 14 ++++++++++++--
+ .dkbo/lib/prompt.sh                |  2 +-
+ .dkbo/methods/debugging.md         | 28 ++++++++++++++++++++++++++++
+ .dkbo/roles/backend.md             |  1 +
+ .dkbo/roles/frontend.md            |  1 +
+ .dkbo/roles/it.md                  |  1 +
+ .dkbo/roles/qa.md                  |  1 +
+ .dkbo/templates/report-employee.md |  5 ++++-
+ tests/unit/07_spawn.bats           |  6 ++++++
+ tests/unit/08_wave_close.bats      | 30 +++++++++++++++++++++++++++---
+ tests/unit/31_methods.bats         | 16 ++++++++++++++++
+ 12 files changed, 100 insertions(+), 9 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/PROTOCOL.md b/.dkbo/PROTOCOL.md
+index 32e8fed..b854f94 100644
+--- a/.dkbo/PROTOCOL.md
++++ b/.dkbo/PROTOCOL.md
+@@ -3,22 +3,22 @@
+ 所有訊息一律用 `$DK_ROOT/bin/dk-msg <對象> "[類型] 內文"`（下文簡寫 dk-msg；`DK_ROOT` 是你 pane 的環境變數）。腳本補寄件人、時間，寫進 messages.log，並等對方閒置才送。內文一到三句、≤200 字元，細節寫在你的 state 或 report 檔並指路，不貼程式碼。對象可寫 `leader`，也可以只寫角色短名（`reviewer-a`、`qa`），腳本會補上任務前綴；名字在 herdr 查不到時自動改走那個 pane 的 id。你不必自己去查註冊名，但送不到仍會回非零。
+ 
+ ## 你要讀的
+ 首段提示指向你的切片 `tasks/<t>/briefs/<你的 state 名>.md`（你的波次列、所有權、共用契約與驗收標準全文、同波成員）。完整 `brief.md` 仍可讀，但以切片為準；切片沒寫的所有權就不是你的。
+ 
+ ## 類型
+ | 類型 | 方向 | 何時 |
+ |---|---|---|
+ | TASK | 領導→員工 | 補充派工、要求補 report、請 reviewer 複看 |
+ | DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done`、report 已寫好。dev 送給領導的這一則只落盤，見下 |
+-| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report |
+-| FIXED | 員工→員工、dev→領導 | 修好了，請重驗。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
++| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report。收到 BUG 先讀 `$DK_ROOT/methods/debugging.md` 再動手 |
++| FIXED | 員工→員工、dev→領導 | 修好了，請重驗，**內文帶一句根因**。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
+ | QUESTION / ANSWER | 任意 | 釐清介面、契約 |
+ | ESCALATE | 員工→領導 | 需要決策、想動不屬於自己的檔、修一次未好、上下文吃緊（寫 `[ESCALATE] context`）、碰到停止條件 |
+ | DECISION | 領導→員工 | 決策結果 |
+ | STOP | 領導→員工 | 停手，寫 state 收尾 |
+ 
+ `[BLOCKED]`、`[LIMIT]` 與 `[TIMEOUT]` 由 dk-watch 直接推給領導，員工不用送。`[BLOCKED]` 是卡在審批（等人按一下），`[LIMIT]` 是撞到額度（該 kind 已熔斷），兩者的差別決定領導該去按審批還是該換人 —— 不要把它們當成同一件事。
+ 
+ **dev 的 `[DONE]` 只寫進 messages.log，不會叫醒領導。** 領導改由 dk-watch 在本波 dev 全員完成時收到一則聚合訊息 —— 每一則送達都是把領導的整個 context 重跑一輪，四人波四次，而領導在收齊之前也做不了下一步。你照常送，指令不變。兩個後果要記得：
+ 
+ 1. **state 還不是 `status: done` 就送，dk-msg 會當場退回（exit 2）。** 聚合看的是 state 檔不是你的訊息 —— state 沒寫好，這一波會靜悄悄卡到整波逾時才有人吭聲。先寫 state 與 report，再送 `[DONE]`。
+diff --git a/.dkbo/bin/dk-wave-close b/.dkbo/bin/dk-wave-close
+index bf08ba2..3192f43 100755
+--- a/.dkbo/bin/dk-wave-close
++++ b/.dkbo/bin/dk-wave-close
+@@ -43,22 +43,32 @@ if [ "$legacy" = 0 ]; then
+     if [ -n "$vline" ]; then
+       for al in $(grep -E "^[^ ]+ review $n spawned " "$dir/process.md" | tail -1 | grep -oE 'reviewer-[a-z]' | sed 's/reviewer-//' | sort -u); do
+         case "$vline" in *"$al:"*) ;; *) problems="$problems\n  review $n verdict does not account for reviewer $al (record its result, or '$al: skipped (<理由>)')";; esac
+       done
+     fi
+   fi
+   while read -r agent _pane _epoch group _; do   # gate b: dev reports carry a filled ## 測試
+     [ "$group" = dev ] || continue
+     sname="${agent#"$DK_SHORT"-}"; rf="$dir/state/$sname.report.md"
+     if [ ! -f "$rf" ]; then problems="$problems\n  no report $rf (dk-msg $agent \"[TASK] 補 report 測試段\")"
+-    elif ! awk '/^## 測試/{t=1; next} t && /^## /{exit} t && /^[^[:space:]（]/{ok=1} END{exit !ok}' "$rf"; then
+-      problems="$problems\n  report $rf lacks content under '## 測試'"
++    elif ! awk '
++      /^## 測試/{t=1; next}
++      t && /^## /{exit}
++      t && /^### 紅/{s="r"; next}
++      t && /^### 綠/{s="g"; next}
++      t && s!="" && /^[^[:space:]（]/{
++        n[s]++
++        if (n[s]==1 && $0 ~ /^不適用:/) ok[s]=1   # 沒有測試的波：首行就是豁免宣告
++        if (n[s]>=2) ok[s]=1                      # 指令列＋輸出，至少兩行
++      }
++      END{exit !(ok["r"] && ok["g"])}' "$rf"; then
++      problems="$problems\n  report $rf 的 '## 測試' 缺證據：'### 紅' 與 '### 綠' 各要指令列與輸出兩行以上（沒有測試的波首行寫「不適用: <理由>」）"
+     fi
+   done < "$dir/.panes"
+   members=$(dk_brief_wave_members "$dir/brief.md" "${n:-0}" | sed 's/(.*//')   # state names, no (tier)
+   base=$(dk_wave_base "$dir" "${n:-}")   # gate d: the real diff, not the employees' self-reported touched
+   if [ -z "$base" ]; then
+     echo "dk-wave-close: no recorded base for wave ${n:-?} in process.md; ownership diff gate skipped" >&2
+   elif ! changed=$(dk_changed_files "$DK_WORKTREE" "$base"); then
+     problems="$problems\n  cannot read the worktree diff ($DK_WORKTREE since ${base:0:7})"
+   else
+     reported=$(for m in $members; do [ -f "$dir/state/$m.md" ] || continue; dk_touched "$dir/state/$m.md"; done)
+diff --git a/.dkbo/lib/prompt.sh b/.dkbo/lib/prompt.sh
+index 34e96d7..0d7ebeb 100644
+--- a/.dkbo/lib/prompt.sh
++++ b/.dkbo/lib/prompt.sh
+@@ -1,8 +1,8 @@
+ # shellcheck shell=bash
+ dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME BRIEF_FILE REPORT_FILE [UPSTREAM]
+   local resume=""; [ "${5:-0}" = 1 ] && resume="你是重新啟動的員工：先讀 $4，從 state 檔續作，不要重做已完成的項目。"
+   # 上游還沒交差時 worktree 裡是半成品，對它下判定只會產出假結論（見 lib/brief.sh 的
+   # dk_brief_wave_upstream）。不擋前置工作，只擋判定。
+   local wait_for=""; [ -n "${8:-}" ] && wait_for="本波的 dev 成員是：${8}。在它們的 state 檔（$3/state/<成員>.md）出現 status: done、或它們送來 [DONE] 之前，worktree 裡是半成品 —— 這段時間你只做不依賴它們產出的前置（環境、測試帳號、探測腳本骨架），不要下驗收判定、不要發 [BUG]、不要把中途看到的狀態寫進報告。"
+-  printf '%s' "你是 $1，角色 $2。先讀：$DK_ROOT/roles/$2.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md、$6。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）；報告檔是 $7（不限行數，照 $DK_ROOT/templates/report-employee.md，「## 測試」必填）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 $DK_ROOT/bin/dk-msg。讀完後建立 state 檔並開始做分給你的項目；送 [DONE] 前 state 與報告都要寫好，然後 dk-msg 交接對象與 leader。$wait_for$resume"
++  printf '%s' "你是 $1，角色 $2。先讀：$DK_ROOT/roles/$2.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md、$6。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）；報告檔是 $7（不限行數，照 $DK_ROOT/templates/report-employee.md，「## 測試」必填）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 $DK_ROOT/bin/dk-msg。讀完後建立 state 檔並開始做分給你的項目。寫程式的順序是：先寫一條會失敗的測試、跑它確認真的失敗、再寫最小實作讓它過；兩次的指令與輸出分別貼進報告的「### 紅」與「### 綠」（沒有測試的波兩節都寫「不適用: <理由>」）。碰到 bug 或測試紅了，先讀 $DK_ROOT/methods/debugging.md 再動手。送 [DONE] 前 state 與報告都要寫好，然後 dk-msg 交接對象與 leader。$wait_for$resume"
+ }
+diff --git a/.dkbo/methods/debugging.md b/.dkbo/methods/debugging.md
+new file mode 100644
+index 0000000..e067250
+--- /dev/null
++++ b/.dkbo/methods/debugging.md
+@@ -0,0 +1,28 @@
++# 除錯方法
++
++收到 `[BUG]`、或自己的測試紅了，先讀這一篇再動手。這裡講的是方法；一次修不好要怎麼辦寫在
++`PROTOCOL.md` 的「規則」段。
++
++## 一、先重現，再修
++沒有一個能穩定重現的最小指令之前，不要改任何一行程式。重現指令寫進你的 report 的
++`## 測試` 的 `### 紅`。改完之後要跑的就是它 —— 「改了所以應該好了」不是證據。
++
++## 二、沿著錯誤往回找第一個說謊的地方
++從症狀出現的那一行往上游走，在每一層問：這一層拿到的輸入對不對？第一個「輸入是對的、
++輸出是錯的」的地方就是根因。在那之前的每一層都只是把錯誤搬運下去，改它們只會把症狀挪位置。
++
++## 三、一次只改一件事
++同時改兩個地方而症狀消失，你不知道是哪一個修好的，也不知道另一個是不是新的洞。改一件、
++跑一次、記一行。
++
++## 四、二分法縮範圍
++範圍大到看不出來時，把它切一半：註解掉一半的輸入、退回一半的 commit、拿掉一半的設定。
++兩三次就能把範圍縮到可以直接讀懂的大小。
++
++## 五、寫下你排除了什麼
++每排除一個假設就記一行到自己的 report 的 `## 自我審查`：試過什麼、看到什麼、所以排除了什麼。
++這份清單有兩個用途 —— 你自己不會繞回去重試，接手的人也不用從頭來過。
++
++## 六、修好的定義
++原本那條重現指令現在通過，而且你能用一句話說出根因。兩者缺一就還沒修好，
++`[FIXED]` 的內文要帶著那一句根因。說不出根因就表示你只是讓症狀消失了。
+diff --git a/.dkbo/roles/backend.md b/.dkbo/roles/backend.md
+index b7e0f48..736fa6b 100644
+--- a/.dkbo/roles/backend.md
++++ b/.dkbo/roles/backend.md
+@@ -4,14 +4,15 @@ kind: claude
+ tiers:
+   S: sonnet/low
+   M: sonnet/medium
+   L: opus/high
+ worktree: true
+ group: dev
+ mcp: []
+ ---
+ ## 職責
+ 實作 API 與資料層；共用契約若由你擁有，先定稿再實作並通知 frontend。
++碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
+ ## 完成定義
+ 所有分給你的驗收項在本機可操作、相關測試通過、state 的 touched 完整、`status: done`。然後 `dk-msg <qa> "[DONE] ..."` 與 `dk-msg leader "[DONE] ..."`。
+ ## 交接對象
+ qa 驗證；qa 的 BUG 修一次，再不過就由 qa 升報。
+diff --git a/.dkbo/roles/frontend.md b/.dkbo/roles/frontend.md
+index 39cb4b9..9fa555c 100644
+--- a/.dkbo/roles/frontend.md
++++ b/.dkbo/roles/frontend.md
+@@ -4,14 +4,15 @@ kind: claude
+ tiers:
+   S: sonnet/low
+   M: sonnet/medium
+   L: opus/high
+ worktree: true
+ group: dev
+ mcp: []
+ ---
+ ## 職責
+ 實作 brief 劃給你的介面檔案。介面契約（API 型別、路徑）以 brief 的「共用契約」為準；契約不清楚就 QUESTION 擁有者，不自行假設。
++碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
+ ## 完成定義
+ 所有分給你的驗收項在本機可操作、相關測試通過、state 的 touched 完整、`status: done`。然後 `dk-msg <qa> "[DONE] ..."` 與 `dk-msg leader "[DONE] ..."`。
+ ## 交接對象
+ qa 驗證；qa 的 BUG 修一次，再不過就由 qa 升報。
+diff --git a/.dkbo/roles/it.md b/.dkbo/roles/it.md
+index 5818f82..dc0c49e 100644
+--- a/.dkbo/roles/it.md
++++ b/.dkbo/roles/it.md
+@@ -4,14 +4,15 @@ kind: claude
+ tiers:
+   S: sonnet/low
+   M: sonnet/low
+   L: sonnet/medium
+ worktree: true
+ group: dev
+ mcp: []
+ ---
+ ## 職責
+ 環境、依賴、CI、合併衝突修復；維護 PROJECT.md 的安裝與測試指令。
++碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
+ ## 完成定義
+ 交代的環境或合併問題已解決、相關測試通過、state 的 touched 完整、`status: done`，然後 `dk-msg leader "[DONE] ..."`。
+ ## 交接對象
+ 領導；修復影響其他成員的檔案時先 QUESTION 擁有者。
+diff --git a/.dkbo/roles/qa.md b/.dkbo/roles/qa.md
+index 977dc09..92014f3 100644
+--- a/.dkbo/roles/qa.md
++++ b/.dkbo/roles/qa.md
+@@ -4,15 +4,16 @@ kind: claude
+ tiers:
+   S: sonnet/low
+   M: sonnet/medium
+   L: sonnet/high
+ worktree: true
+ group: review
+ mcp: []
+ ---
+ ## 職責
+ 依 brief 驗收標準逐條驗證。發現問題 `dk-msg <dev> "[BUG] ..."`，重現步驟寫在 state。自己不修程式。
++碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
+ 同一波的 dev 與你是同時起跑的，你讀到的 worktree 可能是半成品：在 dev 的 state（`state/<成員>.md`）出現 `status: done` 或它送來 `[DONE]` 之前，只做不依賴它產出的前置（環境、測試資料、探測腳本骨架），不要下驗收判定、不要發 `[BUG]`、不要把中途看到的狀態寫進報告。不確定它做完沒就先看它的 state，不要用 `[QUESTION]` 問完就停在那裡等。
+ ## 完成定義
+ 所有驗收項通過，state 記錄每條的驗證方式，`status: done`，`dk-msg leader "[DONE] ..."`。
+ ## 交接對象
+ dev 修；同一 bug FIXED 後再驗仍失敗 → `dk-msg leader "[ESCALATE] ..."`。
+diff --git a/.dkbo/templates/report-employee.md b/.dkbo/templates/report-employee.md
+index 8d9fd3d..b66764d 100644
+--- a/.dkbo/templates/report-employee.md
++++ b/.dkbo/templates/report-employee.md
+@@ -1,6 +1,9 @@
+ # {{AGENT}} 報告（波 {{WAVE}}）
+ ## 做了什麼
+ ## 測試
+-（必填：跑了什麼指令、結果摘要；沒有這段 dk-wave-close 不放行）
++### 紅
++（先寫的那條測試：跑它的指令一行、失敗輸出一行，至少兩行。沒有測試的波首行寫「不適用: <理由>」）
++### 綠
++（實作之後同一條指令一行、通過輸出一行，至少兩行。沒有測試的波首行寫「不適用: <理由>」）
+ ## 自我審查
+ ## 疑慮
+diff --git a/tests/unit/07_spawn.bats b/tests/unit/07_spawn.bats
+index dade922..28fcaab 100644
+--- a/tests/unit/07_spawn.bats
++++ b/tests/unit/07_spawn.bats
+@@ -106,10 +106,16 @@ teardown() { teardown_project; }
+   grep -q 'spawn login-qa failed: pane .* kept for diagnosis' "$d/process.md"
+ }
+ @test "--resume of an overflow tab's only occupant closes the stale tab and keeps one DK_TABS entry" {
+   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\nlogin-qa wB:p10 0 review 2 1\n' > "$d/.panes"
+   sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t9"/' "$d/.task.env"
+   run dk-spawn qa --resume; [ "$status" -eq 0 ]
+   grep -q '^pane close wB:p10$' "$HERDR_STUB_LOG"; grep -q '^tab close wB:t9$' "$HERDR_STUB_LOG"; grep -q '^tab create ' "$HERDR_STUB_LOG"
+   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(grep -c '^2=' <<< "$(sed -n 's/^DK_TABS="\(.*\)"$/\1/p' "$d/.task.env" | tr ' ' '\n')")" -eq 1 ]
+   grep -q 'tab 2 wB:t9 closed (recreated)' "$d/process.md"; grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
+ }
++@test "首輪提示帶 TDD 順序與除錯方法檔" {
++  fixture_brief "$d"; dk-wave-open 1 >/dev/null
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
++  grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
++}
+diff --git a/tests/unit/08_wave_close.bats b/tests/unit/08_wave_close.bats
+index 4041167..6cb1a58 100644
+--- a/tests/unit/08_wave_close.bats
++++ b/tests/unit/08_wave_close.bats
+@@ -1,17 +1,17 @@
+ load ../helpers
+ setup() {
+   setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"
+   printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
+   printf 'status: done\nwave: 1\ntouched:\n  - src/api/login.ts\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+   printf 'status: done\nwave: 1\ntouched:\n  - tests/login.test.ts\n' > "$d/state/qa.md"
+-  printf '# backend 報告\n## 做了什麼\nlogin\n## 測試\nnpm test → 3 passed\n## 自我審查\n## 疑慮\n' > "$d/state/backend.report.md"
++  printf '# backend 報告\n## 做了什麼\nlogin\n## 測試\n### 紅\n$ npm test -- login\nFAIL login not defined\n### 綠\n$ npm test -- login\n3 passed\n## 自我審查\n## 疑慮\n' > "$d/state/backend.report.md"
+   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+   echo "$(date +%Y-%m-%dT%H:%M) wave-open 1 base $(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD) members backend qa" >> "$d/process.md"
+   echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
+   wt() { git -C "$WORKTREE_PATH" -c user.name=t -c user.email=t@t "$@"; }
+ }
+ teardown() { teardown_project; }
+ 
+ @test "all gates pass: panes closed, DK_WAVE cleared, tests skipped without DK_TEST_CMD" {
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"closed 2"* ]]
+   grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"
+@@ -24,22 +24,23 @@ teardown() { teardown_project; }
+   run dk-wave-close --force; [ "$status" -eq 0 ]
+ }
+ @test "gate a: needs a review verdict or a recorded skip" {
+   sed -i '/review 1 verdict/d' "$d/process.md"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"review 1 verdict"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+   echo "2026-09-10T10:00 review 1 skipped: 純文件波" >> "$d/process.md"; run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ @test "gate b: every dev needs a report with content under ## 測試; review-group members do not" {
+   rm "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"no report"*"backend.report.md"* ]]
+   printf '# r\n## 測試\n（必填）\n\n## 自我審查\nok\n' > "$d/state/backend.report.md"
+-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"lacks content under '## 測試'"* ]]
+-  printf '# r\n## 測試\nbats 12 ok\n' > "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 0 ]
++  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"的 '## 測試' 缺證據"* ]]
++  printf '# r\n## 測試\n### 紅\n$ bats\nFAIL 12\n### 綠\n$ bats\n12 ok\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ @test "gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail" {
+   echo 'DK_TEST_CMD="cat tests/marker.txt"' >> "$DK_ROOT/settings.env"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"tests failed (cat tests/marker.txt)"* ]]; [[ "$output" == *"No such file"* ]]
+   ! grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
+   mkdir -p "$WORKTREE_PATH/tests"; echo ok > "$WORKTREE_PATH/tests/marker.txt"   # under qa's ownership, or gate d refuses it
+   run dk-wave-close; [ "$status" -eq 0 ]; grep -q ' wave-close 1 tests ok (cat tests/marker.txt) 2 agents closed$' "$d/process.md"
+ }
+ @test "gate c: --force closes despite failing tests and says so" {
+   echo 'DK_TEST_CMD="echo boom; exit 1"' >> "$DK_ROOT/settings.env"
+@@ -123,20 +124,43 @@ teardown() { teardown_project; }
+ @test "verdict must account for every reviewer that was spawned" {
+   # e2e 實測：兩位 reviewer 派出去，領導只對 a 裁定就放行，codex 那位的意見整筆蒸發
+   # 而流程看起來完全正常（RESULTS-2026-09-11 ⑧）
+   echo "2026-09-11T10:00 review 1 spawned login-reviewer-a(claude) login-reviewer-b(codex)" >> "$d/process.md"
+   run dk-wave-close                      # setup 已寫了 "review 1 verdict a: ok"，缺 b
+   [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+   echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
+   run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ 
++@test "gate b: 缺 ### 紅 或 ### 綠 都不放行，不適用可以過" {
++  # 錯誤訊息同時提到兩個小節名，所以不能拿訊息裡有沒有「### 紅」來分辨是哪一邊缺 ——
++  # 斷言改成「這份 report 被擋下來了」，並用 refute_grep 確認沒有其他 gate 一起叫。
++  printf '# backend 報告\n## 測試\n### 綠\n3 passed\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
++  refute_grep 'unowned change' <<< "$output"
++  printf '# backend 報告\n## 測試\n### 紅\nFAIL\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
++  # 兩節都在、但各只有一行（沒有輸出）：這正是 AC5 要擋的
++  printf '# backend 報告\n## 測試\n### 紅\n跑過了會失敗\n### 綠\n跑過了會過\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"兩行以上"* ]]
++  # 指令列＋輸出：放行
++  printf '# backend 報告\n## 測試\n### 紅\n$ npm test -- login\nFAIL not defined\n### 綠\n$ npm test -- login\n3 passed\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 0 ]
++}
++@test "gate b: 不適用 是單行豁免" {
++  printf '# backend 報告\n## 測試\n### 紅\n不適用: 純文件波\n### 綠\n不適用: 純文件波\n' > "$d/state/backend.report.md"
++  run dk-wave-close; [ "$status" -eq 0 ]
++}
++
+ @test "wave-close 清掉本波的 dev 聚合標記" {
+   mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+   run dk-wave-close; [ "$status" -eq 0 ]
+   [ ! -f "$d/.blocked/wave-1.devdone" ]
+ }
+ 
+ @test "--agent 關掉一位員工後重置聚合標記：換 kind 重派才不會啞掉" {
+   # dev 撞額度 → dk-wave-close --agent 關它 → 用未熔斷的 kind 重派。
+   # 標記還停在 delivered 的話，補上的那位做完也不會再有人通知領導。
+   mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+diff --git a/tests/unit/31_methods.bats b/tests/unit/31_methods.bats
+new file mode 100644
+index 0000000..d898b32
+--- /dev/null
++++ b/tests/unit/31_methods.bats
+@@ -0,0 +1,16 @@
++load ../helpers
++setup() { setup_project; }
++teardown() { teardown_project; }
++
++@test "除錯方法檔存在，PROTOCOL 指得到它" {
++  [ -f "$DK_ROOT/methods/debugging.md" ]
++  grep -q 'methods/debugging.md' "$DK_ROOT/PROTOCOL.md"
++}
++@test "PROTOCOL 的 FIXED 列要求附根因（AC16）" {
++  grep -qE '^\| FIXED \|.*根因' "$DK_ROOT/PROTOCOL.md"
++}
++@test "方法檔講方法不講次數上限" {
++  grep -q '重現' "$DK_ROOT/methods/debugging.md"
++  grep -q '根因' "$DK_ROOT/methods/debugging.md"
++  refute_grep '上限一次' "$DK_ROOT/methods/debugging.md"
++}

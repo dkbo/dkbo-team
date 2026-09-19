@@ -1,0 +1,22 @@
+2026-09-19T14:36 flowgap-reviewer-p1 -> leader-flowgap [DONE] brief-review: 要改 3 處，見 report
+2026-09-19T15:11 flowgap-backend -> leader-flowgap [DONE] 波 1 Task 1–5 完成：AC1–AC4、AC15 全過，tests/run.sh 362 ok、shellcheck 零警告。計畫外補了 dk-brief-review 的 source brief.sh，詳見 state/backend.report.md。
+2026-09-19T15:11 leader-flowgap -> flowgap-backend [TASK] 逐步實作計畫在 /home/bal/project/teamflow/.dkbo/tasks/2026-09-19-flowgap/implementation.md 的 Task 1–5，程式碼可直接貼；設計理由在同資料夾 plan.md
+2026-09-19T15:14 flowgap-backend -> leader-flowgap [DONE] 收到的 [TASK] 即波 1 Task 1–5，已於稍早完成並回報過：362 ok、shellcheck 零警告，state 是 done。無新增工作，不重跑。
+2026-09-19T15:17 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 1: Important 1 條，見 report
+2026-09-19T15:18 leader-flowgap -> flowgap-backend [BUG] review 波 1 Important 1：dk__brief_rows 對欄內 | 會錯位切欄（markdown 的 \| 跳脫也沒用），而這一波把它接進了 dk-brief-check 的擋人邏輯。見 state/reviewer-a.report.md
+2026-09-19T15:31 flowgap-backend -> leader-flowgap [FIXED] Important 1 根因是 dk__brief_rows 用 awk -F'|' 切欄、不認 markdown 的 \| 跳脫，已改哨兵替換＋閘門端同步並加欄數 FAIL。364 ok、shellcheck 零。註：該缺陷自 0.6.3 既有、非本波引入，詳見報告疑慮 1。
+2026-09-19T15:33 leader-flowgap -> flowgap-reviewer-a [TASK] 複看 waves/1.diff（已重打，571 行）。Important 1 已修：dk__brief_rows 改跳脫感知切欄、dk-brief-check 同步並加欄數 FAIL。另請注意你報告裡「本波第一次接進擋 exit code 的邏輯」與事實不符，dk_brief_owners/waves 早就在餵 fail()
+2026-09-19T15:36 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 1 複看: Important 0 條（原 1 條已修驗證過），見 report
+2026-09-19T16:58 leader-flowgap -> flowgap-backend [BUG] wave-close gate c 失敗：測試從領導 session 跑時，helpers.bash 沒 unset 繼承來的 DK_PROJECT_ROOT，dk-task-new 因此在真實 repo 建了 7 個 worktree（已清）。新增 AC17，修 tests/helpers.bash 並加回歸測試。根因鏈見 process.md 最後三行
+2026-09-19T17:09 flowgap-backend -> leader-flowgap [FIXED] AC17：setup_project 改成整片 unset ${!DK_@}（34 個 DK_* 都能從環境讀入，列舉會再過時），回歸測試 30_isolation.bats 兩條。帶領導環境跑全套 366 ok 且誘餌 repo 零變動。gate c 那半仍在波 2。
+2026-09-19T17:11 leader-flowgap -> flowgap-reviewer-a [TASK] 複看 waves/1.diff（第三輪，已重打）。新增 AC17：測試隔離。helpers.bash 的 setup_project 改成整片 unset 繼承的 DK_*，新增 30_isolation.bats。我已用誘餌 repo 獨立驗過 366 ok、真假 repo 都零變動
+2026-09-19T17:13 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 1 複看(第三輪, AC17): Important 0 條，見 report
+2026-09-19T17:26 flowgap-backend -> qa [UNDELIVERED] [DONE] 波2 Task6-8 完成：紅綠小節/gate b、methods/debugging.md、首輪提示，AC5-8/16 已測，見 state/backend.report.md
+2026-09-19T17:26 flowgap-backend -> leader-flowgap [DONE] 波2 backend 完成：Task6-8，AC5-8/16 全測，372 ok、shellcheck 零，見 state/backend.report.md
+2026-09-19T17:30 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 2: Important 0 條，見 report
+2026-09-19T17:46 flowgap-backend -> qa [UNDELIVERED] [DONE] 波3 backend: Task9-13(AC9-14)全完成，377 ok、shellcheck零，見 backend.report.md
+2026-09-19T17:46 flowgap-backend -> leader-flowgap [DONE] 波3 backend: Task9-13(AC9-14)全完成，377 ok、shellcheck零，見 backend.report.md
+2026-09-19T17:50 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 3: Important 0 條，見 report
+2026-09-19T18:05 leader-flowgap -> flowgap-reviewer-a [TASK] 整枝評議請一併 triage 本任務累積的兩條 Minor，逐條判「merge 前必須修」或「可留」，寫進 report 的 ## Minor 開頭：(1) 共用契約新舊判別器用表頭而非段落存在，與 AC4 字面有詮釋差異；(2) 測試檔名 31_methods.bats 與 implementation.md 寫的 30_methods.bats 落差
+2026-09-19T18:19 flowgap-backend -> leader-flowgap [DONE] 波4：AC18-24 全修完（2 Important＋5 Minor），384 bats 全綠、shellcheck 零，見 state/backend.report.md
+2026-09-19T18:27 flowgap-reviewer-a -> leader-flowgap [DONE] review 波 4: Important 0 條，見 report
