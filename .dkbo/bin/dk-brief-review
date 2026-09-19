@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# dk-brief-review [--kinds "k1 k2 k3"] [--tier M|L] — 開工前的計畫審查：派 1–3 位隔離 reviewer
+# 讀 request.md + brief.md 出意見。與 dk-brief-check 同一層：那一支驗形狀，這一支看內容。
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/review.sh"
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
+kinds=""; tier=""
+while [ $# -gt 0 ]; do case "$1" in
+  --kinds) kinds="$2"; shift 2;; --tier) tier="$2"; shift 2;;
+  --*) dk_die "unknown flag $1";; *) dk_die "unexpected argument $1（計畫審查不分波；波號是執行階段的概念）";; esac; done
+
+req="$dir/request.md"
+[ -s "$req" ] || dk_die "缺需求原文 $req —— 先把人的原話逐字抄進去。reviewer 少了它只能在 brief 的自我一致性裡打轉，看不出 brief 漏掉了什麼。"
+# 零 token 的機械閘沒過就燒三個 kind 的 token，是這個設計裡最蠢的失敗模式。順序由程式保證，不靠領導記得。
+# 成功時吞掉 dk-brief-check 的 OK；失敗時把它的 FAIL 清單印出來再死，領導不用另外重跑一次。
+check_out=$("$DK_ROOT/bin/dk-brief-check" 2>&1) || { printf '%s\n' "$check_out"; dk_die "dk-brief-check 沒過（上面那幾條 FAIL），先修 brief 再回來"; }
+
+tier=$(dk_review_tier "$tier")
+[ -n "$kinds" ] || kinds="$DK_REVIEW_KINDS"
+use=$(dk_review_kinds "$kinds" dk-brief-review "brief-review") || exit 1
+
+aliases=(p1 p2 p3); i=0; spawned=""; failed=""
+mkdir -p "$dir/briefs" "$dir/state"
+for k in $use; do
+  alias="${aliases[$i]}"; i=$((i+1)); sname="reviewer-$alias"
+  dk_render "$DK_ROOT/templates/brief-reviewer-plan.md" "DISPLAY=$DK_DISPLAY" "REQUEST=$req" \
+    "BRIEF=$dir/brief.md" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
+  if out=$("$DK_ROOT/bin/dk-spawn" reviewer "$alias" --isolated --kind "$k" --tier "$tier"); then rc=0; else rc=$?; fi
+  if [ -n "$out" ] && [ "$rc" = 0 ]; then
+    spawned="$spawned ${out%% *}($k)"
+  elif [ -n "$out" ]; then
+    spawned="$spawned ${out%% *}($k,prompt-failed)"
+    echo "dk-brief-review: first prompt to ${out%% *} failed; herdr agent read it, then re-prompt" >&2
+  else
+    echo "dk-brief-review: could not spawn reviewer $alias ($k)" >&2; failed="$failed $k"
+  fi
+done
+[ -n "$spawned" ] || dk_die "no reviewer spawned (dk-spawn failed for:$failed); check herdr, then retry dk-brief-review or record: dk-process \"brief-review skipped: <理由>\""
+dk_process "brief-review spawned$spawned"
+echo "brief-review:$spawned"
