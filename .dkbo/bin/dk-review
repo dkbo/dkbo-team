@@ -27,11 +27,12 @@ if [ -z "$kinds" ]; then
 fi
 use=$(dk_review_kinds "$kinds" dk-review "review $n") || exit 1
 members=$(dk_brief_wave_members "$dir/brief.md" "$n" | tr '\n' ' ' | sed 's/ $//')
+constraints=$(dk_brief_constraints "$dir/brief.md")
 aliases=$(dk_review_aliases "a b c" "$use")
 mkdir -p "$dir/briefs"
 for a in $aliases; do
   sname="reviewer-$a"
   dk_render "$DK_ROOT/templates/brief-reviewer.md" "DISPLAY=$DK_DISPLAY" "WAVE=$n" "DIFF=$diff" "BRIEF=$dir/brief.md" \
-    "MEMBERS=$members" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
+    "MEMBERS=$members" "CONSTRAINTS=$constraints" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
 done
 dk_review_spawn "$use" "$aliases" "$tier" dk-review "review $n"
