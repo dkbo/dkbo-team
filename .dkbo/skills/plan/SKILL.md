@@ -1,6 +1,6 @@
 ---
 name: dkbo-plan
-description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指名本篇）時使用。dkbo 計畫階段。開新任務、寫 brief（目標、驗收標準、檔案所有權、波次表）、跑 dk-brief-check、走到關卡①給人確認後停。不派工、不跑波。
+description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指名本篇）時使用。dkbo 計畫階段。開新任務、寫 brief（目標、驗收標準、檔案所有權、波次表）、過 dk-brief-check 機械閘後派 AI 審計畫，走到關卡①給人確認後停。不派工、不跑波。
 ---
 # dkbo 計畫
 

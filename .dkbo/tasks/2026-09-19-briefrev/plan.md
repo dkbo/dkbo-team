@@ -251,10 +251,10 @@ dk-msg leader "[DONE] brief-review: <可以開工|要改 N 處>，見 report"
 
 ## 13. 驗收標準
 
-- [ ] AC1 `dk-brief-review` 在 `request.md` 缺席或 `dk-brief-check` 未過時拒跑，且不 spawn 任何 pane
-- [ ] AC2 正常路徑派出 1–3 位 reviewer，別名 p1/p2/p3，各自拿到內容相同的切片
-- [ ] AC3 `--kinds` / `--tier` 覆寫生效，熔斷的 kind 被跳過，全滅時以非零退出並給出該記的 process 行
-- [ ] AC4 `dk-task-new --gate1` 在缺裁定行、裁定漏交代別名、reviewer pane 未關這三種情況下各自拒絕
-- [ ] AC5 `--from <檔>` 把需求原文逐字寫進 `request.md`
-- [ ] AC6 `dk-review` 改用 `lib/review.sh` 之後行為不變（既有 `20_review.bats` 全過）
-- [ ] AC7 全套 `tests/run.sh` 綠燈
+- [x] AC1 `dk-brief-review` 在 `request.md` 缺席或 `dk-brief-check` 未過時拒跑，且不 spawn 任何 pane
+- [x] AC2 正常路徑派出 1–3 位 reviewer，別名 p1/p2/p3，各自拿到內容相同的切片
+- [x] AC3 `--kinds` / `--tier` 覆寫生效，熔斷的 kind 被跳過，全滅時以非零退出並給出該記的 process 行
+- [x] AC4 `dk-task-new --gate1` 在缺裁定行、裁定漏交代別名、reviewer pane 未關這三種情況下各自拒絕
+- [x] AC5 `--from <檔>` 把需求原文逐字寫進 `request.md`
+- [x] AC6 `dk-review` 改用 `lib/review.sh` 之後行為不變（既有 `20_review.bats` 全過）
+- [x] AC7 全套 `tests/run.sh` 綠燈
