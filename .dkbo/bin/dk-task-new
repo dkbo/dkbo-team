@@ -23,13 +23,17 @@ if [ "$gate1" = 1 ]; then
   # 這時最新的決定是「跳過」而不是那份陳舊的 verdict，逐別名檢查要看最後一行決定，
   # 不能看最後一行 verdict——否則閘 1 放行、閘 2 卻拿舊 verdict 去挑錯，兩道閘互相矛盾。
   last=$(grep -E '^[^ ]+ brief-review (verdict|skipped:)' "$p" | tail -1)
-  case "$last" in
-    *" brief-review verdict"*)   # 派了三個 kind 卻只讀一個的意見，等於第二意見白花（同 dk-wave-close 的 gate a2）
-      for al in $(grep -E '^[^ ]+ brief-review spawned ' "$p" | tail -1 | grep -oE 'reviewer-p[0-9]+' | sed 's/reviewer-//' | sort -u); do
-        case "$last" in *"$al:"*) ;;
-          *) dk_die "brief-review verdict 沒有交代 reviewer $al（寫它的結果，或 '$al: skipped (<理由>)'）";; esac
-      done;;
-  esac
+  # 判斷「最後一行決定是不是 verdict」要重新錨定去比對 $last 本身，不能用
+  # `case ... *" brief-review verdict"*)` 這種子字串比對——skipped 行的自由文字
+  # 只要剛好提到這幾個字（例如理由寫「忘記寫 brief-review verdict」）就會誤判成
+  # verdict，逐別名檢查對 skipped 的自由文字當然找不到 token，等於把兩道閘互相
+  # 矛盾的死結用另一種觸發條件裝回去。
+  if printf '%s\n' "$last" | grep -Eq '^[^ ]+ brief-review verdict'; then   # 派了三個 kind 卻只讀一個的意見，等於第二意見白花（同 dk-wave-close 的 gate a2）
+    for al in $(grep -E '^[^ ]+ brief-review spawned ' "$p" | tail -1 | grep -oE 'reviewer-p[0-9]+' | sed 's/reviewer-//' | sort -u); do
+      case "$last" in *"$al:"*) ;;
+        *) dk_die "brief-review verdict 沒有交代 reviewer $al（寫它的結果，或 '$al: skipped (<理由>)'）";; esac
+    done
+  fi
   live=$(grep -oE "^$DK_SHORT-reviewer-p[0-9]+" "$existing/.panes" 2>/dev/null | sort -u | tr '\n' ' ' || true)
   [ -z "${live// /}" ] || dk_die "計畫審查的 pane 還開著：${live% } —— 先 dk-wave-close --agent <agent> 逐個關掉。留著它們會佔版面格子、被守望當活人算逾時，而且第一波的 dk-wave-close 會因為它們沒 done 而永遠關不掉。"
   dk_process "gate1 approved"
