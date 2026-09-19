@@ -155,3 +155,59 @@ dev_panes() { printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2
   [ "$status" -eq 0 ]
   grep -q '^agent prompt leader-login \[ESCALATE\] from login-backend: 要改共用契約$' "$HERDR_STUB_LOG"
 }
+
+# --- [TASK] 開啟新的一輪：.panes 的 epoch 是「最後一次指派」而不是「spawn 以來」（BACKLOG 2026-09-14） ---
+
+epoch_of() { awk -v n="$2" '$1==n{print $3; exit}' "$1/.panes"; }
+rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2 100 dev 1 1\n' > "$1/.panes"; }
+
+@test "[TASK] 送達後重設該列的 epoch，其餘欄位與其餘列一字不改" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  now=$(date +%s); [ "$(epoch_of "$d" login-reviewer-a)" -ge "$((now - 10))" ]
+  [ "$(awk '$1=="login-reviewer-a"{print $2, $4, $5, $6}' "$d/.panes")" = "wC:p4 review 1 3" ]
+  [ "$(epoch_of "$d" login-frontend)" = 100 ]
+}
+
+@test "送不到的 [TASK] 不重設 epoch：卡住的員工不能被藏起來" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  HERDR_STUB_MISSING="login-reviewer-a wC:p4" DK_MSG_TRIES=2 DK_MSG_RETRY_SEC=0 \
+    run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 1 ]
+  [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
+}
+
+@test "只有 [TASK] 開啟新的一輪：其他類型不動 epoch" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-reviewer-a "[ANSWER] 用現有 users 表"
+  [ "$status" -eq 0 ]
+  [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
+  [ ! -f "$d/.blocked/login-reviewer-a.redispatch" ]
+}
+
+@test "[TASK] 存下指派當下的 state cksum，並清掉上一輪的逾時標記" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  printf 'status: done\n' > "$d/state/reviewer-a.md"
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/login-reviewer-a.timeout"
+  run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/login-reviewer-a.timeout" ]
+  [ "$(cat "$d/.blocked/login-reviewer-a.redispatch")" = "$(cksum < "$d/state/reviewer-a.md")" ]
+}
+
+@test "指派時還沒有 state 檔：標記留空，之後出現的 state 就算這一輪寫的" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-reviewer-a "[TASK] 第一次派工"
+  [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/login-reviewer-a.redispatch" ]
+  [ ! -s "$d/.blocked/login-reviewer-a.redispatch" ]
+}
+
+@test "不在 .panes 裡的對象（雜務、已收工）不會憑空生出一列" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-qa "[TASK] 去驗一下"
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$d/.panes")" -eq 2 ]
+  [ ! -f "$d/.blocked/login-qa.redispatch" ]
+}

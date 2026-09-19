@@ -325,3 +325,44 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
   run dk-watch --once; [ "$status" -eq 0 ]
   refute_grep '全員完成' "$HERDR_STUB_LOG"
 }
+
+# --- 複看：第一輪留下的 status: done 不該讓第二輪永久靜默（BACKLOG 2026-09-14） ---
+# 實跑形狀：reviewer 交完首輪 → 領導派複看 → 它卡住沒動 → 逾時分支看到上一輪的 done 就 continue，
+# 三個出口（熔斷、桌面通知、送領導的 [TIMEOUT]）全程空轉。
+
+neutral_screen() { echo '{"result":{"read":{"text":"thinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"; }
+redispatched() { # 領導派了複看，然後過了 25 分鐘
+  dk-msg login-reviewer-b "[TASK] 複看第二輪" >/dev/null
+  sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"
+}
+
+@test "被重新指派後，上一輪留下的 status: done 不再擋住逾時" {
+  neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"     # 首輪交了，這時吵它才是錯的
+  redispatched
+  dk-watch --once
+  grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+  grep -q ' timeout login-reviewer-b → kind codex down$' "$d/process.md"
+}
+
+@test "複看真的交了（state 被重寫）就不報逾時" {
+  neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+  redispatched
+  printf 'status: done\nnotes: 第二輪也看完了\n' > "$d/state/reviewer-b.md"
+  dk-watch --once
+  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+}
+
+@test "沒被重新指派過的 reviewer：首輪的 done 照樣擋住逾時" {
+  neutral_screen; reviewer_row "$old"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+  dk-watch --once
+  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+}
+
+@test "上一輪的 .timeout 已 delivered，複看再卡住仍會重新報一次" {
+  neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+  mkdir -p "$d/.blocked"; printf 'notified\ntag=\ndelivered\n' > "$d/.blocked/login-reviewer-b.timeout"
+  redispatched
+  dk-watch --once
+  grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+}

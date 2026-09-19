@@ -178,7 +178,13 @@ tick() {
     if [ -f "$m" ]; then
       grep -q '^delivered$' "$m" && continue   # 已送達；否則落到下面重試
     else
-      sf="$dir/state/${agent#"$DK_SHORT"-}.md"; if [ -f "$sf" ] && grep -q '^status: done' "$sf"; then continue; fi
+      # status: done 只有「這一輪寫的」才算數。首輪交完後被派複看又卡住的 reviewer，它的 state 還停在
+      # 上一輪的 done —— 無條件 skip 會讓熔斷、桌面通知、[TIMEOUT] 三個出口全程空轉，它就此永久靜默
+      # （BACKLOG 2026-09-14）。dk-msg 在指派當下存了 state 的 cksum：內容變過才是這一輪的交付；
+      # 沒有那個標記就表示它從沒被重新指派過，首輪的 done 照樣算數。
+      sf="$dir/state/${agent#"$DK_SHORT"-}.md"; rd="$dir/.blocked/$agent.redispatch"
+      if [ -f "$sf" ] && grep -q '^status: done' "$sf" \
+         && { [ ! -f "$rd" ] || [ "$(cksum < "$sf")" != "$(cat "$rd")" ]; }; then continue; fi
       [ $((now - epoch)) -gt $((DK_REVIEW_TIMEOUT_MIN * 60)) ] || continue
       txt=$(pane_text "$agent")
       kind=$(agent_kind "$agent")
