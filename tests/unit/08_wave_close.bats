@@ -188,3 +188,28 @@ teardown() { teardown_project; }
   run dk-wave-close; [ "$status" -eq 0 ]
   grep -q '^PATH=' "$out"; grep -q '^HOME=' "$out"
 }
+@test "AC6: 關波印本波耗時並記進 process" {
+  H=$(date +%H); MM=$(date +%M); T=$(date +%Y-%m-%d)
+  base=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+  cat > "$d/process.md" <<P
+${T}T00:00 wave-open 1 base $base members backend qa
+${T}T00:19 dev-done wave 1 (2: backend qa)
+${T}T00:20 review 1 spawned login-reviewer-a(claude)
+${T}T00:24 review 1 verdict a: 待修
+${T}T00:27 review 1 verdict a: ok
+P
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [[ "$output" =~ wave\ 1\ 耗時\ ([0-9]+)m（dev\ 19m、審查\ 7m） ]] || { echo "$output"; false; }
+  m=$(( 10#${BASH_REMATCH[1]} )); exp=$(( 10#$H * 60 + 10#$MM ))
+  [ "$m" -ge "$exp" ] && [ "$m" -le "$((exp+1))" ]   # 跨分鐘時容一分
+  grep -q ' wave 1 耗時 .*m（dev 19m、審查 7m）$' "$d/process.md"
+}
+@test "AC6: 缺 dev-done 該欄印 —，純文件波審查欄印 skip" {
+  T=$(date +%Y-%m-%d); base=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+  cat > "$d/process.md" <<P
+${T}T00:00 wave-open 1 base $base members backend qa
+${T}T00:05 review 1 skipped: 純文件波
+P
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [[ "$output" == *"（dev —、審查 skip）"* ]] || { echo "$output"; false; }
+}
