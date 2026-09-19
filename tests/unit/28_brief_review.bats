@@ -84,3 +84,12 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
   have_request; run dk-brief-review 1
   [ "$status" -eq 1 ]; [[ "$output" == *"unexpected argument"* ]]
 }
+
+@test "plan SKILL 把兩道閘與 pane 收尾都寫清楚" {
+  s="$DK_ROOT/skills/plan/SKILL.md"
+  grep -q 'request.md' "$s"; grep -q 'dk-brief-check' "$s"; grep -q 'dk-brief-review' "$s"
+  grep -q 'dk-wave-close --agent' "$s"          # 裁定後要關掉 reviewer pane
+  grep -q '重跑' "$s"                            # 改完 brief 要重跑 dk-brief-check
+  # 兩道閘的順序：機械閘在 AI 閘之前
+  [ "$(grep -n 'dk-brief-check' "$s" | head -1 | cut -d: -f1)" -lt "$(grep -n 'dk-brief-review' "$s" | head -1 | cut -d: -f1)" ]
+}
