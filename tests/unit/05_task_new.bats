@@ -144,6 +144,15 @@ teardown() { teardown_project; }
   dk-process "brief-review verdict p1: ok / p2: skipped (逾時)"
   run dk-task-new login --gate1; [ "$status" -eq 0 ]
 }
+@test "gate1 看最後一行決定：verdict 之後補的 skipped 蓋過陳舊 verdict" {
+  dk-task-new login "使用者登入" >/dev/null
+  dk-process "brief-review spawned login-reviewer-p1(claude) login-reviewer-p2(codex)"
+  dk-process "brief-review verdict p1: ok"
+  run dk-task-new login --gate1; [ "$status" -eq 1 ]
+  dk-process "brief-review skipped: 兩個 kind 都熔斷"
+  run dk-task-new login --gate1; [ "$status" -eq 0 ]
+  grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
+}
 @test "gate1 拒絕還開著的計畫審查 pane" {
   d=$(dk-task-new login "使用者登入")
   dk-process "brief-review skipped: 測試"
