@@ -25,6 +25,11 @@ teardown() { teardown_project; }
   : > "$d/.panes"; run dk-wave-open 9; [ "$status" -eq 1 ]; [[ "$output" == *"no members"* ]]
   run dk-wave-open x; [ "$status" -eq 1 ]
 }
+@test "只剩計畫審查 pane 時指得出路：dk-wave-close --agent" {
+  echo "login-reviewer-p1 wC:p9 0 review 1 1" > "$d/.panes"
+  run dk-wave-open 1
+  [ "$status" -eq 1 ]; [[ "$output" == *"dk-wave-close --agent"* ]]; [[ "$output" == *"login-reviewer-p1"* ]]
+}
 @test "a tab-0 advisor pane (pm) does not block wave-open; a grid pane does" {
   echo "login-pm wC:p9 0 dev 0 0" > "$d/.panes"
   run dk-wave-open 1; [ "$status" -eq 0 ]

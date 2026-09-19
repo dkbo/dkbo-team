@@ -5,7 +5,15 @@ set -euo pipefail
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
 n="${1:-}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-wave-open <N>"
 live=$(awk 'NF>=6 && $5==0 {next} NF>0 {n++} END{print n+0}' "$dir/.panes")   # worktree:false advisors (tab 0) are not wave members
-[ "$live" -eq 0 ] || dk_die "live panes remain ($live); run dk-wave-close first"
+if [ "$live" -ne 0 ]; then
+  names=$(awk 'NF>=6 && $5==0 {next} NF>0 {print $1}' "$dir/.panes")
+  # 全部都是計畫審查 pane 時，「dk-wave-close first」跟 gate1 的「no wave open」互指、指不出真正的出路
+  if ! printf '%s\n' "$names" | grep -vqE -- '-reviewer-p[0-9]+$'; then
+    agents=$(printf '%s' "$names" | tr '\n' ' ' | sed 's/ *$//')
+    dk_die "計畫審查的 pane 還開著（$agents）：先逐個 dk-wave-close --agent <agent> 關掉，再 dk-task-new $DK_SHORT --gate1 過關卡①（見 .dkbo/skills/plan/SKILL.md 第 6 步）"
+  fi
+  dk_die "live panes remain ($live); run dk-wave-close first"
+fi
 [ -z "${DK_WAVE:-}" ] || dk_die "wave $DK_WAVE is open; run dk-wave-close first"
 ! grep -q " wave-open $n " "$dir/process.md" || dk_die "wave $n was already opened (see process.md)"
 brief="$dir/brief.md"

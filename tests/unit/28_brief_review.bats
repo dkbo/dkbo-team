@@ -13,8 +13,13 @@ teardown() { teardown_project; }
   done
   grep -q '{{REQUEST}}' "$t"; grep -q '{{BRIEF}}' "$t"; grep -q '{{REPORT}}' "$t"; grep -q '{{DISPLAY}}' "$t"
   grep -q '不需要讀專案程式碼' "$t"
-  # 需求覆蓋必須排在其餘四段之前：那是唯一只有看了 request 才答得出來的一段
-  [ "$(grep -n '## 需求覆蓋' "$t" | cut -d: -f1)" -lt "$(grep -n '## 檔案所有權' "$t" | cut -d: -f1)" ]
+  # spec §7：六段順序是刻意的，逐一釘住行號遞增，不是只釘第一段在某一段之前
+  prev=0
+  for s in '## 需求覆蓋' '## 驗收標準可驗證性' '## 檔案所有權' '## 波次切法' '## Minor' '## 結論'; do
+    n=$(grep -n -F "$s" "$t" | head -1 | cut -d: -f1)
+    [ "$n" -gt "$prev" ] || { echo "順序錯了：$s 在第 $n 行，前一段在第 $prev 行"; false; }
+    prev="$n"
+  done
 }
 
 have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "$d/request.md"; }
@@ -27,6 +32,12 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
 @test "request.md 是空的也拒跑" {
   : > "$d/request.md"
   run dk-brief-review; [ "$status" -eq 1 ]; [[ "$output" == *"需求原文"* ]]
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
+}
+@test "request.md 是 dk-task-new 沒填的空殼也拒跑" {
+  # dk-task-new 沒給 --from 真檔時就是這份空殼；[ -s ] 對它恆真，靠的是這道 sentinel 檢查。
+  cp "$DK_ROOT/templates/request.md" "$d/request.md"
+  run dk-brief-review; [ "$status" -eq 1 ]; [[ "$output" == *"空殼"* ]]
   refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 @test "dk-brief-check 沒過就不燒 token" {
@@ -90,6 +101,7 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
   grep -q 'request.md' "$s"; grep -q 'dk-brief-check' "$s"; grep -q 'dk-brief-review' "$s"
   grep -q 'dk-wave-close --agent' "$s"          # 裁定後要關掉 reviewer pane
   grep -q '重跑' "$s"                            # 改完 brief 要重跑 dk-brief-check
-  # 兩道閘的順序：機械閘在 AI 閘之前
-  [ "$(grep -n 'dk-brief-check' "$s" | head -1 | cut -d: -f1)" -lt "$(grep -n 'dk-brief-review' "$s" | head -1 | cut -d: -f1)" ]
+  # 兩道閘的順序：機械閘在 AI 閘之前。釘編號步驟（第 4、5 步），不是全檔第一次出現 ——
+  # frontmatter 的 description 裡兩支指令都提過一次，拿它跟正文比對不出步驟順序。
+  [ "$(grep -n '^4\. .*dk-brief-check' "$s" | cut -d: -f1)" -lt "$(grep -n '^5\. .*dk-brief-review' "$s" | cut -d: -f1)" ]
 }
