@@ -366,3 +366,109 @@ redispatched() { # 領導派了複看，然後過了 25 分鐘
   dk-watch --once
   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
 }
+
+# --- 開波空窗的假聚合（BACKLOG 2026-09-19，flowgap 波 3／4 實測兩次）---
+# state 檔跨波共用而 `.devdone` 標記逐波：波 N 的 `status: done` 還躺在檔裡，領導 dk-wave-open N+1
+# 並 dk-spawn 之後、員工尚未動筆之前，守望就把「dev 全員完成」推了出去。誤發之後標記寫成
+# delivered，真正完成時永遠不再通知 —— 既靜默放行空波，也讓真交付靜默。
+# 判準不能是 state 的 `wave:` 欄（員工漏填就永遠不通知，比誤報更糟），所以沿用 0.8.0 reviewer
+# 那套：dk-spawn 當下存 state 內容的 cksum，內容變過才是這一輪的交付。
+
+wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 spawn、還沒動筆
+  printf 'status: done\nwave: 1\n' > "$d/state/backend.md"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="2"/' "$d/.task.env"
+  : > "$d/.panes"
+  dk-spawn backend >/dev/null
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+}
+
+@test "開波空窗：上一波留下的 status: done 不算這一波的交付" {
+  wave2_spawned
+  run dk-watch --once; [ "$status" -eq 0 ]
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+  refute_grep ' dev-done wave 2' "$d/process.md"
+  [ ! -f "$d/.blocked/wave-2.devdone" ]
+}
+
+@test "員工在這一波重寫 state 之後，聚合照常推一次且只推一次" {
+  wave2_spawned
+  dk-watch --once
+  printf 'status: done\nwave: 2\nnotes: 波 2 做完了\n' > "$d/state/backend.md"
+  dk-watch --once
+  grep -q ' dev-done wave 2 (1: backend)$' "$d/process.md"
+  grep -q '^delivered$' "$d/.blocked/wave-2.devdone"
+  dk-watch --once
+  [ "$(grep -c '全員完成' "$HERDR_STUB_LOG")" -eq 1 ]
+}
+
+@test "state 漏填 wave: 欄也認得出這一輪的交付" {
+  wave2_spawned
+  printf 'status: done\nnotes: 交了，但忘了填 wave 欄\n' > "$d/state/backend.md"
+  dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"
+}
+
+@test "resume_unchanged_stays_done: 重派不把已認定的完成打回未完成" {
+  printf 'status: done\nwave: 1\n' > "$d/state/backend.md"
+  printf 'status: done\nwave: 1\n' > "$d/state/frontend.md"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="2"/' "$d/.task.env"
+  : > "$d/.panes"
+  dk-spawn backend >/dev/null; dk-spawn frontend >/dev/null
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  printf 'status: done\nwave: 2\n' > "$d/state/backend.md"   # backend 交了波 2
+  dk-watch --once; refute_grep '全員完成' "$HERDR_STUB_LOG"   # frontend 還沒，不該推
+  dk-spawn backend --resume >/dev/null                        # 重派；它的 state 從此不再變動
+  printf 'status: done\nwave: 2\n' > "$d/state/frontend.md"
+  dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"
+}
+
+# --- latch 只豁免「內容與快照相同」，不豁免 status: done 本身 -----------------
+# reviewer-a Important 1：dev_delivered() 原本是 `[ -f "$latch" ] && return 0`，一旦某位 dev
+# 交過一次，latch 落下之後不論它的 state 變成什麼都算「已交付」。A 交件 → qa 退件 A 改回
+# working → B 才交齊，這樣也會被判成全員完成 —— 跟 BACKLOG 那條開波空窗的洞同一個症狀，
+# 只是觸發條件換成「qa 退件」。
+
+@test "latch 落下後被退回 working，不再算已交付；同波夥伴交齊也不推聚合" {
+  printf 'status: done\nwave: 1\n' > "$d/state/backend.md"
+  printf 'status: done\nwave: 1\n' > "$d/state/frontend.md"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="2"/' "$d/.task.env"
+  : > "$d/.panes"
+  dk-spawn backend >/dev/null; dk-spawn frontend >/dev/null
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  printf 'status: done\nwave: 2\n' > "$d/state/backend.md"   # A 交件，latch 落下
+  dk-watch --once; refute_grep '全員完成' "$HERDR_STUB_LOG"
+  printf 'status: working\nwave: 2\n' > "$d/state/backend.md"   # qa 退件，A 改回 working
+  printf 'status: done\nwave: 2\n' > "$d/state/frontend.md"     # B 交齊
+  dk-watch --once
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+  refute_grep ' dev-done wave 2' "$d/process.md"
+  [ ! -f "$d/.blocked/wave-2.devdone" ]
+  printf 'status: done\nwave: 2\n' > "$d/state/backend.md"     # A 再改回 done 才推
+  dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"
+}
+
+# --- 逾時訊息的 (quota?) 標記走該 kind 的額度式子，不再自己寫一條寬鬆的 ---------
+# dk-watch 原本另寫 'rate limit|quota|429|usage limit'：裸 quota 讓 agy 的啟動橫幅
+# `bal@host (Antigravity Starter Quota)` 被標成疑似撞額度，領導會去換 kind 而不是去看它為什麼卡住。
+
+@test "逾時標記：agy 的啟動橫幅不算額度" {
+  echo '{"result":{"read":{"text":"bal@host (Antigravity Starter Quota)\nthinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+  printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"
+  echo "2026-09-10T10:00 spawn login-reviewer-b (agy M) override-kind isolated" >> "$d/process.md"
+  dk-watch --once
+  grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+  refute_grep 'quota?' "$HERDR_STUB_LOG"
+  refute_grep 'LIMIT' "$HERDR_STUB_LOG"
+}
+
+@test "逾時標記：agy 真的耗盡時仍標 (quota?)" {
+  echo '{"result":{"read":{"text":"Individual quota reached, Resets in 102h11m1s"}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+  printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"
+  echo "2026-09-10T10:00 spawn login-reviewer-b (agy M) override-kind isolated" >> "$d/process.md"
+  dk-watch --once
+  grep -q '\[LIMIT\] from dk-watch: login-reviewer-b 撞額度' "$HERDR_STUB_LOG"
+  # reviewer-a Minor 1：AC8 改動的 dk-watch:212 只有反向（不該標）被守著，正向拿掉整行也不會紅。
+  grep -q '\[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)' "$HERDR_STUB_LOG"
+}

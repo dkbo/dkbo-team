@@ -160,6 +160,25 @@ chore_tick() {   # chores have no reviewers and no waves: blocked detection only
   done
 }
 
+# 這一波的交付，不是上一波留在檔裡的 status: done。state 檔跨波共用而 `.devdone` 標記逐波，
+# 只看 `^status: done` 的話，開波到員工動筆之間的空窗就會被判成「dev 全員完成」——
+# 誤發之後標記寫成 delivered，真完成時永遠不再通知（BACKLOG 2026-09-19，flowgap 波 3／4 實測）。
+# 判準不用 state 的 `wave:` 欄：員工漏填會靜默永不通知，比誤報更糟。改比 dk-spawn 當下存的
+# 內容快照（cksum；不用 mtime，`date -r` 在 GNU 與 BSD 語義不同）。
+# 認定過就落一個逐波的 latch：重派會以當下內容重取快照，沒有 latch 的話已完成的成員會被打回
+# 未完成，同波其他人交齊了也沒人通知領導。沒有快照檔（legacy 任務、手寫的 .panes）就照舊只看
+# status，不平白讓整波啞掉。
+dev_delivered() { # AGENT SNAME — 這一波真的交了嗎
+  local agent="$1" sname="$2" sf snap latch
+  sf="$dir/state/$sname.md"; snap="$dir/.blocked/$agent.spawn"; latch="$dir/.blocked/wave-$DK_WAVE.$sname.done"
+  # latch 只豁免「內容與快照相同」那一關，不豁免 status: done 本身：交過一次之後被退回
+  # working，不能再算已交付（reviewer-a Important 1，qa 退件會重現跟開波空窗一樣的誤發）。
+  [ -f "$latch" ] && { grep -q '^status: done' "$sf" 2>/dev/null; return $?; }
+  grep -q '^status: done' "$sf" 2>/dev/null || return 1
+  if [ -f "$snap" ] && [ "$(cksum < "$sf")" = "$(cat "$snap")" ]; then return 1; fi
+  : > "$latch"
+}
+
 tick() {
   [ -f "$dir/.panes" ] || exit 0
   local now list; now=$(date +%s); list=$(dk_h_soft agent list) || return 0
@@ -190,7 +209,9 @@ tick() {
       kind=$(agent_kind "$agent")
       # 它不是掛了，是在等人按一下 —— 主迴圈的 assess 已經送過 [BLOCKED]，這裡只要不熔斷
       screen_hits "$txt" "$(dk_kind_re "$kind" block)" && continue
-      tag=""; printf '%s' "$txt" | grep -qiE 'rate limit|quota|429|usage limit' && tag=" (quota?)"
+      # 標記走該 kind 自己的額度式子，不另寫一條。原本那條裸 `quota` 會把 agy 的啟動橫幅
+      # `bal@host (Antigravity Starter Quota)` 標成疑似撞額度，領導會去換 kind 而不是去看它卡在哪。
+      tag=""; screen_hits "$txt" "$(dk_kind_re "$kind" quota)" && tag=" (quota?)"
       herdr notification show "dkbo: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
       # 熔斷與事件紀錄不等領導：這是任務狀態的改變，領導收不收得到訊息都一樣成立
       if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
@@ -212,7 +233,7 @@ tick() {
     while read -r agent _pane _epoch group _; do
       [ "${group:-}" = dev ] || continue
       cnt=$((cnt+1)); sname="${agent#"$DK_SHORT"-}"
-      if grep -q '^status: done' "$dir/state/$sname.md" 2>/dev/null; then devs="${devs:+$devs, }$sname"
+      if dev_delivered "$agent" "$sname"; then devs="${devs:+$devs, }$sname"
       else all=0; break; fi
     done < "$dir/.panes"
     if [ "$cnt" -gt 0 ] && [ "$all" = 1 ]; then

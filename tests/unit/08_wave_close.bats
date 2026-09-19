@@ -172,3 +172,19 @@ teardown() { teardown_project; }
   run dk-wave-close --agent login-backend; [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/wave-1.devdone" ]
 }
+
+@test "gate c: 測試指令拿到的環境裡沒有任何 DK_*" {
+  # 領導整包 DK_* 傳下去，測試裡任何 source lib/common.sh 的東西都會打到真 repo：
+  # 2026-09-19 實跑就這樣在源碼倉建了 7 個 worktree 與 8 個分支（BACKLOG）。
+  out="$PROJECT/gatec-dk.txt"
+  echo "DK_TEST_CMD=\"env | grep '^DK_' > $out; true\"" >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [ -f "$out" ]; [ ! -s "$out" ] || { echo "洩漏："; cat "$out"; false; }
+}
+
+@test "gate c: 非 DK_* 的環境照舊（PATH、HOME 都還在）" {
+  out="$PROJECT/gatec-env.txt"
+  echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  grep -q '^PATH=' "$out"; grep -q '^HOME=' "$out"
+}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1 — 2026-09-19
+
+- fix(watch): dev 完成聚合只看 state 的 `^status: done`，而 state 檔跨波共用、`.devdone` 標記逐波 —— 成員跨兩波時，**開波到員工寫下第一份 state 之間的空窗會被判成「dev 全員完成」**（flowgap 實測兩次），誤發後標記寫成 `delivered`，真正完成時永遠不再通知，領導從此只能手動追蹤。改法：`dk-spawn` 在每次 spawn（含 `--resume`／`--handoff` 重派）當下把 state 內容的 `cksum` 存成 `.blocked/<agent>.spawn`，聚合要求「`status: done` 且內容與快照不同」才算這一輪的交付；認定過就落一個 `.blocked/wave-N.<成員>.done` latch，重派不會把已認定的完成打回未完成。不看 state 的 `wave:` 欄（員工漏填會靜默永不通知，比誤報更糟），也不看 mtime（`date -r` 在 GNU 與 BSD 語義不同）。沒有快照檔的 legacy 任務照舊只看 status。`dk-wave-close` 收波與 `--agent` 關單人時一併清 latch。
+- fix(wave-close): gate c 用 `bash -c "$DK_TEST_CMD"` 跑測試，把領導整包 `DK_*` 環境餵給子行程；專案的測試只要 source 到會寫 `${DK_X:-預設}` 的東西就會照繼承值打到真 repo（2026-09-19 領導在自己 session 跑 gate c，在源碼倉建了 7 個 worktree 與 8 個分支）。改成以 `env -u` 逐一剝掉所有 `DK_*` 再執行，`PATH`、`HOME` 等非 `DK_*` 照舊；仍在 `DK_WORKTREE` 內跑，測試非零仍拒絕關波，`--force` 照舊放行。
+- fix(kinds): `kinds/agy.sh` 的 `KIND_QUOTA_RE` 收了裸 `quota`，而 agy 的啟動橫幅就叫 `bal@host (Antigravity Starter Quota)` —— 每個 agy 員工一 spawn 就被判撞額度、該 kind 當場熔斷。改成只收耗盡的說法（`quota reached|quota exceeded|rate limit|usage limit|resource exhausted`；實測原文 `Individual quota reached, Resets in 102h11m1s`），`lib/kinds.sh` 的通用回退式 `DK_RE_QUOTA_ANY` 同步收窄。`dk-watch` 對 reviewer `[TIMEOUT]` 附加 `(quota?)` 的那條另寫的寬鬆式子（`rate limit|quota|429|usage limit`）廢除，改走該 kind 的 `KIND_QUOTA_RE` 同一條路徑。`kinds/claude.sh` 的 `KIND_QUOTA_RE` 同一波再收窄一次：移除裸 `approaching your`（「快到了」不是「已耗盡」，且是極常見英文片語，員工畫面上出現這兩個字就會被誤判熔斥），只留實測過的耗盡片語 `usage limit|rate limit`。
+- fix(watch): `dev_delivered()` 的 latch 原本一旦落下就無條件視為「已交付」，qa 把某位 dev 退回 `status: working` 之後，只要同波其他人交齊，仍會被判成全員完成並推出聚合 `[DONE]`——跟開波空窗那條誤發是同一個洞，只是觸發條件換成「退件」。改成 latch 只豁免「內容與快照相同」那一關，`status: done` 本身仍要每輪重新確認。
+- docs: 三份 README 的 herdr 版號誤標成 0.9.1（含疑難排解那列的錯誤訊息原文），與 `lib/common.sh` 的 `DK_HERDR_MIN="0.9.0"` 不符；改回 0.9.0，六處。新增 `21_version.bats` 測試守住兩者一致。
+- 測試：399 bats（+14）；shellcheck 零警告。
+
 ## 0.9.0 — 2026-09-19
 
 - feat(brief)!: brief 新增 `## 全域約束` 段（橫切所有波的硬要求，一行一條），流進三份切片模板（成員、波審查、計畫審查）的 `{{CONSTRAINTS}}` token。`dk_brief_constraints()` 有 reader 與測試。

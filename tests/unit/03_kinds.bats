@@ -54,3 +54,39 @@ teardown() { teardown_project; }
     [[ "$a" != *"--sandbox"* ]] || { echo "$k: $a"; false; }
   done
 }
+
+# --- 額度式子只描述「額度已耗盡」，不描述正常啟動就有的字樣 ---------------------
+# agy 的啟動橫幅是 `bal@host (Antigravity Starter Quota)`：裸 `quota` 命中它，等於每個 agy 員工
+# 一 spawn 就被判撞額度、該 kind 當場熔斷，整條守望反過來害人（BACKLOG 2026-09-19 實測）。
+quota_hits() { # KIND TEXT — 走 dk-watch screen_hits 的同一條路徑
+  printf '%s' "$2" | grep -qiE "$(dk_kind_re "$1" quota)"
+}
+assert_quota() { quota_hits "$@" || { echo "$1 的額度式子漏掉了: $2"; false; }; }
+refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; false; fi; }
+
+@test "agy 的額度式子放過啟動橫幅，仍認得實測的耗盡訊息" {
+  refute_quota agy 'bal@host (Antigravity Starter Quota)'
+  assert_quota agy 'Individual quota reached, Resets in 102h11m1s'   # 1.2.6 實測原文
+  assert_quota agy 'quota exceeded'
+  assert_quota agy 'resource exhausted'
+  assert_quota agy 'rate limit'
+}
+@test "未知 kind 的通用額度式子也放過啟動橫幅" {
+  refute_quota '' 'bal@host (Antigravity Starter Quota)'
+  assert_quota '' 'Individual quota reached, Resets in 102h11m1s'
+  assert_quota '' 'usage limit'
+}
+@test "claude 與 codex 的額度式子放過各自的啟動畫面" {
+  refute_quota claude '✻ Welcome to Claude Code!  /help for help, /status for your current setup'
+  refute_quota codex 'OpenAI Codex (v0.31.0)  model: gpt-5.5  approval: never'
+  assert_quota claude 'Approaching your usage limit'
+  assert_quota codex "You've hit your usage limit. Upgrade to Plus to continue using Codex"
+}
+# --- claude 的裸 approaching your 是「快到了」不是「已耗盡」，違反共用契約第三列 ---
+# （reviewer-a Important 3）：正常畫面只要出現這兩個很常見的英文字就會被判額度已耗盡，
+# 跟被修掉的 agy 裸 quota 是同一類洞。收窄成實測過的耗盡片語。
+@test "claude 的額度式子不再吃裸 approaching your，只認耗盡片語" {
+  refute_quota claude 'approaching your deadline'
+  assert_quota claude "You've hit your usage limit"
+  assert_quota claude 'rate limit'
+}
