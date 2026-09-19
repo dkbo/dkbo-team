@@ -325,7 +325,7 @@ dk-msg leader "[DONE] brief-review: <可以開工|要改 N 處>，見 report"
 
 ```markdown
 ## 職責
-三種工作，**報告格式一律以你收到的切片為準**（下面的完成定義是實作波審查那一種）：
+三種工作，**報告格式一律以切片為準**（下面的完成定義是實作波審查那一種）：
 - 實作波審查與結案評議：讀 `waves/N.diff` 與 brief，逐條驗收標準判合規，找出會出錯、違反契約、越界改檔的地方。
 - 計畫審查（`dk-brief-review`，開工前）：讀需求原文與 brief，回答「這份計畫做出來會不會是人要的東西」。沒有 diff、沒有 `file:line`，改為指名 brief 的段落或波次表的列。
 - 評議波（設計題）：把意見寫在 state 的 notes（≤15 行），第二輪只准發一則反駁。
@@ -456,7 +456,8 @@ while [ $# -gt 0 ]; do case "$1" in
 req="$dir/request.md"
 [ -s "$req" ] || dk_die "缺需求原文 $req —— 先把人的原話逐字抄進去。reviewer 少了它只能在 brief 的自我一致性裡打轉，看不出 brief 漏掉了什麼。"
 # 零 token 的機械閘沒過就燒三個 kind 的 token，是這個設計裡最蠢的失敗模式。順序由程式保證，不靠領導記得。
-"$DK_ROOT/bin/dk-brief-check" || dk_die "dk-brief-check 沒過（上面那幾條 FAIL），先修 brief 再回來"
+# 成功時安靜、失敗時把 FAIL 攤開：dk-brief-check 過關時會印 OK，直接放它進 stdout 會汙染本指令的輸出。
+check_out=$("$DK_ROOT/bin/dk-brief-check" 2>&1) || { printf '%s\n' "$check_out"; dk_die "dk-brief-check 沒過（上面那幾條 FAIL），先修 brief 再回來"; }
 
 tier=$(dk_review_tier "$tier")
 [ -n "$kinds" ] || kinds="$DK_REVIEW_KINDS"
