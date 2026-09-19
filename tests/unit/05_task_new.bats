@@ -107,9 +107,11 @@ teardown() { teardown_project; }
   grep -q '逐字' "$d/request.md"
 }
 @test "--from 指向檔案時把需求原文逐字複製進 request.md" {
-  printf '第一行需求\n第二行需求\n' > "$PROJECT/req.txt"
+  # 這行含 {{DISPLAY}} token：純 cp 會原樣留著它；若被人誤改成 dk_render "$from" 會被替換掉，測試才抓得到
+  printf '第一行需求\n第二行需求，含 {{DISPLAY}} token\n' > "$PROJECT/req.txt"
   d=$(dk-task-new login "使用者登入" --from "$PROJECT/req.txt")
   [ "$(cat "$d/request.md")" = "$(cat "$PROJECT/req.txt")" ]
+  grep -qF '{{DISPLAY}}' "$d/request.md"
   grep -q '來源：.*req.txt' "$d/brief.md"
 }
 @test "--from 指向不存在的檔時退回空殼，來源欄照舊" {
@@ -129,7 +131,7 @@ teardown() { teardown_project; }
   refute_grep 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
   refute_grep '| 使用者登入 | task | running |' "$DK_ROOT/tasks/INDEX.md"
 }
-@test "gate1 接受 skipped，也接受 verdict" {
+@test "gate1 接受 brief-review skipped" {
   dk-task-new login "使用者登入" >/dev/null
   dk-process "brief-review skipped: 純文件任務"
   run dk-task-new login --gate1; [ "$status" -eq 0 ]

@@ -67,7 +67,7 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
 | `roles/` | 角色檔（kind、S/M/L 三檔、職責） |
 | `kinds/` | 各 AI CLI 的旗標對應 |
 | `bin/` | `dk-*` 腳本，全部封裝 herdr |
-| `tasks/<日期-短名>/` | 一個任務的全部記憶：brief、process、report、messages.log、state/ |
+| `tasks/<日期-短名>/` | 一個任務的全部記憶：request.md、brief、process、report、messages.log、state/ |
 | `tasks/INDEX.md`、`tasks/BACKLOG.md`、`decisions.md`、`PROJECT.md` | 跨任務記憶 |
 
 ## 更新 dkbo
