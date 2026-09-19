@@ -101,3 +101,57 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]
   grep -q 'login-qa -> login-frontend \[UNDELIVERED\] \[BUG\] x' "$d/messages.log"
 }
+
+# --- dev 的 [DONE] 不再逐筆吵領導：只落盤，等 dk-watch 在全員完成時推一則 ---
+
+dev_panes() { printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$1/.panes"; }
+
+@test "dev 的 [DONE] 寫進 log 但不投遞給領導" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"
+  [ "$status" -eq 0 ]
+  refute_grep '^agent prompt' "$HERDR_STUB_LOG"
+  grep -Eq '^[0-9T:-]+ login-backend -> leader-login \[DONE\] POST /login 完成$' "$d/messages.log"
+}
+
+@test "dev 的 state 還不是 done 就送 [DONE]：當場拒收，不落盤也不投遞" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: working\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"status: done"* ]]
+  refute_grep '^agent prompt' "$HERDR_STUB_LOG"
+  refute_grep 'DONE' "$d/messages.log"
+}
+
+@test "dev 連 state 檔都還沒建就送 [DONE]：一樣拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  rm -f "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  refute_grep 'DONE' "$d/messages.log"
+}
+
+@test "dev 送給同波夥伴的 [DONE] 照響（qa 等它才開工）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg login-qa "[DONE] API 好了，可以驗"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt login-qa \[DONE\] from login-backend: API 好了，可以驗$' "$HERDR_STUB_LOG"
+}
+
+@test "review 組（qa、reviewer）的 [DONE] 照響" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt leader-login \[DONE\] from login-qa: 驗收全過$' "$HERDR_STUB_LOG"
+}
+
+@test "dev 的其他類型不受影響：state 沒 done 也照送 ESCALATE" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: working\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[ESCALATE] 要改共用契約"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt leader-login \[ESCALATE\] from login-backend: 要改共用契約$' "$HERDR_STUB_LOG"
+}

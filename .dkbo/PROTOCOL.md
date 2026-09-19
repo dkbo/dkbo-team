@@ -9,7 +9,7 @@
 | 類型 | 方向 | 何時 |
 |---|---|---|
 | TASK | 領導→員工 | 補充派工、要求補 report、請 reviewer 複看 |
-| DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done`、report 已寫好 |
+| DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done`、report 已寫好。dev 送給領導的這一則只落盤，見下 |
 | BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report |
 | FIXED | 員工→員工、dev→領導 | 修好了，請重驗。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
 | QUESTION / ANSWER | 任意 | 釐清介面、契約 |
@@ -18,6 +18,11 @@
 | STOP | 領導→員工 | 停手，寫 state 收尾 |
 
 `[BLOCKED]`、`[LIMIT]` 與 `[TIMEOUT]` 由 dk-watch 直接推給領導，員工不用送。`[BLOCKED]` 是卡在審批（等人按一下），`[LIMIT]` 是撞到額度（該 kind 已熔斷），兩者的差別決定領導該去按審批還是該換人 —— 不要把它們當成同一件事。
+
+**dev 的 `[DONE]` 只寫進 messages.log，不會叫醒領導。** 領導改由 dk-watch 在本波 dev 全員完成時收到一則聚合訊息 —— 每一則送達都是把領導的整個 context 重跑一輪，四人波四次，而領導在收齊之前也做不了下一步。你照常送，指令不變。兩個後果要記得：
+
+1. **state 還不是 `status: done` 就送，dk-msg 會當場退回（exit 2）。** 聚合看的是 state 檔不是你的訊息 —— state 沒寫好，這一波會靜悄悄卡到整波逾時才有人吭聲。先寫 state 與 report，再送 `[DONE]`。
+2. **送給同波夥伴的 `[DONE]`（dev→qa）照常即時送達**，那是解鎖訊號不是回報。qa、reviewer 與雜務員工的 `[DONE]` 也都照常即時送達。
 
 ## 規則
 - 同一波員工可以互相傳訊。`DK_ISOLATED=1` 的員工（reviewer）只能對 leader 傳訊。
