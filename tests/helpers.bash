@@ -2,6 +2,14 @@
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 setup_project() {
+  # 繼承來的 DK_* 一律洗掉，再設 harness 自己要的那兩個。
+  # common.sh 幾乎每個變數都寫成 ${DK_X:-<預設>}，繼承值優先 —— 只覆寫 DK_ROOT 不夠：
+  # DK_PROJECT_ROOT 會留著指向呼叫者的 repo，而 dk-task-new 是 git -C "$DK_PROJECT_ROOT"
+  # worktree add。2026-09-19 領導在自己 session 跑 gate c，就這樣在真 repo 建了 7 個
+  # worktree 與 8 個分支；員工手動跑全綠，因為員工的 shell 沒 source 過 common.sh。
+  # 逐一列舉會隨新變數再度過時，所以整片清 —— 回歸測試在 tests/unit/30_isolation.bats。
+  local v
+  for v in ${!DK_@}; do unset "$v"; done
   PROJECT="$(mktemp -d)"
   cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
@@ -19,7 +27,6 @@ setup_project() {
   export HERDR_ENV=1 HERDR_PANE_ID=wB:p1 HERDR_WORKSPACE_ID=wB HERDR_TAB_ID=wB:t1
   export DK_ROOT="$PROJECT/.dkbo"
   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
-  unset DK_TASK_DIR DK_ROLE DK_AGENT DK_LEADER DK_ISOLATED
   cd "$PROJECT"
 }
 teardown_project() {
@@ -77,6 +84,9 @@ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
 ## 目標（≤3 行）
 登入 API 與表單。
 
+## 全域約束
+bash 3.2+；不得使用 bash 4 語法
+
 ## 驗收標準
 - [ ] POST /login 空密碼回 400
 - [ ] renderLogin 產出 user/pass 欄位
@@ -90,7 +100,9 @@ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
 | qa | tests/** | — |
 
 ## 共用契約
-無
+| 契約 | 擁有者 | 消費者 | 形狀／簽名 | 變更流程 |
+|---|---|---|---|---|
+| login API | backend | frontend-cart, qa | POST /login {user,pw} → {token} | 動它要先 ESCALATE |
 
 ## 波次表
 | 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |

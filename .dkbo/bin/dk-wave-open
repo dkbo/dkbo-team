@@ -20,6 +20,7 @@ brief="$dir/brief.md"
 members=$(dk_brief_wave_members "$brief" "$n"); [ -n "$members" ] || dk_die "wave $n has no members in the 波次表 of $brief"
 base=$(git -C "$DK_WORKTREE" rev-parse HEAD)
 goal=$(dk_brief_section "$brief" "## 目標"); contract=$(dk_brief_section "$brief" "## 共用契約"); acc=$(dk_brief_section "$brief" "## 驗收標準")
+constraints=$(dk_brief_constraints "$brief")
 peers=$(echo "$members" | tr '\n' ' ' | sed 's/ $//')
 mkdir -p "$dir/briefs"
 for m in $members; do m="${m%%(*}"
@@ -27,6 +28,7 @@ for m in $members; do m="${m%%(*}"
   own=$(dk_brief_owners "$brief" | awk -F'|' -v m="$m" '$1==m {printf "| %s | %s | %s |\n", $1,$2,$3}')
   [ -n "$own" ] || echo "dk-wave-open: $m has no row in 檔案所有權 (run dk-brief-check)" >&2
   dk_render "$DK_ROOT/templates/brief-member.md" "DISPLAY=$DK_DISPLAY" "MEMBER=$m" "WAVE=$n" "BRIEF=$brief" "GOAL=$goal" \
+    "CONSTRAINTS=$constraints" \
     "WAVE_ROWS=$rows" "OWNER_ROWS=$own" "CONTRACT=$contract" "ACCEPTANCE=$acc" "PEERS=$peers" > "$dir/briefs/$m.md"
 done
 dk_env_set DK_WAVE "$n"; dk_env_set DK_WAVE_STARTED "$(date +%s)"

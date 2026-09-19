@@ -67,3 +67,14 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
   open_wave 1; run dk-review
   [ "$status" -eq 1 ]; [[ "$output" == *"settings.env"* ]]; ! grep -q '^agent start' "$HERDR_STUB_LOG"
 }
+@test "整枝評議帶累積的 Minor，逐波審查不帶" {
+  open_wave 1
+  echo "2026-09-19T10:00 minor 1: 變數命名不一致 src/a.sh:12" >> "$d/process.md"
+  run dk-review 1; [ "$status" -eq 0 ]
+  grep -q '逐波審查不 triage' "$d/briefs/reviewer-a.md"
+  refute_grep '變數命名不一致' "$d/briefs/reviewer-a.md"
+  dk-wave-close --force >/dev/null 2>&1 || true
+  mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
+  run dk-review --task; [ "$status" -eq 0 ]
+  grep -q '變數命名不一致' "$d/briefs/reviewer-a.md"
+}

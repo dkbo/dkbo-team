@@ -12,7 +12,7 @@ teardown() { teardown_project; }
   grep -q '^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$' "$d/briefs/backend.md"
   ! grep -q 'frontend-cart |' "$d/briefs/backend.md"
   grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; ! grep -q '^| qa |' "$d/briefs/backend.md"
-  grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^無$' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
+  grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^| login API | backend | frontend-cart, qa |' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
   grep -q "$d/brief.md" "$d/briefs/backend.md"; grep -q '登入 API 與表單' "$d/briefs/qa.md"
 }
 @test "refuses a second open, an open with live panes, and a wave without members" {

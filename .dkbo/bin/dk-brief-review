@@ -2,7 +2,7 @@
 # dk-brief-review [--kinds "k1 k2 k3"] [--tier M|L] — 開工前的計畫審查：派 1–3 位隔離 reviewer
 # 讀 request.md + brief.md 出意見。與 dk-brief-check 同一層：那一支驗形狀，這一支看內容。
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/review.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/review.sh"
 dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
 kinds=""; tier=""
 while [ $# -gt 0 ]; do case "$1" in
@@ -24,11 +24,12 @@ tier=$(dk_review_tier "$tier")
 [ -n "$kinds" ] || kinds="$DK_REVIEW_KINDS"
 use=$(dk_review_kinds "$kinds" dk-brief-review "brief-review") || exit 1
 
+constraints=$(dk_brief_constraints "$dir/brief.md")
 aliases=$(dk_review_aliases "p1 p2 p3" "$use")
 mkdir -p "$dir/briefs" "$dir/state"
 for a in $aliases; do
   sname="reviewer-$a"
   dk_render "$DK_ROOT/templates/brief-reviewer-plan.md" "DISPLAY=$DK_DISPLAY" "REQUEST=$req" \
-    "BRIEF=$dir/brief.md" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
+    "BRIEF=$dir/brief.md" "CONSTRAINTS=$constraints" "REPORT=$dir/state/$sname.report.md" > "$dir/briefs/$sname.md"
 done
 dk_review_spawn "$use" "$aliases" "$tier" dk-brief-review brief-review

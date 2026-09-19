@@ -10,8 +10,8 @@
 |---|---|---|
 | TASK | 領導→員工 | 補充派工、要求補 report、請 reviewer 複看 |
 | DONE | 員工→領導（也可同時通知同波夥伴，如 dev→qa） | 完成，且 state 已寫 `status: done`、report 已寫好。dev 送給領導的這一則只落盤，見下 |
-| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report |
-| FIXED | 員工→員工、dev→領導 | 修好了，請重驗。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
+| BUG | 員工→員工、領導→dev（reviewer 的 Important 由領導轉） | 附重現方式，指向 state 或 report。收到 BUG 先讀 `$DK_ROOT/methods/debugging.md` 再動手 |
+| FIXED | 員工→員工、dev→領導 | 修好了，請重驗，**內文帶一句根因**。領導轉來的 `[BUG]`（reviewer 的 Important）修好後也回這個，不要回 `[DONE]` —— 領導要靠它決定何時重打差異包請 reviewer 複看 |
 | QUESTION / ANSWER | 任意 | 釐清介面、契約 |
 | ESCALATE | 員工→領導 | 需要決策、想動不屬於自己的檔、修一次未好、上下文吃緊（寫 `[ESCALATE] context`）、碰到停止條件 |
 | DECISION | 領導→員工 | 決策結果 |
@@ -26,7 +26,7 @@
 
 ## 規則
 - 同一波員工可以互相傳訊。`DK_ISOLATED=1` 的員工（reviewer）只能對 leader 傳訊。
-- 修復迴圈上限一次，以同一個 bug 計：BUG → FIXED → 再驗仍失敗 → qa（或領導）直接 ESCALATE，不再回 dev。
+- 修復迴圈上限兩輪，以同一個 bug 計：BUG → FIXED → 再驗仍失敗 → **領導換一個腦袋**（`dk-spawn <角色> <別名> --handoff "<原因>"`，換 kind 或升檔位；腳本自己落 ruling）→ 再驗仍失敗 → qa（或領導）ESCALATE，不再回 dev。同一個人再試一次跟換一個腦袋試一次不是同一件事，第二輪要換人。
 - QUESTION 若 brief 沒有答案，被問的人不得自己決定；提問者 ESCALATE。同一波同一對員工 QUESTION 最多兩則。
 - 任何「選 A 或 B」、任何共用契約的變更，一律 ESCALATE。
 - 只能修改切片所有權劃給你的檔案。要動別人的檔 → 用 QUESTION 請擁有者改，或 ESCALATE。

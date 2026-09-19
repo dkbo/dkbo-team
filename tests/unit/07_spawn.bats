@@ -113,3 +113,41 @@ teardown() { teardown_project; }
   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(grep -c '^2=' <<< "$(sed -n 's/^DK_TABS="\(.*\)"$/\1/p' "$d/.task.env" | tr ' ' '\n')")" -eq 1 ]
   grep -q 'tab 2 wB:t9 closed (recreated)' "$d/process.md"; grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
 }
+@test "首輪提示帶 TDD 順序與除錯方法檔" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+  grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
+}
+@test "--handoff 落 ruling、隱含 resume、用接手版提示" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  grep -qE '^[^ ]+ ruling: 換 codex/M 接手 login-backend 的修復 — claude 修一次沒好，換 codex — ' "$d/process.md"
+  grep -q '上一位修過一次沒成功' "$HERDR_STUB_LOG"
+  grep -q 'methods/debugging.md' "$HERDR_STUB_LOG"
+}
+@test "--handoff 不帶原因就死" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend --handoff; [ "$status" -ne 0 ]; [[ "$output" == *"--handoff"* ]]
+}
+@test "TDD 那一句只發給 group: dev，reviewer 與 qa 不收到" {
+  # Minor 6：reviewer 依角色定義不寫任何碼，報告格式另由切片規定成規格合規／Important／
+  # Minor，收到「兩次的指令與輸出貼進報告的紅綠」跟自己的切片矛盾。
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  grep -q '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  refute_grep '先寫一條會失敗的測試' "$HERDR_STUB_LOG"
+}
+@test "--handoff 的 ruling 只在 pane 與 agent 真的起來後才落盤" {
+  # Minor 7：ruling 原本在 pane split／agent start 之前就落盤，agent start 失敗時
+  # process.md 會留下一行「換人」的假裁定，而那次換手其實沒發生。
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  HERDR_STUB_FAIL="agent start" run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 1 ]
+  refute_grep 'ruling: 換 codex' "$d/process.md"
+}

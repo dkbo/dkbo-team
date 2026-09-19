@@ -50,8 +50,18 @@ if [ "$legacy" = 0 ]; then
     [ "$group" = dev ] || continue
     sname="${agent#"$DK_SHORT"-}"; rf="$dir/state/$sname.report.md"
     if [ ! -f "$rf" ]; then problems="$problems\n  no report $rf (dk-msg $agent \"[TASK] 補 report 測試段\")"
-    elif ! awk '/^## 測試/{t=1; next} t && /^## /{exit} t && /^[^[:space:]（]/{ok=1} END{exit !ok}' "$rf"; then
-      problems="$problems\n  report $rf lacks content under '## 測試'"
+    elif ! awk '
+      /^## 測試/{t=1; next}
+      t && /^## /{exit}
+      t && /^### 紅/{s="r"; next}
+      t && /^### 綠/{s="g"; next}
+      t && s!="" && /^[^[:space:]（]/{
+        n[s]++
+        if (n[s]==1 && $0 ~ /^不適用[:：]/) ok[s]=1   # 沒有測試的波：首行就是豁免宣告（半形／全形冒號都算）
+        if (n[s]>=2) ok[s]=1                      # 指令列＋輸出，至少兩行
+      }
+      END{exit !(ok["r"] && ok["g"])}' "$rf"; then
+      problems="$problems\n  report $rf 的 '## 測試' 缺證據：'### 紅' 與 '### 綠' 各要指令列與輸出兩行以上（沒有測試的波首行寫「不適用: <理由>」）"
     fi
   done < "$dir/.panes"
   members=$(dk_brief_wave_members "$dir/brief.md" "${n:-0}" | sed 's/(.*//')   # state names, no (tier)
