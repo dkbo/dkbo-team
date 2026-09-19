@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1 — 2026-09-19
+
+- refactor(review): 審查的 spawn 迴圈收進 `lib/review.sh`，`dk-review` 與 `dk-brief-review` 不再各養一份。兩支原本有 14 行逐字重複 —— 別名指派、`dk-spawn` 呼叫與 rc 捕捉、prompt-failed 三分支、`spawned` 累積、結尾的 `dk_die`／`dk_process`／`echo` —— 真正不同的只有 `dk_render` 那一句與訊息裡的名字。0.8.0 已評估過抽法可行但選擇先出貨，這一版收掉。
+- 切法是兩段：呼叫端自己跑 render 迴圈把切片產齊，`dk_review_spawn` 只管派 —— 它假設 `briefs/reviewer-<別名>.md` 已經在那裡。沒有回呼、沒有 eval，bash 3.2 相容（用位置參數走訪別名，不用陣列索引）。順手也抽了 `dk_review_aliases`：只抽 spawn 迴圈的話，render 迴圈會變成 `for k in $use` 卻不用 `k`（shellcheck SC2034），而用 `disable` 蓋掉一個**真的沒用到**的變數是在掩蓋味道；抽出來之後兩邊的 `i` 計數一起消失，「別名清單與 kind 清單一一對應」也有了明確的出處。
+- **行為一個字都沒變**，而且是量過的：`tests/unit/20_review.bats` 與 `28_brief_review.bats` 共 24 筆的 TAP 輸出，重構前後逐字相同。這兩支對那 14 行的三個分支（正常、prompt-failed、全數 spawn 失敗）都有測試蓋著，所以那份綠是真的擋得住事的綠。`dk-review` 48→37 行，`dk-brief-review` 45→34 行。
+- 測試：354 bats（±0 —— 純重構不該需要新測試，需要的話就表示它不是純重構）；shellcheck 零警告。
+- 升級：照 README 的 rsync 流程走即可。只動 `lib/` 與 `bin/` 兩支腳本，沒有新檔案、沒有新 symlink、`settings.env` 沒有新鍵。從 0.8.0 升上來的人不會看到任何行為差異。
+
 ## 0.8.0 — 2026-09-19
 
 - feat(plan)!: **計畫本身現在也會被第二個腦袋看過。** 執行階段每一波都有多模型審查閘（`dk-review`），但 `brief.md` 從來沒有 —— 領導寫完、跑過 `dk-brief-check`（機械閘、零 token）就直接到關卡①請人拍板，而那時所有人都還沒開工，改起來最便宜。新增 `dk-brief-review`：派 2–3 個不同 kind 的 reviewer 讀「需求原文 + brief」，各自出一份固定格式的意見，領導一輪收齊後裁定、改 brief，才准過關卡①。
