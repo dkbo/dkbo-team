@@ -194,3 +194,32 @@ teardown() { teardown_project; }
   : > "$d/.panes"
   run dk-task-new login --gate1; [ "$status" -eq 0 ]
 }
+
+# --- 開場的 dk_repos_check 便宜三項（AC2／AC4 的早失敗那一半，0.10.0）-----------
+# 名字、第一個是主 repo、路徑是 git 根：三項都不必碰工作樹狀態，所以在建資料夾之前就驗。
+# 「工作樹乾淨」留到 dk-leader --run 真的要從 HEAD 切 worktree 的那一刻（--no-clean）。
+
+@test "task-new 在 DK_REPOS 名字不合法時拒絕，什麼都不建" {
+  printf 'DK_REPOS="main=. Bad=%s"\n' "$PROJECT-api" >> "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"Bad"* ]]
+  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+}
+@test "task-new 在第一個 repo 不是主 repo 時拒絕" {
+  setup_multirepo
+  sed -i "s#^DK_REPOS=.*#DK_REPOS=\"api=$REPO_API main=.\"#" "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"主 repo"* ]]
+  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+}
+@test "task-new 在 repo 路徑不是 git 根時拒絕並點名" {
+  mkdir -p "$PROJECT-plain"
+  printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-plain" >> "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
+  rm -r "$PROJECT-plain"
+}
+@test "task-new 不驗工作樹乾不乾淨（--no-clean；那一項是 dk-leader --run 的事）" {
+  setup_multirepo
+  repo_dirty_tracked "$REPO_API"
+  run dk-task-new login x; [ "$status" -eq 0 ]
+  [ -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+}

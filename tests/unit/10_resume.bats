@@ -88,3 +88,33 @@ teardown() { teardown_project; }
   run dk-resume; [ "$status" -eq 0 ]
   [[ "$output" == *"任務已進行 "* ]]; [[ "$output" != *"本波已進行"* ]]
 }
+
+# --- 0.10.0：本波段之前印一張 .repos 表 ---------------------------------------
+
+@test "resume 在本波段之前印倉庫段；單 repo 一列且不印前綴欄" {
+  run dk-resume; [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep -qx '## 倉庫'
+  printf '%s\n' "$output" | grep -qx "$WORKTREE_PATH"
+  refute_grep -qx "main → $WORKTREE_PATH" <(printf '%s\n' "$output")
+  a=$(printf '%s\n' "$output" | grep -n '^## 倉庫$' | cut -d: -f1)
+  b=$(printf '%s\n' "$output" | grep -n '^## 本波$' | cut -d: -f1)
+  [ "$a" -lt "$b" ]
+}
+
+@test "resume 多 repo 逐列印 <名> → <worktree>" {
+  printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-api" >> "$DK_ROOT/settings.env"
+  cat > "$d/.repos" <<R
+main $PROJECT $PROJECT/.worktrees/login/main aaaaaaa
+api $PROJECT-api $PROJECT/.worktrees/login/api bbbbbbb
+R
+  run dk-resume; [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep -qx "main → $PROJECT/.worktrees/login/main"
+  printf '%s\n' "$output" | grep -qx "api → $PROJECT/.worktrees/login/api"
+}
+
+@test "resume 在還沒交棒（沒有 .repos）時印尚未交棒並指向 --run" {
+  rm -f "$d/.repos"
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"尚未交棒"* ]]; [[ "$output" == *"dk-leader login --run"* ]]
+  [ "${#lines[@]}" -le 150 ]
+}

@@ -2,7 +2,7 @@
 # dk-task-new <short> "<display>" [--from <plan>] [--no-worktree]
 # dk-task-new <short> --gate1
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
 dk_require_herdr
 short="${1:-}"; shift || true
 [[ "$short" =~ ^[a-z][a-z0-9-]{0,11}$ ]] || dk_die "short name must be ascii lowercase, ≤12 chars: '$short'"
@@ -42,6 +42,12 @@ if [ "$gate1" = 1 ]; then
 fi
 [ -n "$display" ] || dk_die "display name required"
 [[ "$display" != *[\"\$\`\\]* ]] || dk_die "display name must not contain \" \$ \` or backslash"
+# DK_REPOS 的便宜三項：名字合法且唯一、第一個是主 repo、每個路徑是 git 根。三項都只看設定與
+# 磁碟佈局，不看工作樹狀態，所以在建任何東西之前就驗（早失敗）。「工作樹乾淨」是 --no-clean
+# 跳掉的那一項 —— 計畫可能拖幾天，乾不乾淨要以 dk-leader --run 真的要從 HEAD 切 worktree
+# 的那一刻為準，不是現在。
+dk_settings
+dk_repos_check --no-clean
 date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"

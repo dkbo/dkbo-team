@@ -32,7 +32,7 @@ teardown() { teardown_project; }
 }
 
 # --- dk-leader <short> --run：實體化 + 交棒（0.10.0） ---------------------------
-# 單 repo 模式。多 repo（DK_REPOS）在波 2。
+# 單 repo 與多 repo（DK_REPOS）兩種模式。
 
 mk() { # 一個過了關卡①、還沒實體化的任務
   dk-task-new login "使用者登入" >/dev/null
@@ -153,5 +153,120 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   run dk-leader login --run; [ "$status" -eq 0 ]
   refute_grep '^workspace create' "$HERDR_STUB_LOG"
   grep -q '^agent start leader-login --kind claude --pane wC:p1 -- ' "$HERDR_STUB_LOG"
+  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+}
+
+# --- 多 repo（DK_REPOS 非空）：AC3 AC4 AC20 ------------------------------------
+
+@test "--run 多 repo：每個 repo 一個 worktree、.repos 三列、DK_WORKTREE 是主 repo 的" {
+  setup_multirepo; mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  for n in main api shared; do
+    [ -d "$PROJECT/.worktrees/login/$n" ]
+    [ "$(git -C "$PROJECT/.worktrees/login/$n" rev-parse --abbrev-ref HEAD)" = dk/login ]
+  done
+  [ "$(grep -c . "$d/.repos")" -eq 3 ]
+  grep -q "^main $PROJECT $PROJECT/.worktrees/login/main [0-9a-f]\{40\}$" "$d/.repos"
+  grep -q "^api $REPO_API $PROJECT/.worktrees/login/api [0-9a-f]\{40\}$" "$d/.repos"
+  grep -q "^shared $REPO_SHARED $PROJECT/.worktrees/login/shared [0-9a-f]\{40\}$" "$d/.repos"
+  [ "$(head -1 "$d/.repos" | awk '{print $1}')" = main ]   # 主 repo 永遠第一列
+  grep -q "^DK_WORKTREE=\"$PROJECT/.worktrees/login/main\"\$" "$d/.task.env"
+  grep -q "^DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"\$" "$d/.task.env"
+  grep -q 'materialize repos main api shared workspace wC' "$d/process.md"
+}
+
+@test "--run 單 repo 也寫 .repos：一列，名字 main" {
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  [ "$(grep -c . "$d/.repos")" -eq 1 ]
+  grep -q "^main $PROJECT $WORKTREE_PATH [0-9a-f]\{40\}\$" "$d/.repos"
+}
+
+@test "--run 多 repo 下拒絕 DK_NO_WORKTREE" {
+  setup_multirepo
+  dk-task-new login "使用者登入" --no-worktree >/dev/null
+  dk-process "brief-review skipped: 單元測試"; dk-task-new login --gate1 >/dev/null
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"DK_NO_WORKTREE"* ]]
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  [ ! -e "$d/.repos" ]; [ ! -e "$PROJECT/.worktrees/login" ]
+}
+
+@test "--run 任一 repo 工作樹不乾淨就拒絕並點名該 repo" {
+  setup_multirepo; mk
+  repo_dirty_tracked "$REPO_API"
+  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
+  [ ! -e "$PROJECT/.worktrees/login" ]; [ ! -e "$d/.repos" ]
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+}
+
+@test "--run 多 repo：workspace create 失敗就清掉全部 worktree、分支與 .repos" {
+  setup_multirepo; mk
+  HERDR_STUB_FAIL="workspace create" run dk-leader login --run; [ "$status" -ne 0 ]
+  [ ! -e "$PROJECT/.worktrees/login/main" ]
+  [ ! -e "$PROJECT/.worktrees/login/api" ]
+  [ ! -e "$PROJECT/.worktrees/login/shared" ]
+  refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
+  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
+  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
+  [ ! -e "$d/.repos" ]
+  grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+}
+
+@test "--run 某個 repo 的 dk/<short> 分支已存在時點名它並清掉先切好的" {
+  setup_multirepo; mk
+  git -C "$REPO_SHARED" branch dk/login
+  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"shared"* ]]
+  [ ! -e "$PROJECT/.worktrees/login/main" ]; [ ! -e "$PROJECT/.worktrees/login/api" ]
+  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
+  [ ! -e "$d/.repos" ]
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+}
+
+@test "AC20: 每個 worktree 切好後在該 worktree 內、乾淨環境跑 DK_SETUP_CMD_<名>" {
+  setup_multirepo
+  cat > "$PROJECT/setup.sh" <<'S'
+#!/usr/bin/env bash
+pwd > setup-ran.txt
+env | grep -c '^DK_' >> setup-ran.txt || true
+S
+  chmod +x "$PROJECT/setup.sh"
+  printf 'DK_SETUP_CMD_api="%s"\n' "$PROJECT/setup.sh" >> "$DK_ROOT/settings.env"
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  f="$PROJECT/.worktrees/login/api/setup-ran.txt"
+  [ -f "$f" ]
+  [ "$(sed -n 1p "$f")" = "$PROJECT/.worktrees/login/api" ]   # cwd 是那個 repo 的 worktree
+  [ "$(sed -n 2p "$f")" = 0 ]                                  # 一個 DK_* 都沒漏進去
+  [ ! -e "$PROJECT/.worktrees/login/main/setup-ran.txt" ]      # 沒設 DK_SETUP_CMD 就不跑
+  [ ! -e "$PROJECT/.worktrees/login/shared/setup-ran.txt" ]
+}
+
+@test "AC20: 鉤子失敗只警告並記 process，不 rollback" {
+  setup_multirepo
+  printf 'DK_SETUP_CMD_api="exit 7"\n' >> "$DK_ROOT/settings.env"
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  [[ "$output" == *"setup"* ]]
+  grep -q 'setup api failed' "$d/process.md"
+  [ -d "$PROJECT/.worktrees/login/api" ]        # worktree 本身是好的，不因鉤子而收掉
+  grep -q '^agent start leader-login ' "$HERDR_STUB_LOG"
+}
+
+@test "AC20: 單 repo 模式也跑 DK_SETUP_CMD" {
+  printf 'DK_SETUP_CMD="pwd > setup-ran.txt"\n' >> "$DK_ROOT/settings.env"
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  [ "$(cat "$WORKTREE_PATH/setup-ran.txt")" = "$WORKTREE_PATH" ]
+}
+
+@test "--run 的已實體化判別器是 .repos，不是 DK_WORKTREE" {
+  mk
+  dk-leader login --run >/dev/null
+  rm -f "$HERDR_STUB_RESPONSES/agent_get.wC:p1.json"   # 執行領導掛了，要重交棒
+  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#' "$d/.task.env"
+  : > "$HERDR_STUB_LOG"
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
 }
