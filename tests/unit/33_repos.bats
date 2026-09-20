@@ -84,6 +84,18 @@ teardown() { teardown_project; }
   run dk_repos_check; [ "$status" -eq 1 ]; [[ "$output" == *"「api」"* ]]
 }
 
+@test "乾淨檢查對主 repo 排除 .dkbo/ 底下的路徑（Important 1 回歸：.dkbo/ 進版控的專案，如本倉）" {
+  DK_REPOS=""
+  git -C "$PROJECT" add .dkbo
+  git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m "track .dkbo"
+  echo more >> "$DK_ROOT/settings.env"   # .dkbo/ 底下已追蹤且已修改，不該算髒
+  run dk_repos_check; [ "$status" -eq 0 ]
+  echo v2 > "$PROJECT/tracked.txt"; git -C "$PROJECT" add tracked.txt
+  git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m tracked
+  echo v3 > "$PROJECT/tracked.txt"       # .dkbo/ 之外的已追蹤檔仍要點名
+  run dk_repos_check; [ "$status" -eq 1 ]; [[ "$output" == *"「main」"* ]]; [[ "$output" == *"乾淨"* ]]
+}
+
 # ── .repos 讀寫 ───────────────────────────────────────────────────────────────
 @test "dk_repos_write: 單 repo 一列，名字 main，worktree 是 <root>/<short>" {
   d=$(fixture_task login 使用者登入); rm -f "$d/.repos"

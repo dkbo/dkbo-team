@@ -60,7 +60,9 @@ run_setup() { # NAME WT — AC20：每個 worktree 切好之後跑一次依賴�
   # shellcheck disable=SC2086  # ${!DK_@} 要斷詞，一個變數名一個元素
   for v in ${!DK_@}; do clean+=(-u "$v"); done
   log="$dir/setup.$n.log"
-  if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") > "$log" 2>&1; then return 0; fi
+  # </dev/null：這支在 while read <<< 的迴圈裡跑（呼叫端），鉤子若讀一次 stdin（pnpm 的
+  # 互動提示、docker compose…）沒有這行的話會吃掉迴圈的 herestring，後面的 repo 靜默不跑。
+  if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") < /dev/null > "$log" 2>&1; then return 0; fi
   echo "dk-leader: repo $n 的依賴鉤子失敗（$cmd）；worktree 已切好，依賴要自己補裝。最後 20 行見 $log：" >&2
   tail -n 20 "$log" >&2
   dk_process "setup $n failed"
@@ -118,10 +120,10 @@ if [ "$run" = 1 ]; then
       repos_written=1
       while read -r rname rroot rwt rbase; do
         [ -n "$rname" ] || continue
-        [ ! -e "$rwt" ] || rb_die "worktree path exists: $rwt（repo $rname）"
+        [ ! -e "$rwt" ] || rb_die "worktree 路徑已存在：$rwt（repo $rname）"
         mkdir -p "$(dirname "$rwt")"
         git -C "$rroot" worktree add -q -b "dk/$short" "$rwt" "$rbase" >/dev/null 2>&1 \
-          || rb_die "git worktree add failed（repo $rname：分支 dk/$short 已存在？git -C $rroot branch -D dk/$short）"
+          || rb_die "git worktree add 失敗（repo $rname：分支 dk/$short 已存在？git -C $rroot branch -D dk/$short）"
         created_rows="$created_rows$rroot $rwt
 "
         run_setup "$rname" "$rwt"

@@ -74,6 +74,14 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   refute_grep -- '--name dk/login' "$HERDR_STUB_LOG"
 }
 
+@test "--run 主 repo的 .dkbo/tasks/INDEX.md 已追蹤且已修改時仍要過（Important 1 回歸：本倉這種 .dkbo/ 進版控的專案）" {
+  mk
+  git -C "$PROJECT" add .dkbo
+  git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m "track .dkbo"
+  echo more >> "$DK_ROOT/tasks/INDEX.md"   # .dkbo/tasks/INDEX.md 已追蹤且已修改
+  run dk-leader login --run; [ "$status" -eq 0 ]
+}
+
 @test "--run 尊重 DK_WORKTREE_DIR" {
   mk
   DK_WORKTREE_DIR="$PROJECT/wt" run dk-leader login --run; [ "$status" -eq 0 ]
@@ -95,7 +103,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
 @test "--run 在分支已存在時拒絕，.task.env 原封不動" {
   mk
   git -C "$PROJECT" branch dk/login
-  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"worktree add failed"* ]]
+  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"git worktree add 失敗"* ]]
   grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
   refute_grep '^workspace create' "$HERDR_STUB_LOG"
 }
@@ -258,6 +266,16 @@ S
   mk
   run dk-leader login --run; [ "$status" -eq 0 ]
   [ "$(cat "$WORKTREE_PATH/setup-ran.txt")" = "$WORKTREE_PATH" ]
+}
+
+@test "AC20 回歸: 鉤子讀一次 stdin 仍能跑完 N 個 repo（Important 2）" {
+  setup_multirepo
+  printf 'DK_SETUP_CMD_api="cat >/dev/null; pwd > setup-ran.txt"\n' >> "$DK_ROOT/settings.env"
+  printf 'DK_SETUP_CMD_shared="pwd > setup-ran.txt"\n' >> "$DK_ROOT/settings.env"
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]
+  [ -f "$PROJECT/.worktrees/login/api/setup-ran.txt" ]
+  [ -f "$PROJECT/.worktrees/login/shared/setup-ran.txt" ]
 }
 
 @test "--run 的已實體化判別器是 .repos，不是 DK_WORKTREE" {

@@ -145,7 +145,7 @@ if [ -n "$localchg" ]; then
 fi
 if [ -n "$conflict" ]; then
   dk_process "merge-conflict $DK_BRANCH repos:$conflict"; commit_memory
-  echo "dk-task-close: merge conflict on $DK_BRANCH（repo:$conflict）；一個 repo 都沒有合併。找人或開一個 it 修復波"; exit 3
+  echo "dk-task-close: 分支 $DK_BRANCH 有合併衝突（repo:$conflict）；一個 repo 都沒有合併。找人或開一個 it 修復波"; exit 3
 fi
 
 merged=""; failed=""; rest=""

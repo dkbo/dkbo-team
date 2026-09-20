@@ -247,6 +247,17 @@ multirepo_close() {
   [ ! -f "$d/waves/1.shared.test.log" ]
 }
 
+@test "AC11 回歸: 測試指令讀一次 stdin 不會吃掉後續 repo（Important 2）" {
+  multirepo_close
+  mkdir -p "$main_wt/src/api" "$api_wt/src" "$shared_wt/src"
+  echo m > "$main_wt/src/api/login.ts"; echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
+  echo 'DK_TEST_CMD="cat >/dev/null; echo main-ran"' >> "$DK_ROOT/settings.env"   # helpers 已給 DK_TEST_CMD_api="true"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  grep -q 'main ok' "$d/process.md"
+  grep -q 'api ok (true)' "$d/process.md"
+  grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
+}
+
 @test "AC11: 本波沒變更的 repo 不跑它的測試" {
   multirepo_close
   mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"

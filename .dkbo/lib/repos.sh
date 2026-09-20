@@ -53,7 +53,15 @@ dk_repos_check() { # [--no-clean] — 驗名字、唯一性、第一個是主 re
     # 只看已追蹤檔（領導 2026-09-20T09:41 ruling）：員工的 worktree 是從 HEAD 切出來的，
     # 未追蹤檔本來就不影響它；把未追蹤也算髒的話，.dkbo/ 不進版控的專案（panova 那一類）
     # 每一次 dk-leader --run 都會被自己的 .dkbo/ 擋下來。
-    if [ "$clean" = 1 ] && [ -n "$(git -C "$p" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    # 主 repo 排除 .dkbo/ 底下的路徑（reviewer-a Important 1）：dkbo 自己的任務記帳
+    # （INDEX.md／process.md…）從 dk-task-new 到 dk-task-close 之間永遠是已追蹤且已修改，
+    # 那不是「工作樹不乾淨」，是這套工具本身在寫日記；在把 .dkbo/ 進版控的專案（含本倉）上
+    # 不排除的話，--run 會被自己的任務記帳擋死。.dkbo/ 只存在於主 repo，其餘 repo 這條
+    # pathspec 排除不到東西，行為不變。
+    local dirty
+    if [ "$p" = "$main" ]; then dirty=$(git -C "$p" status --porcelain --untracked-files=no -- . ':!.dkbo' 2>/dev/null)
+    else dirty=$(git -C "$p" status --porcelain --untracked-files=no 2>/dev/null); fi
+    if [ "$clean" = 1 ] && [ -n "$dirty" ]; then
       dk_die "DK_REPOS: repo「$n」的工作樹不乾淨：有已追蹤檔尚未 commit，先 commit 或 stash（$p）"
     fi
   done <<< "$(dk_repos_parse)"

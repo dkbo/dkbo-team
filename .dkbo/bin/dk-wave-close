@@ -149,7 +149,9 @@ if [ "$legacy" = 0 ]; then   # gate c
         continue
       fi
       log="$dir/waves/${n:-forced}.$rname.test.log"
-      if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") > "$log" 2>&1; then parts="$parts $rname ok ($cmd)"
+      # </dev/null：這一段在 while read <<< "$repo_rows" 的迴圈裡，測試指令若讀一次 stdin
+      # 沒有這行的話會吃掉迴圈的 herestring，後面的 repo 靜默不跑（一道閘靜默失效）。
+      if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") < /dev/null > "$log" 2>&1; then parts="$parts $rname ok ($cmd)"
       else
         echo "dk-wave-close: tests failed ($rname: $cmd); last 20 lines of $log:"; tail -n 20 "$log"
         if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($rname: $cmd)"; exit 1; fi
@@ -196,7 +198,8 @@ if [ "$legacy" = 0 ]; then   # the wave boundary is a commit boundary; the leade
     [ -n "$rname" ] && [ -n "${rwt:-}" ] && [ -d "$rwt" ] || continue
     [ -n "$(git -C "$rwt" status --porcelain 2>/dev/null)" ] || continue
     suffix=""; [ "$multi" = 0 ] || suffix=" repo $rname"
-    if git -C "$rwt" add -A && git -C "$rwt" commit -q -m "$msg"; then
+    # 同一個迴圈、同一類曝險，雖然 -m 下 git commit 不讀 stdin，一併加固。
+    if git -C "$rwt" add -A && git -C "$rwt" commit -q -m "$msg" < /dev/null; then
       committed=1; sha=$(git -C "$rwt" rev-parse --short=7 HEAD)
       echo "wave ${n:-?}$suffix committed $sha"; dk_process "commit $sha wave ${n:-?}$suffix"
     else
