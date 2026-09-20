@@ -98,3 +98,74 @@ teardown() { teardown_project; }
   fixture_brief "$d"; sed -i 's#POST /login {user,pw} → {token}#契約|擁有者#' "$b"
   run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"欄數"* ]]
 }
+
+# ── repo 前綴（AC5）──────────────────────────────────────────────────────────
+# dk-brief-check 跑在關卡①之前，任務還沒實體化 —— 那時還沒有 .repos，repo 名字只能查
+# settings.env 的 DK_REPOS。fixture_task 落的那一份是「已實體化」的樣子，這裡先拿掉。
+multirepo_mode() { setup_multirepo; rm -f "$d/.repos"; }
+# 多 repo 用的所有權表：可改與只讀每個 glob 都帶 <名>: 前綴
+multirepo_brief() {
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/** | main:src/web/** |#' "$b"
+  sed -i 's#^| frontend-cart | src/web/\*\* | src/api/types.ts |$#| frontend-cart | main:src/web/** | api:src/types.ts |#' "$b"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | main:tests/** | — |#' "$b"
+}
+
+@test "多 repo：缺前綴的 glob 要 FAIL，補上前綴就過" {
+  multirepo_mode
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"前綴"* ]]; [[ "$output" == *"所有權 backend"* ]]
+  multirepo_brief
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+}
+@test "多 repo：未知的 repo 名字要 FAIL（可改與只讀兩欄都驗）" {
+  multirepo_mode; multirepo_brief
+  sed -i 's#| backend | api:src/\*\* |#| backend | nope:src/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"nope"* ]]
+  multirepo_brief
+  sed -i 's#| main:src/web/\*\* |$#| ghost:src/web/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"ghost"* ]]
+}
+@test "單 repo：帶前綴的 glob 要 FAIL" {
+  multirepo_brief
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"單 repo"* ]]
+}
+@test "多 repo：重疊只在同一個 repo 內判" {
+  multirepo_mode; multirepo_brief
+  # 跨 repo 的同一條 glob 不算重疊
+  sed -i 's#^| qa | main:tests/\*\* | — |$#| qa | shared:src/** | — |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+  # 同一個 repo 內就算
+  multirepo_brief
+  sed -i 's#^| frontend-cart | main:src/web/\*\* |#| frontend-cart | api:src/web/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"重疊"* ]]; [[ "$output" == *"所有權 backend/frontend-cart"* ]]
+}
+
+@test "已實體化的任務以 .repos 為準（DK_REPOS 之後被改動也不影響本任務）" {
+  setup_multirepo; multirepo_brief           # .repos 是 fixture 落的單列 main
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"未知的 repo 名字 api"* ]]
+}
+
+@test "所有權的 glob 不被 cwd 的真實檔名展開（reviewer-a Important 1）" {
+  # dk-brief-check 不 cd，執行時的 cwd 就是專案根。未加引號的 $(…) 在 word splitting 之後
+  # 還會做 pathname expansion，所以 cwd 底下真的存在符合的檔時，`.dkbo/kinds/**` 會被換成
+  # 三個實際檔名 —— 真正的 glob 字串反而沒被驗到，多 repo 的前綴檢查形同虛設。
+  multirepo_mode
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | .dkbo/kinds/** | — |#' "$b"
+  [ -f "$PWD/.dkbo/kinds/agy.sh" ]          # 前提：cwd 底下真的有符合的檔
+  run dk-brief-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *".dkbo/kinds/**"* ]]                    # 訊息指的是 brief 裡那條 glob
+  refute_grep -q 'kinds/agy\.sh' <<< "$output"             # 不是被展開出來的檔名
+  [ "$(printf '%s\n' "$output" | grep -c '^FAIL 所有權 backend')" -eq 1 ]   # 一條 glob 一條 FAIL
+}
+
+@test "獨佔資源欄同樣不被 cwd 的真實檔名展開（Important 1 的同類洞）" {
+  # 同一個未加引號的 for，line 85。獨佔資源是自由文字（db、port:3000、docker…），
+  # 可以含 * 與 ? —— 波號與成員名那幾個迴圈是數字與 [a-z0-9_-]，不會被展開，這個會。
+  : > "$PWD/build-a"; : > "$PWD/build-b"
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | build-* |#' "$b"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/** | — | build-* |#' "$b"
+  run dk-brief-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"獨佔資源 build-* 同時被"* ]]      # 訊息指的是宣告的那個字串
+  refute_grep -q 'build-a' <<< "$output"              # 不是 cwd 展開出來的檔名
+}

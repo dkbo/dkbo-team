@@ -20,6 +20,10 @@ teardown() { teardown_project; rm -rf "$BAIT"; }
 @test "setup_project 洗掉繼承來的 DK_*，測試不會碰到別的 repo" {
   [ -z "${DK_PROJECT_ROOT:-}" ]; [ -z "${DK_WORKTREE_DIR:-}" ]; [ -z "${DK_TEST_CMD:-}" ]
   run dk-task-new login 使用者登入; [ "$status" -eq 0 ]
+  # 0.10.0 起 worktree 是 dk-leader --run 建的，所以正面斷言要走完交棒那一步才看得到
+  dk-process "brief-review skipped: 隔離測試"
+  dk-task-new login --gate1 >/dev/null
+  run dk-leader login --run; [ "$status" -eq 0 ]
   # 正面：worktree 真的建出來了，而且落在測試專案裡（不是靜默沒做事）
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
   # 反面：誘餌 repo 一個 worktree、一個分支、一個檔案都沒多

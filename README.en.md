@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.9.2); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.10.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -20,7 +20,7 @@ A single agent working on a medium-sized feature hits three walls: it forgets th
 
 ```
 you ──chat──▶ leader (Claude Code, left column of tab 1)
-                │  dk-task-new / dk-spawn / dk-review / dk-wave-close / dk-task-close
+                │  dk-task-new / dk-leader --run / dk-spawn / dk-review / dk-wave-close / dk-task-close
                 ▼
         worker panes (herdr splits, each inside the task worktree)
         backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
@@ -33,7 +33,7 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 
 1. You invoke `/dkbo-plan` and tell it: "open task login, display name 'User login', requirements are…".
 2. The leader writes `brief.md`: goal, acceptance criteria, file ownership, shared contracts, and a wave table with one row per member tagged S/M/L. It runs `dk-brief-check` and only then moves on to review. Next `dk-brief-review` dispatches 2 to 3 reviewers of different kinds to read the raw request and the brief; the leader rules on their feedback, revises the brief, and only then hands you all three — the raw request, the brief, and a summary of the ruling — to confirm. This is **gate 1**.
-3. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own. When done they write their state and report and send `dk-msg leader "[DONE] …"`.
+3. You invoke `/dkbo-run`: only then does `dk-leader <short> --run` "materialize" the task — one worktree per repo in `DK_REPOS` (a multi-repo project; see [.dkbo/README.md](.dkbo/README.md), Traditional Chinese), a task-specific herdr workspace, and a handoff to an execution leader in its root pane, freeing your session for the next task. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own (in a multi-repo project, ownership and `touched` carry a `<name>:` prefix). When done they write their state and report and send `dk-msg leader "[DONE] …"`.
 4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
 5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
 6. Once qa is done and the review has a verdict, `dk-wave-close` applies four gates — the verdict line, every dev's `## 測試` section, `DK_TEST_CMD`, and an ownership check against the worktree's real diff — then closes the panes and commits the wave inside the worktree (`-m` sets the message).
@@ -52,7 +52,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.9.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.10.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # expected: leader
@@ -81,7 +81,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | Command | What it does |
 |---|---|
 | `dk-whoami` | Is this pane the leader or a worker |
-| `dk-task-new` / `dk-brief-check` | Create the task directory and worktree; mechanical brief check |
+| `dk-task-new` / `dk-brief-check` | Create the task directory only (no worktree — `/dkbo-run` materializes it at handoff); mechanical brief check |
 | `dk-brief-review` | Before work starts, dispatch 1 to 3 reviewers to review the brief and the raw request (an AI gate, the second one before gate 1) |
 | `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices; open a worker pane and prompt it |
 | `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
@@ -93,7 +93,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |
 | `dk-chore-tidy` | File chore notes under their date folder, archive `messages.log` (only when no chore is running) |
 | `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind. `--ensure` restarts it idempotently (dk-spawn, dk-wave-open and dk-resume all call it); `--chores` watches the chore side |
-| `dk-leader` / `dk-version` | Start a second leader (kind from `DK_LEADER_KIND`, tier L of that kind); print the version |
+| `dk-leader` / `dk-version` | Start a second leader (kind from `DK_LEADER_KIND`, tier L of that kind); `--run` materializes the task (worktrees per `DK_REPOS`, a task-specific workspace) and hands off to the execution leader in that workspace's root pane; print the version |
 
 ## Layout of the repo
 

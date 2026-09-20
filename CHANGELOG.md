@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0 — 2026-09-20
+
+- feat(workspace)!: 一個任務從此有自己的 herdr workspace，在 `/dkbo-run` 那一刻才建。`dk-task-new` 只建任務資料夾——不切 worktree、不開 workspace，`.task.env` 的 `DK_WORKTREE`／`DK_BASE` 是空的，計畫完可能不做就不先付成本。`dk-leader <short> --run` 把任務「實體化」：切 worktree、跑依賴鉤子、用 `herdr workspace create --cwd <主樹>` 開 label 與 tab 名皆為 `dk/<short>` 的 workspace、在根 pane 起執行領導（`agent start --name dk/<short>`，claude 才帶這個旗標）並改綁 `.sessions`、`DK_LEADER_PANE`。`agent start` 之前任一步失敗，rollback 還原全部 worktree、分支、workspace 與 `.task.env`；重跑是幂等的。單 repo 專案（`DK_REPOS` 空字串）行為相同，只是只切一個 worktree。
+- feat(repos)!: 一個任務可以跨 N 個獨立 git repo。新的 `settings.env` 鍵 `DK_REPOS="<名>=<路徑> …"`（第一個是主 repo）；設了它，檔案所有權、`touched`、差異包、`dk-wave-close` 的越界比對、合併全部長出 repo 這個維度，所有面向人的輸出（切片、報告、越界訊息、`file:line`）在多 repo 模式下一律印 `<名>:` 前綴，單 repo 模式一律不印。新函式庫 `.dkbo/lib/repos.sh`：`dk_repos_parse`／`dk_repos_check`／`dk_repos_write`／`dk_glob_split`／`dk_glob_check`／`dk_repo_setup_cmd` 等。`DK_REPOS` 空字串時 0.9.2 的既有測試語意不變。
+- feat(setup): 新增 `DK_SETUP_CMD`／`DK_SETUP_CMD_<名>` 依賴鉤子，每個 worktree 切好之後在乾淨環境（`env -u DK_*`，同 gate c 那一套）各跑一次；失敗只警告不 rollback，log 落 `tasks/<t>/setup.<名>.log`。前端 repo 建議 `pnpm install --frozen-lockfile --prefer-offline`——不 symlink 主樹的 `node_modules`（見 `.dkbo/README.md` 的「多 repo 專案」段兩個坑）。
+- feat(task-close)!: `dk-task-close` 重寫合併流程為兩階段：先逐 repo 預檢（`merge --no-commit --no-ff` 後 abort），任一衝突就整批不合併並 exit 3、全部列名；主樹本地變更會被覆蓋則 exit 5；預檢全過才真的逐 repo 合併，中途失敗 exit 4 並印 merged／failed／not attempted 三份清單（已合併的不會自動回捲）。任務記憶固定在合併之前先 commit 一次（修掉「暫存中的改名擋住 merge」那個舊債）。**不再自動 `herdr workspace close`**——執行領導自己住在那個 workspace 的根 pane 上，成功結案的最後一行改印 `herdr workspace close <id>` 提醒人手動關。
+- feat(gates): `dk-wave-open`／`dk-review-pack`／`dk-wave-close`／`dk-spawn` 全部學會多 repo：`dk-wave-open` 逐 repo 記 base 並在切片印「## 倉庫」段；`dk-review-pack` 逐 repo 分段 `## repo <名>`；`dk-wave-close` 的 gate c 只對本波有變更的 repo 跑各自的 `DK_TEST_CMD`／`DK_TEST_CMD_<名>`、gate d 逐 repo 比對所有權並逐 repo commit；`dk-spawn` 的 pane cwd 落在成員第一個可改 glob 所在 repo 的 worktree，`DK_ADD_DIRS` 對 `.repos` 每一列各出一個 `--add-dir`（單 repo 模式維持只有主樹，不放寬既有斷言）。
+- fix(dk-task-new): 開場多驗「主 repo 是 git 根」（`dk_repos_check --no-clean` 的便宜三項），比 0.9.2 早——0.9.2 是靠 `git worktree add` 隱含這個要求，`dk-task-new` 瘦身後不再切 worktree，失敗點從 `/dkbo-run` 提前到 `/dkbo-plan`。
+- fix(repos): `dk_repos_check` 的乾淨檢查只看已追蹤檔（`git status --porcelain --untracked-files=no`）——`.dkbo/` 不進版控的專案，未追蹤檔不算髒。
+- fix(common): `dk_task_dir` 在 `DK_TASK_DIR` 分支結尾的裸 `return` 改成 `return 0`；裸 `return` 在 EXIT trap 裡回的是觸發 trap 的狀態，會讓掛了 rollback trap 的失敗路徑上 `dk_env_set` 第一行靜默退出。
+- fix(brief-check): 所有權與獨佔資源欄用了未加引號的 `for … in $(…)`，被 cwd 的真實檔名做 pathname expansion 展開，多 repo 模式的前綴檢查形同虛設；改成 `while IFS= read -r … <<< "$(…)"`。
+- fix(repos): 主 repo 的乾淨檢查排除 `.dkbo/` 底下的路徑（`git status … -- . ':!.dkbo'`）——dkbo 自己的任務記帳（`INDEX.md`／`process.md`…）從 `dk-task-new` 到 `dk-task-close` 之間永遠是已追蹤且已修改，那不是工作樹不乾淨；把 `.dkbo/` 進版控的專案（含本倉）不排除的話，`--run` 會被自己的任務記帳擋死。`.dkbo/` 只存在於主 repo，其餘 repo 這條 pathspec 排除不到東西，行為不變。
+- fix(leader,wave-close): `dk-leader --run` 的 `DK_SETUP_CMD` 鉤子與 `dk-wave-close` gate c 的測試指令都跑在 `while read <<< "$repo_rows"` 的迴圈裡；鉤子或測試指令若讀一次 stdin（互動提示、docker compose…），會吃掉迴圈的 herestring，後面的 repo 靜默不跑。兩處都加 `< /dev/null`；`dk-wave-close` 逐 repo commit 那一句雖然 `-m` 下 `git commit` 不讀 stdin，同一個迴圈、同一類曝險，一併加固。
+- docs: 三份 README 加交棒（`/dkbo-run` 才建 workspace）、多 repo 前綴、`dk-task-close` exit 3/4/5 與 workspace 不自動關、`DK_SETUP_CMD` 的 pnpm 寫法與 `node_modules` 兩個坑；`PROTOCOL.md` 加 `<名>:` 前綴與共用 worktree 段；`LEADER.md` 補 `DK_REPOS`／`DK_SETUP_CMD`；`roles/reviewer.md` 補 `file:line` 前綴；`PROJECT.md` 補多 repo 事實。
+- 測試：539 bats（+113）；shellcheck 零警告。
+- 升級：新增三把 `settings.env` 鍵（`DK_REPOS`、`DK_SETUP_CMD`，加上多 repo 專案逐 repo 的 `DK_TEST_CMD_<名>`／`DK_SETUP_CMD_<名>`），沒有新依賴、沒有新 skill、`install.sh` 沒有新 symlink。既有單 repo 專案不設 `DK_REPOS` 就是 0.9.2 的行為，唯一可見差異是 `dk-task-new` 早驗主 repo 是 git 根、`dk-task-close` 不再自動關 workspace（0.9.2 本來就沒有任務專屬 workspace 可關）。
+
 ## 0.9.2 — 2026-09-19
 
 - fix(watch): assess()/reviewer 逾時判定加 agent_status=working 與 state done 前提，跳過畫面判定不再誤判額度／審批

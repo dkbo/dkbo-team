@@ -48,7 +48,9 @@ fallback=""
 if [ "$chore" = 0 ]; then
   panes="$dir/.panes"
   in_panes() { [ -f "$panes" ] && awk -v n="$1" '$1==n{f=1} END{exit !f}' "$panes"; }
-  if [ "$target" = "$leader" ]; then fallback="${DK_ROOT_PANE:-}"
+  # 領導在哪是 DK_LEADER_PANE（交棒後＝任務 workspace 的根 pane）；DK_ROOT_PANE 是版面錨點，
+  # 只在沒有 DK_LEADER_PANE 的舊任務裡才是同一格。
+  if [ "$target" = "$leader" ]; then fallback="${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}"
   else
     if ! in_panes "$target" && in_panes "${DK_SHORT:-}-$target"; then target="${DK_SHORT}-$target"; fi
     [ -f "$panes" ] && fallback=$(awk -v n="$target" '$1==n{print $2; exit}' "$panes")

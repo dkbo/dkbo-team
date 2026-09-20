@@ -15,6 +15,19 @@ H="herdr --session dktest"
 ws=$($H workspace create --cwd "$tmp" --no-focus 2>&1) || { echo "$ws"; fail "workspace create"; exit 1; }
 ws0=$(echo "$ws" | jq -r '.result.workspace.workspace_id')
 root=$(echo "$ws" | jq -r '.result.root_pane.pane_id'); [ -n "$root" ] && ok "workspace create root_pane=$root" || fail "workspace create shape: $ws"
+# ── AC17: workspace create --label（dk-leader --run 開任務 workspace 用的正是這個組合）
+wsl=$($H workspace create --cwd "$tmp" --label dk/probe --no-focus 2>&1)
+wsl_id=$(echo "$wsl" | jq -r '.result.workspace.workspace_id // empty'); wsl_root=$(echo "$wsl" | jq -r '.result.root_pane.pane_id // empty')
+[ -n "$wsl_id" ] && [ -n "$wsl_root" ] && ok "workspace create --label shape ws=$wsl_id root=$wsl_root" || fail "workspace create --label shape: $wsl"
+printf '%s' "$wsl" > "$tmp/workspace_create.json"
+# ── AC17: workspace get（dk-leader --run 讀 .result.workspace.active_tab_id 來 tab rename）
+wg=$($H workspace get "$wsl_id" 2>&1)
+wg_tab=$(echo "$wg" | jq -r '.result.workspace.active_tab_id // empty')
+[ -n "$wg_tab" ] && ok "workspace get has .result.workspace.active_tab_id=$wg_tab" || fail "workspace get shape: $wg"
+printf '%s' "$wg" > "$tmp/workspace_get.json"
+# 領導 2026-09-20 裁定：本腳本零 token 契約優先，不起真 agent 驗 AC17 的「根 pane agent start」，
+# 那一段拿掉，AC17 只留 workspace create 與 workspace get 兩個探針。
+$H workspace close "$wsl_id" >/dev/null 2>&1
 sp=$($H pane split --pane "$root" --direction right --cwd "$tmp" --no-focus --env DK_TEST=42 2>&1)
 p=$(echo "$sp" | jq -r '.result.pane.pane_id // empty'); [ -n "$p" ] && ok "pane split pane_id=$p" || fail "pane split shape: $sp"
 $H pane run "$p" 'echo DKENV=$DK_TEST' >/dev/null 2>&1

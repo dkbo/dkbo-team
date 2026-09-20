@@ -151,3 +151,62 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]
   refute_grep 'ruling: 換 codex' "$d/process.md"
 }
+
+# ── 多 repo（AC8）────────────────────────────────────────────────────────────
+multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再來一次
+  teardown_project; setup_project; setup_multirepo
+  d=$(fixture_task login 使用者登入); fixture_brief "$d"
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/**, shared:src/** | main:src/web/** |#' "$d/brief.md"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | main:tests/** | — |#' "$d/brief.md"
+  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+}
+
+@test "AC8: cwd 是成員第一個可改 glob 的 repo worktree，--add-dir 主樹加每個 worktree" {
+  multirepo_task
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  api_wt=$(dk_repo_field "$d" api wt)
+  grep -q -- "--cwd $api_wt --no-focus" "$HERDR_STUB_LOG"
+  start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
+  [[ "$start" == *"--add-dir $PROJECT "* ]] || [[ "$start" == *"--add-dir $PROJECT" ]]
+  for r in main api shared; do
+    [[ "$start" == *"--add-dir $(dk_repo_field "$d" "$r" wt)"* ]]
+  done
+  # qa 的第一個 glob 在 main
+  : > "$HERDR_STUB_LOG"
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
+}
+
+@test "AC8: 首輪提示點名自己的 repo；單 repo 模式不印這一句" {
+  multirepo_task
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  p=$(grep '^agent prompt login-backend' "$HERDR_STUB_LOG")
+  [[ "$p" == *"你的 pane 在「api」的 worktree"* ]]
+  [[ "$p" == *"$(dk_repo_field "$d" api wt)"* ]]
+  [[ "$p" == *"「## 倉庫」"* ]]
+  [[ "$p" == *"以「api:」"* ]]
+  teardown_project; setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  refute_grep '你的 pane 在' "$HERDR_STUB_LOG"
+}
+
+@test "AC8: 單 repo 模式的 --add-dir 只有主樹（0.9.2 不變）" {
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
+  [[ "$start" == *"--add-dir $PROJECT" ]]                 # 就這一個，而且在行尾
+  [ "$(grep -o -- '--add-dir' <<< "$start" | wc -l)" -eq 1 ]
+}
+
+@test "AC8: DK_WORKTREE 為空（計畫階段的 reviewer）時 cwd 退回主樹" {
+  # 計畫階段的任務只有資料夾：沒有 worktree，也還沒有 .repos
+  sed -i 's/^DK_WORKTREE=.*/DK_WORKTREE=""/' "$d/.task.env"; rm -f "$d/.repos"
+  run dk-spawn reviewer p1 --isolated; [ "$status" -eq 0 ]
+  grep -q -- "--cwd $PROJECT --no-focus" "$HERDR_STUB_LOG"
+  grep -q -- '--add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
+}
+
+@test "AC8: 所有權表沒有這位成員時 cwd 退回 DK_WORKTREE（主 repo）" {
+  multirepo_task
+  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
+  grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
+}

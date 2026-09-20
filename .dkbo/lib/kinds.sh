@@ -4,6 +4,12 @@ dk_kind_load() {
   # shellcheck disable=SC1090
   . "$f"
 }
+dk_add_dirs() { # DK_ADD_DIRS 的每一項一個 --add-dir（空白分隔，預設只有主樹）
+  # 員工的 cwd 是自己那個 repo 的 worktree，但切片、state、report 在主樹的 .dkbo/ 下，
+  # 跨 repo 的成員還要讀寫別的 worktree —— 清單由 dk-spawn 組好（主樹 + .repos 每一列的
+  # worktree，去重）並 export，三個 kind 的 kind_args 只負責展開它。
+  local d; for d in ${DK_ADD_DIRS:-$DK_PROJECT_ROOT}; do printf ' --add-dir %s' "$d"; done
+}
 dk_kind_models() { echo "$KIND_MODEL_EFFORTS" | tr ' ' '\n' | cut -d: -f1 | tr '\n' ' ' | sed 's/ *$//'; }
 dk_kind_model_efforts() { # model — the efforts that model really offers, empty when the model is unknown
   echo "$KIND_MODEL_EFFORTS" | tr ' ' '\n' | awk -F: -v m="$1" '$1==m{print $2}'

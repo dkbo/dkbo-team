@@ -115,7 +115,10 @@ P
   grep -q '^| 任務 | 2026-09-19T20:39 | ' "$d/report.md"   # 結束欄是這次 task-close 的當下
   refute_grep -F '由 dk-task-close 填' "$d/report.md"      # 範本的指引行被實際內容取代
   grep -qx '## 完成' "$d/report.md"                         # 其他段落不動
-  git -C "$PROJECT" show --stat HEAD | grep -q report.md    # 填完才 commit 任務記憶
+  # 0.10.0：任務記憶在合併之前先 commit 一次（AC13），所以 report.md 落在那一筆裡而不是
+  # HEAD（HEAD 是合併後撿 INDEX 與 process 尾巴的第二筆）。錨點跟著換，強度不變。
+  m=$(git -C "$PROJECT" log --format='%H %s' | grep 'dkbo memory: task login' | tail -1 | cut -d' ' -f1)
+  git -C "$PROJECT" show --stat "$m" | grep -q report.md    # 填完才 commit 任務記憶
 }
 @test "AC9: --abandon 不附時間表" {
   echo '2026-09-19T20:39 task-new login' > "$d/process.md"
@@ -125,4 +128,141 @@ P
 @test "AC9: 範本有 ## 時間 段且註明由 dk-task-close 填" {
   grep -qx '## 時間' "$REPO_ROOT/.dkbo/templates/report.md"
   grep -q 'dk-task-close' "$REPO_ROOT/.dkbo/templates/report.md"
+}
+
+# --- 0.10.0：記憶先 commit、兩階段合併、exit 3/4/5、不關 workspace（AC13 AC14）------
+
+# setup() 已經用單 repo 建過一次任務（worktree 在 .worktrees/login），多 repo 的佈局是
+# .worktrees/login/<名>，兩者在同一個路徑上打架 —— 先把單 repo 那份收掉再重建。
+remk_multirepo() {
+  git -C "$PROJECT" worktree remove --force "$WORKTREE_PATH" >/dev/null 2>&1 || true
+  git -C "$PROJECT" branch -D dk/login >/dev/null 2>&1 || true
+  rm -rf "$DK_ROOT/tasks/$(date +%F)-login"
+  setup_multirepo
+  d=$(fixture_task login 使用者登入)
+  : > "$d/.panes"
+}
+# 三個 repo 的分支上各改一次 f.txt（內容＝repo 名），讓每個 repo 都真的有東西要合。
+seed_branch_commits() {
+  local n wt
+  for n in main api shared; do
+    wt="$PROJECT/.worktrees/login/$n"
+    echo "${1:-$n}" > "$wt/f.txt"; git -C "$wt" add f.txt
+    git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m wave1
+  done
+}
+
+@test "AC13: 任務記憶在合併之前就先 commit 一次" {
+  # BACKLOG 2026-09-19「暫存中的改名擋住 merge」：任務目錄還在未追蹤狀態時 merge 會被擋。
+  echo '# r' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  m=$(git -C "$PROJECT" log --format='%H %s' | grep 'dkbo memory: task login' | tail -1 | cut -d' ' -f1)
+  mg=$(git -C "$PROJECT" log --format='%H %s' | grep -m1 'task login: 使用者登入' | cut -d' ' -f1)
+  [ -n "$m" ]; [ -n "$mg" ]
+  git -C "$PROJECT" merge-base --is-ancestor "$m" "$mg"   # 記憶那一筆在合併那一筆之前
+  git -C "$PROJECT" show --stat "$m" | grep -q report.md
+}
+
+@test "AC14: 結案不呼叫 herdr workspace close，最後一行叫人自己關" {
+  echo '# r' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  refute_grep '^workspace close' "$HERDR_STUB_LOG"
+  [[ "${lines[$((${#lines[@]}-1))]}" == *"herdr workspace close wB"* ]]
+}
+
+@test "AC13: 主樹有會被覆蓋的本地變更 → exit 5，一個 repo 都沒合" {
+  echo '# r' > "$d/report.md"
+  echo local > "$PROJECT/f.txt"     # 分支上也有 f.txt，合併會覆蓋它
+  run dk-task-close; [ "$status" -eq 5 ]
+  [[ "$output" == *"本地變更"* ]]
+  refute_grep 'task-close merged' "$d/process.md"
+  [ -f "$DK_ROOT/.sessions/wB:p1" ]; [ -d "$WORKTREE_PATH" ]
+  [ "$(cat "$PROJECT/f.txt")" = local ]
+}
+
+@test "AC13: 多 repo 任一個衝突 → exit 3、列出全部衝突 repo、誰都不合" {
+  remk_multirepo
+  echo '# r' > "$d/report.md"
+  # 三個 repo 都在分支上改了 f.txt；api 與 shared 的主樹也各自改了同一個檔 → 衝突
+  seed_branch_commits branch
+  for r in "$REPO_API" "$REPO_SHARED"; do
+    echo trunk > "$r/f.txt"; git -C "$r" add f.txt
+    git -C "$r" -c user.name=t -c user.email=t@t commit -q -m clash
+  done
+  run dk-task-close; [ "$status" -eq 3 ]
+  [[ "$output" == *"api"* ]]; [[ "$output" == *"shared"* ]]
+  grep -q 'merge-conflict' "$d/process.md"
+  [ ! -e "$PROJECT/f.txt" ]                          # 主 repo 也沒被合進去
+  git -C "$PROJECT" diff --quiet                     # 預檢的 merge 都 abort 乾淨了
+  git -C "$REPO_API" diff --quiet
+  [ -d "$PROJECT/.worktrees/login/api" ]             # worktree 與分支一律保留
+}
+
+@test "AC13: 真合併中途失敗 → exit 4，印 merged／failed／not attempted" {
+  remk_multirepo
+  echo '# r' > "$d/report.md"
+  seed_branch_commits branch
+  # 預檢用 --no-commit，不跑 commit-msg 鉤子；真合併要建 commit 才跑。這是「預檢過、
+  # 真合併炸」唯一能在測試裡穩定造出來的縫。
+  printf '#!/bin/sh\nexit 1\n' > "$REPO_API/.git/hooks/commit-msg"
+  chmod +x "$REPO_API/.git/hooks/commit-msg"
+  run dk-task-close; [ "$status" -eq 4 ]
+  [[ "$output" == *"merged"* ]]; [[ "$output" == *"main"* ]]
+  [[ "$output" == *"failed"* ]]; [[ "$output" == *"api"* ]]
+  [[ "$output" == *"not attempted"* ]]; [[ "$output" == *"shared"* ]]
+  [ -d "$PROJECT/.worktrees/login/shared" ]          # worktree 與分支一律不刪
+  git -C "$REPO_SHARED" rev-parse --verify -q dk/login
+  [ -f "$DK_ROOT/.sessions/wB:p1" ]
+}
+
+@test "AC13: 多 repo 全過 → 逐 repo 合併、逐 repo 刪 worktree 與分支" {
+  remk_multirepo
+  echo '# r' > "$d/report.md"
+  seed_branch_commits
+  run dk-task-close; [ "$status" -eq 0 ]
+  [ "$(cat "$PROJECT/f.txt")" = main ]
+  [ "$(cat "$REPO_API/f.txt")" = api ]
+  [ "$(cat "$REPO_SHARED/f.txt")" = shared ]
+  for n in main api shared; do [ ! -d "$PROJECT/.worktrees/login/$n" ]; done
+  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
+  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
+  refute_grep '^workspace close' "$HERDR_STUB_LOG"
+}
+
+@test "AC13: 某個 repo 的 worktree 髒了就擋下，訊息帶 repo 前綴" {
+  remk_multirepo
+  echo '# r' > "$d/report.md"
+  echo dirty > "$PROJECT/.worktrees/login/shared/g.txt"
+  run dk-task-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"uncommitted"* ]]; [[ "$output" == *"shared:"* ]]
+  [ -f "$DK_ROOT/.sessions/wB:p1" ]
+}
+
+@test "AC2/AC13: 計畫階段（沒有 .repos）--abandon 也收得乾淨" {
+  rm -f "$d/.repos"
+  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#; s#^DK_BASE=.*#DK_BASE=""#' "$d/.task.env"
+  run dk-task-close --abandon "計畫完不做了"; [ "$status" -eq 0 ]
+  grep -q '計畫完不做了' "$d/report.md"
+  grep -q '| abandoned | 計畫完不做了 |' "$DK_ROOT/tasks/INDEX.md"
+  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+  grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
+  [ -z "$(git -C "$PROJECT" status --porcelain -- "$d")" ]   # 記憶進了 git
+}
+
+@test "AC13: --abandon 逐 repo 刪 worktree 與分支" {
+  remk_multirepo
+  run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
+  for n in main api shared; do [ ! -d "$PROJECT/.worktrees/login/$n" ]; done
+  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
+  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
+}
+
+@test "AC13 反面: 沒有 .repos 又不是 --abandon → exit 1，不去合一個不存在的分支" {
+  rm -f "$d/.repos"
+  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#; s#^DK_BASE=.*#DK_BASE=""#' "$d/.task.env"
+  echo '# r' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"尚未實體化"* ]]; [[ "$output" == *"--abandon"* ]]
+  [ -f "$DK_ROOT/.sessions/wB:p1" ]
+  refute_grep 'task-close' "$d/process.md"
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dk-resume [<task-folder|short>] — print a ≤150-line recovery pack for the leader.
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
 if [ -n "${1:-}" ]; then
   t="$1"; [ -d "$DK_ROOT/tasks/$t" ] || t=$(compgen -G "$DK_ROOT/tasks/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$1" | tail -1 || true); t="${t##*/}"
   [ -n "$t" ] && [ -d "$DK_ROOT/tasks/$t" ] || dk_die "no task '$1'"
@@ -22,6 +22,16 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   echo "## 你是 $(dk_leader_name)（任務 $(basename "$dir")）"
   echo "本任務的執行規範是 .dkbo/skills/run/SKILL.md（Claude Code：/dkbo-run）。若你要接手推進，先讀它與 .dkbo/LEADER.md。任務目錄 $dir"
   echo "## brief"; cat "$dir/brief.md"
+  # .repos 在不在就是「實體化了沒」。領導接手的第一件事是知道自己有幾個 worktree 可以
+  # 派人進去；還沒交棒的話，這一段就是那句「先去 --run」。單 repo 模式不印名字欄
+  # （面向人的輸出在單 repo 模式一律不帶 repo 前綴）。
+  echo "## 倉庫"
+  if [ -f "$dir/.repos" ]; then
+    if dk_repos_multi; then dk_repos_rows "$dir" | awk '{printf "%s → %s\n", $1, $3}'
+    else dk_repos_rows "$dir" | awk 'NR==1{print $3}'; fi
+  else
+    echo "尚未交棒（/dkbo-run 會跑 dk-leader $DK_SHORT --run：切 worktree、開 workspace、把領導搬進去）"
+  fi
   echo "## 本波"
   if [ -n "$task_min" ]; then e=$((now_min - task_min)); echo "任務已進行 $((e/60))h $((e%60))m（自 task-new）"; fi
   if [ -n "$wave_min" ]; then echo "本波已進行 $((now_min - wave_min))m（自 wave-open）"; fi

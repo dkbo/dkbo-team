@@ -213,3 +213,92 @@ P
   run dk-wave-close; [ "$status" -eq 0 ]
   [[ "$output" == *"（dev —、審查 skip）"* ]] || { echo "$output"; false; }
 }
+
+# ── 多 repo（AC11／AC12）─────────────────────────────────────────────────────
+# setup 建的是單 repo fixture；多 repo 要從頭再來一次，並用真的 dk-wave-open 把逐 repo 的
+# base 行寫進 process.md（gate c 與 gate d 都靠它分辨「本波有沒有變更」）。
+multirepo_close() {
+  teardown_project; setup_project; setup_multirepo
+  d=$(fixture_task login 使用者登入); fixture_brief "$d"
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/**, main:src/api/**, shared:src/** | main:src/web/** |#' "$d/brief.md"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | main:tests/** | — |#' "$d/brief.md"
+  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+  dk-wave-open 1 >/dev/null
+  printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
+  printf 'status: done\nwave: 1\ntouched:\n  - api:src/a.ts\n  - main:src/api/login.ts\n  - shared:src/s.ts\n' > "$d/state/backend.md"
+  printf 'status: done\nwave: 1\ntouched:\n' > "$d/state/qa.md"
+  printf '# r\n## 測試\n### 紅\n$ bats\nFAIL 1\n### 綠\n$ bats\n1 ok\n' > "$d/state/backend.report.md"
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
+  main_wt=$(dk_repo_field "$d" main wt); api_wt=$(dk_repo_field "$d" api wt); shared_wt=$(dk_repo_field "$d" shared wt)
+}
+
+@test "AC11: gate c 逐 repo 跑各自的指令，log 檔名帶 repo，缺指令記 skipped 不擋" {
+  multirepo_close
+  mkdir -p "$main_wt/src/api" "$api_wt/src" "$shared_wt/src"
+  echo m > "$main_wt/src/api/login.ts"; echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
+  echo 'DK_TEST_CMD="echo main-ran"' >> "$DK_ROOT/settings.env"   # helpers 已給 DK_TEST_CMD_api="true"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [ -f "$d/waves/1.main.test.log" ]; [ -f "$d/waves/1.api.test.log" ]
+  [ ! -f "$d/waves/1.test.log" ]
+  grep -q 'main-ran' "$d/waves/1.main.test.log"
+  grep -q 'main ok (echo main-ran)' "$d/process.md"
+  grep -q 'api ok (true)' "$d/process.md"
+  grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
+  [ ! -f "$d/waves/1.shared.test.log" ]
+}
+
+@test "AC11 回歸: 測試指令讀一次 stdin 不會吃掉後續 repo（Important 2）" {
+  multirepo_close
+  mkdir -p "$main_wt/src/api" "$api_wt/src" "$shared_wt/src"
+  echo m > "$main_wt/src/api/login.ts"; echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
+  echo 'DK_TEST_CMD="cat >/dev/null; echo main-ran"' >> "$DK_ROOT/settings.env"   # helpers 已給 DK_TEST_CMD_api="true"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  grep -q 'main ok' "$d/process.md"
+  grep -q 'api ok (true)' "$d/process.md"
+  grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
+}
+
+@test "AC11: 本波沒變更的 repo 不跑它的測試" {
+  multirepo_close
+  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
+  echo 'DK_TEST_CMD="echo main-ran"' >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [ -f "$d/waves/1.api.test.log" ]; [ ! -f "$d/waves/1.main.test.log" ]
+  grep -q 'main skipped (no change)' "$d/process.md"
+}
+
+@test "AC11: 某個 repo 的測試紅了要點名它，pane 不關" {
+  multirepo_close
+  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
+  echo 'DK_TEST_CMD_api="echo boom; exit 1"' >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"api"* ]]; [[ "$output" == *"boom"* ]]
+  refute_grep '^pane close' "$HERDR_STUB_LOG"
+  grep -q 'wave-close 1 tests failed' "$d/process.md"
+}
+
+@test "AC12: gate d 的 unowned／unreported 訊息帶 <名>: 前綴" {
+  multirepo_close
+  mkdir -p "$shared_wt/docs"; echo x > "$shared_wt/docs/x.md"      # 沒人擁有 shared:docs/**
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"unowned change: shared:docs/x.md"* ]]
+  refute_grep '^pane close' "$HERDR_STUB_LOG"
+  rm -r "$shared_wt/docs"
+  mkdir -p "$api_wt/src"; echo o > "$api_wt/src/other.ts"          # backend 擁有但沒寫進 touched
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [[ "$output" == *"unreported change: api:src/other.ts (owner backend)"* ]]
+}
+
+@test "AC12: 每個有變更的 repo 各 commit 一次，沒變更的不 commit" {
+  multirepo_close
+  mkdir -p "$api_wt/src" "$shared_wt/src"
+  echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [ "$(git -C "$api_wt" log -1 --pretty=%s)" = "wave 1: backend qa" ]
+  [ "$(git -C "$shared_wt" log -1 --pretty=%s)" = "wave 1: backend qa" ]
+  [ "$(git -C "$main_wt" log -1 --pretty=%s)" = init ]
+  [ -z "$(git -C "$api_wt" status --porcelain)" ]
+  [[ "$output" == *"api"* ]]
+  grep -qE ' commit [0-9a-f]{7} wave 1 repo api$' "$d/process.md"
+  refute_grep ' repo main$' "$d/process.md"
+}

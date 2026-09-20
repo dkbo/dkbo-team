@@ -85,6 +85,17 @@ teardown() { teardown_project; }
   grep -Eq '^[0-9T:-]+ login-qa -> leader-login \[DONE\] 驗收全過$' "$d/messages.log"
 }
 
+@test "交棒之後領導的退路是 DK_LEADER_PANE，不是版面錨點 DK_ROOT_PANE" {
+  # dk-leader --run 把領導搬到任務 workspace 的根 pane。DK_ROOT_PANE 是版面錨點，
+  # 「領導在哪」是 DK_LEADER_PANE —— 借用版面變數會把訊息打到空 shell。
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  echo 'DK_LEADER_PANE="wC:p1"' >> "$d/.task.env"
+  DK_AGENT=login-qa HERDR_STUB_MISSING="leader-login" run dk-msg leader "[DONE] 驗收全過"
+  [ "$status" -eq 0 ]
+  grep -q '^agent prompt wC:p1 \[DONE\] from login-qa: 驗收全過$' "$HERDR_STUB_LOG"
+  refute_grep '^agent prompt wB:p1 ' "$HERDR_STUB_LOG"
+}
+
 @test "falls back to the employee pane id from .panes when its agent name is gone" {
   d="$DK_ROOT/tasks/$(date +%F)-login"
   printf 'login-frontend wB:pS 0 dev 1 1\n' > "$d/.panes"

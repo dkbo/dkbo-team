@@ -2,20 +2,25 @@ load ../helpers
 setup() { setup_project; }
 teardown() { teardown_project; }
 
-@test "task-new creates folder, env, worktree, binding, index, rename" {
+@test "task-new 只建任務資料夾：不切 worktree、不開 workspace，env、binding、index、rename 照舊" {
+  # 0.10.0：worktree、分支、workspace 全延到 dk-leader --run（計畫完可能不做，不先付成本）。
+  # 原本在這裡的 worktree／base 斷言原樣搬到 13_leader 的 --run 測試。
   run dk-task-new login "使用者登入" --from docs/plan.md
   [ "$status" -eq 0 ]
   d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-login"; [ "$output" = "$d" ]
   [ -f "$d/brief.md" ]; [ -f "$d/process.md" ]; [ -f "$d/messages.log" ]; [ -d "$d/state" ]; [ -f "$d/.panes" ]
   grep -q '^# 使用者登入$' "$d/brief.md"; grep -q 'docs/plan.md' "$d/brief.md"; grep -q 'dk/login' "$d/brief.md"
-  grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q "^DK_WORKTREE=\"$WORKTREE_PATH\"$" "$d/.task.env"
+  grep -q '交棒時建立' "$d/brief.md"
+  grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q '^DK_WORKTREE=""$' "$d/.task.env"
   grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"; grep -q '^DK_ROOT_PANE="wB:p1"$' "$d/.task.env"
-  grep -q "^DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"$" "$d/.task.env"; grep -q '^DK_WAVE=""$' "$d/.task.env"; grep -q '^DK_TABS=""$' "$d/.task.env"
+  grep -q '^DK_LEADER_PANE="wB:p1"$' "$d/.task.env"
+  grep -q '^DK_BASE=""$' "$d/.task.env"; grep -q '^DK_WAVE=""$' "$d/.task.env"; grep -q '^DK_TABS=""$' "$d/.task.env"
   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]
   grep -q '| 使用者登入 | task | planning |' "$DK_ROOT/tasks/INDEX.md"
-  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
-  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
-  [ "$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)" = dk/login ]
+  refute_grep '^worktree create' "$HERDR_STUB_LOG"
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  [ ! -e "$WORKTREE_PATH" ]
+  refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
   grep -q '^agent rename wB:p1 leader-login$' "$HERDR_STUB_LOG"
   grep -q 'task-new login' "$d/process.md"
 }
@@ -43,7 +48,7 @@ teardown() { teardown_project; }
 @test "task-new skips rename when already named leader-<short>" {
   echo '{"result":{"agent":{"name":"leader-login","agent_status":"idle","pane_id":"wB:p1"}}}' > "$HERDR_STUB_RESPONSES/agent_get.json"
   dk-task-new login x >/dev/null
-  ! grep -q '^agent rename' "$HERDR_STUB_LOG"
+  refute_grep '^agent rename' "$HERDR_STUB_LOG"
 }
 @test "dk-process appends to the bound task" {
   dk-task-new login x >/dev/null; dk-process "decision: 用現有 users 表"
@@ -65,22 +70,31 @@ teardown() { teardown_project; }
   dk-process "brief-review skipped: 單元測試"
   run dk-task-new new --gate1; [ "$status" -eq 0 ]
   grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-new/process.md"
-  ! grep -q 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-brand-new/process.md"
+  refute_grep 'gate1 approved' "$DK_ROOT/tasks/$(date +%F)-brand-new/process.md"
 }
-@test "task-new honours DK_WORKTREE_DIR and refuses an existing branch without creating the folder" {
-  DK_WORKTREE_DIR="$PROJECT/wt" run dk-task-new login x; [ "$status" -eq 0 ]; grep -q "^DK_WORKTREE=\"$PROJECT/wt/login\"$" "$output/.task.env"
+@test "task-new 不理會 DK_WORKTREE_DIR，分支已存在也照建（切 worktree 是 dk-leader --run 的事）" {
+  # DK_WORKTREE_DIR 與「分支已存在就拒絕」的斷言搬到 13_leader 的 --run 測試。
+  DK_WORKTREE_DIR="$PROJECT/wt" run dk-task-new login x; [ "$status" -eq 0 ]; grep -q '^DK_WORKTREE=""$' "$output/.task.env"
+  [ ! -e "$PROJECT/wt" ]
   git -C "$PROJECT" branch dk/pay
-  run dk-task-new pay y; [ "$status" -eq 1 ]; [[ "$output" == *"worktree add failed"* ]]; [ ! -d "$DK_ROOT/tasks/$(date +%F)-pay" ]
+  run dk-task-new pay y; [ "$status" -eq 0 ]; [ -d "$DK_ROOT/tasks/$(date +%F)-pay" ]
+  grep -q '^DK_WORKTREE=""$' "$output/.task.env"
 }
-@test "task-new --no-worktree still records DK_BASE" {
-  run dk-task-new login x --no-worktree; [ "$status" -eq 0 ]; grep -q "^DK_WORKTREE=\"$PROJECT\"$" "$output/.task.env"; grep -Eq '^DK_BASE="[0-9a-f]{40}"$' "$output/.task.env"
+@test "task-new --no-worktree 只記旗標，不碰 worktree 也不記 base" {
+  run dk-task-new login x --no-worktree; [ "$status" -eq 0 ]
+  grep -q '^DK_NO_WORKTREE="1"$' "$output/.task.env"
+  grep -q '^DK_WORKTREE=""$' "$output/.task.env"; grep -q '^DK_BASE=""$' "$output/.task.env"
+  [ ! -e "$WORKTREE_PATH" ]
 }
-@test "task-new removes its worktree and branch when a later step fails" {
+@test "task-new 預設不寫 DK_NO_WORKTREE" {
+  run dk-task-new login x; [ "$status" -eq 0 ]; grep -q '^DK_NO_WORKTREE=""$' "$output/.task.env"
+}
+@test "task-new 在後續步驟失敗時收乾淨資料夾與 .sessions（沒有 worktree 可收）" {
   rm "$DK_ROOT/templates/process.md"
   run dk-task-new login x; [ "$status" -ne 0 ]
-  [ ! -d "$WORKTREE_PATH" ]
-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
-  ! git -C "$PROJECT" rev-parse --verify -q dk/login
+  [ ! -e "$WORKTREE_PATH" ]
+  refute_grep -qx "worktree $WORKTREE_PATH" <(git -C "$PROJECT" worktree list --porcelain)
+  refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
   [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]; [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
   cp "$REPO_ROOT/.dkbo/templates/process.md" "$DK_ROOT/templates/process.md"
   run dk-task-new login x; [ "$status" -eq 0 ]   # same short name works again afterwards
@@ -97,7 +111,7 @@ teardown() { teardown_project; }
 @test "task-new stays quiet when the rename did take" {
   run dk-task-new login x
   [ "$status" -eq 0 ]
-  ! grep -q 'rename' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
+  refute_grep 'rename' "$DK_ROOT/tasks/$(date +%F)-login/process.md"
 }
 
 @test "task-new 產出 request.md 空殼" {
@@ -179,4 +193,33 @@ teardown() { teardown_project; }
   [ "$status" -eq 1 ]; [[ "$output" == *"login-reviewer-p1"* ]]; [[ "$output" == *"dk-wave-close --agent"* ]]
   : > "$d/.panes"
   run dk-task-new login --gate1; [ "$status" -eq 0 ]
+}
+
+# --- 開場的 dk_repos_check 便宜三項（AC2／AC4 的早失敗那一半，0.10.0）-----------
+# 名字、第一個是主 repo、路徑是 git 根：三項都不必碰工作樹狀態，所以在建資料夾之前就驗。
+# 「工作樹乾淨」留到 dk-leader --run 真的要從 HEAD 切 worktree 的那一刻（--no-clean）。
+
+@test "task-new 在 DK_REPOS 名字不合法時拒絕，什麼都不建" {
+  printf 'DK_REPOS="main=. Bad=%s"\n' "$PROJECT-api" >> "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"Bad"* ]]
+  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+}
+@test "task-new 在第一個 repo 不是主 repo 時拒絕" {
+  setup_multirepo
+  sed -i "s#^DK_REPOS=.*#DK_REPOS=\"api=$REPO_API main=.\"#" "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"主 repo"* ]]
+  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+}
+@test "task-new 在 repo 路徑不是 git 根時拒絕並點名" {
+  mkdir -p "$PROJECT-plain"
+  printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-plain" >> "$DK_ROOT/settings.env"
+  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
+  rm -r "$PROJECT-plain"
+}
+@test "task-new 不驗工作樹乾不乾淨（--no-clean；那一項是 dk-leader --run 的事）" {
+  setup_multirepo
+  repo_dirty_tracked "$REPO_API"
+  run dk-task-new login x; [ "$status" -eq 0 ]
+  [ -d "$DK_ROOT/tasks/$(date +%F)-login" ]
 }
