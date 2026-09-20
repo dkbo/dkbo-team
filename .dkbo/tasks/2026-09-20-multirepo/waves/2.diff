@@ -1,0 +1,1688 @@
+# 多 repo workspace — wave 2 since 855231b — 2026-09-20T10:59
+# files changed: 18 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/bin/dk-leader             |  80 ++++++++++++++++-----
+ .dkbo/bin/dk-resume             |  12 +++-
+ .dkbo/bin/dk-review-pack        |  52 ++++++++++----
+ .dkbo/bin/dk-spawn              |  33 +++++++--
+ .dkbo/bin/dk-task-close         | 151 +++++++++++++++++++++++++++++++++-------
+ .dkbo/bin/dk-task-new           |   8 ++-
+ .dkbo/bin/dk-wave-close         |  88 +++++++++++++++++++----
+ .dkbo/bin/dk-wave-open          |  19 ++++-
+ .dkbo/lib/prompt.sh             |   7 +-
+ .dkbo/templates/brief-member.md |   3 +
+ tests/unit/05_task_new.bats     |  29 ++++++++
+ tests/unit/07_spawn.bats        |  59 ++++++++++++++++
+ tests/unit/08_wave_close.bats   |  78 +++++++++++++++++++++
+ tests/unit/10_resume.bats       |  30 ++++++++
+ tests/unit/12_task_close.bats   | 142 ++++++++++++++++++++++++++++++++++++-
+ tests/unit/13_leader.bats       | 117 ++++++++++++++++++++++++++++++-
+ tests/unit/18_wave_open.bats    |  46 ++++++++++++
+ tests/unit/19_review_pack.bats  |  46 ++++++++++++
+ 18 files changed, 917 insertions(+), 83 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/bin/dk-leader b/.dkbo/bin/dk-leader
+index 52c4b3d..98117a0 100755
+--- a/.dkbo/bin/dk-leader
++++ b/.dkbo/bin/dk-leader
+@@ -1,17 +1,17 @@
+ #!/usr/bin/env bash
+ # dk-leader <short> "<display>" [--kind claude] [--model M] [--effort E]  — open a second leader pane.
+ # dk-leader <short> --run       [--kind claude] [--model M] [--effort E]  — 實體化任務（worktree＋herdr
+ #   workspace）並交棒給該 workspace 根 pane 的執行領導。/dkbo-run 的第 0 步；見 skills/run/SKILL.md。
+ set -euo pipefail
+ . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+-. "$DK_ROOT/lib/kinds.sh"
++. "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/repos.sh"
+ dk_require_herdr
+ short="${1:-}"; shift || true
+ [[ "$short" =~ ^[a-z][a-z0-9-]{0,11}$ ]] || dk_die "short name must be ascii lowercase, ≤12 chars"
+ run=0; display=""
+ if [ "${1:-}" = --run ]; then run=1; shift
+ else
+   display="${1:-}"; shift || true
+   [ -n "$display" ] || dk_die "display name required"
+   [[ "$display" != *[\"\$\`\\]* ]] || dk_die "display name must not contain \" \$ \` or backslash"
+ fi
+@@ -20,99 +20,141 @@ kind="$DK_LEADER_KIND"; model=""; effort=""
+ while [ $# -gt 0 ]; do case "$1" in --kind) kind="$2";; --model) model="$2";; --effort) effort="$2";; *) dk_die "unknown flag $1";; esac; shift 2; done
+ dk_kind_load "$kind"
+ ltier=$(echo "$KIND_DEFAULT_TIERS" | tr ' ' '\n' | awk -F= '$1=="L"{print $2}')   # 領導用最高檔
+ [ -n "$model" ]  || model="${ltier%%/*}"
+ [ -n "$effort" ] || effort="${ltier##*/}"
+ args=$(dk_kind_args "$kind" "$model/$effort")
+ # CLI 那側的 session 顯示名＝workspace 名，人在 session picker 與終端標題上看到的就是 dk/<short>。
+ # claude 有 --name，codex 與 agy 沒有對應旗標，回空字串（契約：kinds/<kind>.sh 的 kind_session_args）。
+ sess=$(kind_session_args "dk/$short")
+ 
+-# --run 的 rollback 與它的狀態。定義在 if 外面：函式體在呼叫時才展開，而寫在 if 裡面
+-# 會被 shellcheck 判成 unreachable（SC2317 —— 它看不出它會被叫到）。
+-created_wt=0; new_ws=""; env_written=0; wt_path=""
++# --run 的 rollback、依賴鉤子與它們的狀態。定義在 if 外面：函式體在呼叫時才展開，而寫在
++# if 裡面會被 shellcheck 判成 unreachable（SC2317 —— 它看不出它會被叫到）。
++dir=""; new_ws=""; env_written=0; wt_path=""; repos_written=0
++created_rows=""   # 已經真的切出來的 worktree，一列 "<repo 根> <worktree>"；rollback 逐列收
+ old_ws=""; old_root=""; old_leader=""; old_wt=""; old_base=""
+ rollback() { # agent start 之前任一步失敗：只還原這一次真的動過的東西
+-  if [ "$created_wt" = 1 ]; then
+-    git -C "$DK_PROJECT_ROOT" worktree remove --force "$wt_path" >/dev/null 2>&1 || true
+-    git -C "$DK_PROJECT_ROOT" branch -D "dk/$short" >/dev/null 2>&1 || true
++  local rroot rwt
++  if [ -n "$created_rows" ]; then
++    while read -r rroot rwt; do
++      [ -n "$rroot" ] || continue
++      git -C "$rroot" worktree remove --force "$rwt" >/dev/null 2>&1 || true
++      git -C "$rroot" branch -D "dk/$short" >/dev/null 2>&1 || true
++    done <<< "$created_rows"
+   fi
+   [ -z "$new_ws" ] || herdr workspace close "$new_ws" >/dev/null 2>&1 || true
++  # .repos 的存在與否就是「實體化了沒」的判別器（契約），所以失敗路徑上一定要把它收掉，
++  # 否則下一次 --run 會以為已經實體化、跳過切 worktree，然後在一個空的佈局上交棒。
++  if [ "$repos_written" = 1 ]; then rm -f "$dir/.repos"; fi
+   if [ "$env_written" = 1 ]; then
+     dk_env_set DK_WORKSPACE "$old_ws"; dk_env_set DK_ROOT_PANE "$old_root"; dk_env_set DK_LEADER_PANE "$old_leader"
+     dk_env_set DK_WORKTREE "$old_wt"; dk_env_set DK_BASE "$old_base"
+   fi
+ }
++run_setup() { # NAME WT — AC20：每個 worktree 切好之後跑一次依賴鉤子
++  # 環境的組法與 dk-wave-close 的 gate c 相同：剝光 DK_*。鉤子多半是 pnpm install，而任何
++  # source 了 lib/common.sh 的東西都會照 ${DK_X:-預設} 吃到繼承值，打到領導那一側的真 repo。
++  # 失敗不 rollback：多半是網路，worktree 本身是好的，人補裝一次就能開工（plan.md 決策⑮）。
++  local n="$1" rwt="$2" cmd log v
++  cmd=$(dk_repo_setup_cmd "$n"); [ -n "$cmd" ] || return 0
++  local clean=(env)   # 第一個元素讓陣列永不為空：bash 3.2 對空陣列展開在 set -u 下會死
++  # shellcheck disable=SC2086  # ${!DK_@} 要斷詞，一個變數名一個元素
++  for v in ${!DK_@}; do clean+=(-u "$v"); done
++  log="$dir/setup.$n.log"
++  if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") > "$log" 2>&1; then return 0; fi
++  echo "dk-leader: repo $n 的依賴鉤子失敗（$cmd）；worktree 已切好，依賴要自己補裝。最後 20 行見 $log：" >&2
++  tail -n 20 "$log" >&2
++  dk_process "setup $n failed"
++}
+ # 明確呼叫，不掛 trap EXIT。這一版原本是掛 trap 的，而 rollback 只做了一半 —— worktree 刪了、
+ # workspace 關了，.task.env 卻留著實體化後的值：dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，
+ # 而 dk_task_dir 當時結尾是裸 return，bash 規定 trap handler 裡的裸 return 回的是「觸發 trap 的那個
+ # 狀態」（失敗路徑上就是 1）。common.sh 那一行已改成 return 0（回歸測試 01_common.bats），但這裡
+ # 維持明確呼叫：rollback 到底有沒有跑完，不該吊在另一支 lib 的一行上，而它失效時是完全無聲的。
+ rb_die() { rollback; dk_die "$@"; }
+ 
+ if [ "$run" = 1 ]; then
+   dir=$(compgen -G "$DK_ROOT/tasks/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$short" | tail -1 || true)
+   [ -n "$dir" ] || dk_die "no task $short"
+   DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+   grep -Eq '^[^ ]+ gate1 approved$' "$dir/process.md" \
+     || dk_die "任務 $short 還沒過關卡①（process.md 沒有 gate1 approved）：先給人確認再 dk-task-new $short --gate1"
+   [ -z "${DK_WAVE:-}" ] || dk_die "任務 $short 還有開著的波（wave $DK_WAVE）：先 dk-wave-close 收完這一波再交棒"
+ 
+   pane_agent_name() { herdr agent get "$1" 2>/dev/null | dk_json '.result.agent.name // empty' || true; }
+ 
+-  # 「實體化了沒」＝ .task.env 的 DK_WORKTREE 有沒有值（計畫階段是空字串，dk_legacy_task 只看
+-  # DK_BASE= 這一行在不在，空值不是 legacy）。多 repo 的 .repos 在波 2 一起進來。
++  # 「實體化了沒」＝ .repos 在不在（契約）。不看 .task.env 的 DK_WORKTREE：那是主 repo 的
++  # 單一路徑，多 repo 下它只是 N 個之一，而 .repos 是「N 個 worktree 都切好了」的那一份清單。
+   materialized=0
+-  if [ -n "${DK_WORKTREE:-}" ]; then
++  if [ -f "$dir/.repos" ]; then
+     if [ -n "${DK_WORKSPACE:-}" ] && ! herdr workspace get "$DK_WORKSPACE" >/dev/null 2>&1; then
+-      dk_die "任務 $short 已實體化（DK_WORKTREE=$DK_WORKTREE）但 workspace $DK_WORKSPACE 已不在；先人工收拾再跑"
++      dk_die "任務 $short 已實體化（$dir/.repos 已在）但 workspace $DK_WORKSPACE 已不在；先人工收拾再跑"
+     fi
+     materialized=1
+     if [ "$(pane_agent_name "${DK_ROOT_PANE:-}")" = "leader-$short" ]; then
+       echo "dk-leader: 任務 $short 已交棒（workspace $DK_WORKSPACE 根 pane $DK_ROOT_PANE 上的 leader-$short）"
+       exit 0
+     fi
+   fi
+ 
+   old_ws="${DK_WORKSPACE:-}"; old_root="${DK_ROOT_PANE:-}"; old_leader="${DK_LEADER_PANE:-}"
+   old_wt="${DK_WORKTREE:-}"; old_base="${DK_BASE:-}"; wt_path="$old_wt"
+ 
+   if [ "$materialized" = 0 ]; then
+-    base_sha=$(git -C "$DK_PROJECT_ROOT" rev-parse HEAD)   # 交棒當下的 HEAD 才是對的起點（計畫可能拖幾天）
++    # 交棒當下每個 repo 都要是乾淨的 git 根（乾淨只看已追蹤檔）。dk-task-new 已經做過名字、
++    # 主 repo、git 根三項；「乾淨」是這裡才驗的那一項 —— worktree 從 HEAD 切，此刻才算數。
++    dk_repos_check
+     if [ "${DK_NO_WORKTREE:-}" = 1 ]; then
++      # 多 repo 沒有「共同的當前分支」可以就地做，一定要 N 個 worktree（plan.md 決策⑥）。
++      if dk_repos_multi; then dk_die "多 repo 模式（DK_REPOS 非空）不支援 DK_NO_WORKTREE：N 個 repo 沒有共同的當前分支，一定要各切一個 worktree"; fi
++      base_sha=$(git -C "$DK_PROJECT_ROOT" rev-parse HEAD)   # 交棒當下的 HEAD 才是對的起點（計畫可能拖幾天）
+       wt_path="$DK_PROJECT_ROOT"
++      # 單 repo 就地做也寫 .repos：讀端（dk-task-close、dk-resume、gate c／d）只有一條路。
++      printf '%s %s %s %s\n' "$(dk_repos_parse | awk 'NR==1{print $1}')" "$DK_PROJECT_ROOT" "$DK_PROJECT_ROOT" "$base_sha" > "$dir/.repos"
++      repos_written=1
+     else
+-      wt_path="${DK_WORKTREE_DIR:-$DK_PROJECT_ROOT/.worktrees}/$short"
+-      [ ! -e "$wt_path" ] || dk_die "worktree path exists: $wt_path"
+-      mkdir -p "$(dirname "$wt_path")"
+-      git -C "$DK_PROJECT_ROOT" worktree add -q -b "dk/$short" "$wt_path" "$base_sha" >/dev/null 2>&1 \
+-        || dk_die "git worktree add failed (branch dk/$short exists? run: git branch -D dk/$short)"
+-      created_wt=1
++      # 先把 .repos 算出來（路徑與 base sha，不切 worktree），再照它逐 repo 切 —— 佈局只有
++      # 一份定義（repos.sh），dk-leader 不自己重算一套。失敗路徑上 rollback 會把它收掉。
++      dk_repos_write "$dir" "$short" "${DK_WORKTREE_DIR:-$DK_PROJECT_ROOT/.worktrees}"
++      repos_written=1
++      while read -r rname rroot rwt rbase; do
++        [ -n "$rname" ] || continue
++        [ ! -e "$rwt" ] || rb_die "worktree path exists: $rwt（repo $rname）"
++        mkdir -p "$(dirname "$rwt")"
++        git -C "$rroot" worktree add -q -b "dk/$short" "$rwt" "$rbase" >/dev/null 2>&1 \
++          || rb_die "git worktree add failed（repo $rname：分支 dk/$short 已存在？git -C $rroot branch -D dk/$short）"
++        created_rows="$created_rows$rroot $rwt
++"
++        run_setup "$rname" "$rwt"
++      done <<< "$(dk_repos_rows "$dir")"
++      # .task.env 的 DK_WORKTREE／DK_BASE 記主 repo（第一列）；其餘 repo 一律走 .repos。
++      rname=$(dk_repos_names "$dir" | head -1)
++      wt_path=$(dk_repo_field "$dir" "$rname" wt); base_sha=$(dk_repo_field "$dir" "$rname" base)
+     fi
+     # workspace 只是一個「cwd 指向主樹、label 是分支名」的容器：領導必須站在主樹（.dkbo/ 在主樹，
+     # 跑的也是主樹的腳本），員工 pane 照舊各自 --cwd。所以不用 herdr worktree create（plan.md 決策①）。
+     out=$(herdr workspace create --cwd "$DK_PROJECT_ROOT" --label "dk/$short" --no-focus \
+             --env "DK_ROOT=$DK_ROOT" --env "HERDR_ENV=1" 2>/dev/null || true)
+     new_ws=$(printf '%s' "$out" | dk_json '.result.workspace.workspace_id // empty' 2>/dev/null || true)
+     root_pane=$(printf '%s' "$out" | dk_json '.result.root_pane.pane_id // empty' 2>/dev/null || true)
+     [ -n "$new_ws" ] && [ -n "$root_pane" ] \
+       || rb_die "herdr workspace create 沒有回 workspace_id／root_pane（herdr 版本不符？）：$out"
+     tab=$(herdr workspace get "$new_ws" 2>/dev/null | dk_json '.result.workspace.active_tab_id // empty' 2>/dev/null || true)
+     if [ -z "$tab" ]; then dk_process "herdr-degraded: workspace get $new_ws（沒有 active_tab_id，tab 名字沒改）"
+     elif ! herdr tab rename "$tab" "dk/$short" >/dev/null 2>&1; then dk_process "herdr-degraded: tab rename $tab"; fi
+ 
+     env_written=1
+     dk_env_set DK_WORKSPACE "$new_ws"; dk_env_set DK_ROOT_PANE "$root_pane"; dk_env_set DK_LEADER_PANE "$root_pane"
+     dk_env_set DK_WORKTREE "$wt_path"; dk_env_set DK_BASE "$base_sha"
+     DK_WORKSPACE="$new_ws"; DK_ROOT_PANE="$root_pane"; DK_LEADER_PANE="$root_pane"
+     DK_WORKTREE="$wt_path"; DK_BASE="$base_sha"
+-    dk_process "materialize repos main workspace $new_ws"
++    dk_process "materialize repos $(dk_repos_names "$dir" | tr '\n' ' ' | sed 's/ $//') workspace $new_ws"
+   fi
+ 
+   # 交棒。herdr 的註冊名唯一，所以先把呼叫者 pane 的 leader-<short> 清掉，執行領導才起得來。
+   caller="${HERDR_PANE_ID:-}"
+   if [ -n "$caller" ] && [ "$(pane_agent_name "$caller")" = "leader-$short" ]; then
+     herdr agent rename "$caller" --clear >/dev/null \
+       || rb_die "herdr agent rename $caller --clear 失敗：leader-$short 這個名字還被佔著，執行領導起不來"
+   fi
+   # agent start 之後不再 rollback：pane 留著、印診斷（同現行 dk-leader 的失敗路徑）
+   # shellcheck disable=SC2086
+diff --git a/.dkbo/bin/dk-resume b/.dkbo/bin/dk-resume
+index 546eaa2..b43d9b8 100755
+--- a/.dkbo/bin/dk-resume
++++ b/.dkbo/bin/dk-resume
+@@ -1,34 +1,44 @@
+ #!/usr/bin/env bash
+ # dk-resume [<task-folder|short>] — print a ≤150-line recovery pack for the leader.
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+ if [ -n "${1:-}" ]; then
+   t="$1"; [ -d "$DK_ROOT/tasks/$t" ] || t=$(compgen -G "$DK_ROOT/tasks/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$1" | tail -1 || true); t="${t##*/}"
+   [ -n "$t" ] && [ -d "$DK_ROOT/tasks/$t" ] || dk_die "no task '$1'"
+   mkdir -p "$DK_ROOT/.sessions"; echo "$t" > "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
+ fi
+ dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
+ # once, before render: render may run up to four times to fit the 150-line budget
+ watch=$("$DK_ROOT/bin/dk-watch" --ensure 2>/dev/null || echo "watch: unknown")
+ # 時間也只算一次：render 重跑四次的話，每次重算會讓同一份輸出裡的兩段數字對不起來。
+ now_min=$(dk_ts_minutes "$(dk_now)"); now_s=$(date +%s); task_min=""; wave_min=""
+ ts=$(awk '$2=="task-new"{print $1; exit}' "$dir/process.md")
+ if [ -n "$ts" ]; then task_min=$(dk_ts_minutes "$ts" || true); fi
+ if [ -n "${DK_WAVE:-}" ]; then
+   ts=$(dk_ts_pick "$dir/process.md" wave-open "$DK_WAVE")
+   if [ -n "$ts" ]; then wave_min=$(dk_ts_minutes "$ts" || true); fi
+ fi
+ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
+   echo "## 你是 $(dk_leader_name)（任務 $(basename "$dir")）"
+   echo "本任務的執行規範是 .dkbo/skills/run/SKILL.md（Claude Code：/dkbo-run）。若你要接手推進，先讀它與 .dkbo/LEADER.md。任務目錄 $dir"
+   echo "## brief"; cat "$dir/brief.md"
++  # .repos 在不在就是「實體化了沒」。領導接手的第一件事是知道自己有幾個 worktree 可以
++  # 派人進去；還沒交棒的話，這一段就是那句「先去 --run」。單 repo 模式不印名字欄
++  # （面向人的輸出在單 repo 模式一律不帶 repo 前綴）。
++  echo "## 倉庫"
++  if [ -f "$dir/.repos" ]; then
++    if dk_repos_multi; then dk_repos_rows "$dir" | awk '{printf "%s → %s\n", $1, $3}'
++    else dk_repos_rows "$dir" | awk 'NR==1{print $3}'; fi
++  else
++    echo "尚未交棒（/dkbo-run 會跑 dk-leader $DK_SHORT --run：切 worktree、開 workspace、把領導搬進去）"
++  fi
+   echo "## 本波"
+   if [ -n "$task_min" ]; then e=$((now_min - task_min)); echo "任務已進行 $((e/60))h $((e%60))m（自 task-new）"; fi
+   if [ -n "$wave_min" ]; then echo "本波已進行 $((now_min - wave_min))m（自 wave-open）"; fi
+   if [ -n "${DK_WAVE:-}" ]; then
+     echo "wave: $DK_WAVE  base: $(dk_wave_base "$dir" "$DK_WAVE")  kinds down: ${DK_KIND_DOWN:-無}"
+     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
+       NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
+         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"
+         while ((getline l < sf) > 0) if (l ~ /^status: /) st=substr(l, 9); close(sf)
+         printf "%s %s %d min%s\n", $1, st, (now-$3)/60, ((now-$3) > t*60 && st!="done") ? " TIMEOUT?" : "" }' "$dir/.panes"
+diff --git a/.dkbo/bin/dk-review-pack b/.dkbo/bin/dk-review-pack
+index ebc682e..3edfd53 100755
+--- a/.dkbo/bin/dk-review-pack
++++ b/.dkbo/bin/dk-review-pack
+@@ -1,29 +1,55 @@
+ #!/usr/bin/env bash
+ # dk-review-pack [N] | dk-review-pack --task — write tasks/<t>/waves/N.diff (or task.diff) for reviewers; prints the path.
+ # Includes uncommitted and untracked work in the worktree via a throwaway index (the employees' real index is untouched).
++# 多 repo：一份檔、每個有變更的 repo 一段「## repo <名>」（決策⑩）——reviewer 仍然只讀一個檔。
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+-dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
++dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
++mode=wave; n=""
+ if [ "${1:-}" = --task ]; then
+   [ -n "${DK_BASE:-}" ] || dk_die "no DK_BASE in .task.env (legacy task); pass a wave number instead"
+-  base="$DK_BASE"; out="$dir/waves/task.diff"; label="task $DK_SHORT, whole branch since ${base:0:7}"
++  mode=task; base="$DK_BASE"; out="$dir/waves/task.diff"; label="task $DK_SHORT, whole branch since ${base:0:7}"
+ else
+   n="${1:-${DK_WAVE:-}}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-review-pack [N] | --task  (no wave is open)"
+   base=$(dk_wave_base "$dir" "$n")
+   [ -n "$base" ] || dk_die "no 'wave-open $n base <sha>' line in process.md"
+   out="$dir/waves/$n.diff"; label="wave $n since ${base:0:7}"
+ fi
+ mkdir -p "$dir/waves"
+-idx=$(mktemp); trap 'rm -f "$idx"' EXIT
+-g()  { git -C "$DK_WORKTREE" "$@"; }
+-gi() { GIT_INDEX_FILE="$idx" git -C "$DK_WORKTREE" "$@"; }
+-gi read-tree HEAD; gi add -A
+-changed=$(gi diff --cached --name-only "$base" | wc -l)
++idx=$(mktemp); body=$(mktemp); trap 'rm -f "$idx" "$body"' EXIT
++# 沒有 .repos 的是 0.9.2 之前建立的任務：退回單列（名字 main、路徑 DK_WORKTREE、base 就是上面算好的那個）
++rows=$(dk_repos_rows "$dir" 2>/dev/null || true)
++[ -n "$rows" ] || rows="main $DK_PROJECT_ROOT $DK_WORKTREE $base"
++mainrepo=$(printf '%s\n' "$rows" | awk 'NR==1{print $1}')
++multi=0; dk_repos_multi && multi=1
++total=0
++while read -r rname _rroot rwt rbase; do
++  [ -n "$rname" ] && [ -n "${rwt:-}" ] && [ -d "$rwt" ] || continue
++  if [ "$mode" = task ]; then
++    b="$rbase"; [ -n "$b" ] || b="$base"        # --task：每個 repo 從它被實體化的那一刻算起
++  else
++    b=$(dk_wave_base "$dir" "$n" "$rname")       # 逐 repo 那一行
++    # 用 if 不用 `[ … ] || { … && … ; }`：AND 群組為假時整個 OR 列回非零，set -e 會當場退出
++    if [ -z "$b" ] && [ "$rname" = "$mainrepo" ]; then b="$base"; fi   # 主 repo 退回 0.9.2 那一行
++    [ -n "$b" ] || b="$rbase"                    # 那一波沒開過：退回 .repos 記的實體化 sha
++  fi
++  [ -n "$b" ] || continue
++  : > "$idx"
++  GIT_INDEX_FILE="$idx" git -C "$rwt" read-tree HEAD
++  GIT_INDEX_FILE="$idx" git -C "$rwt" add -A
++  c=$(GIT_INDEX_FILE="$idx" git -C "$rwt" diff --cached --name-only "$b" | wc -l)
++  total=$((total + c))
++  [ "$c" -gt 0 ] || continue
++  {
++    [ "$multi" = 0 ] || { echo "## repo $rname"; echo; }
++    echo "## commits"; git -C "$rwt" log --oneline "$b..HEAD"; echo
++    echo "## stat"; GIT_INDEX_FILE="$idx" git -C "$rwt" diff --cached --stat "$b"; echo
++    echo "## diff (-U10)"; GIT_INDEX_FILE="$idx" git -C "$rwt" -c core.quotePath=false diff --cached -U10 "$b"; echo
++  } >> "$body"
++done <<< "$rows"
+ {
+-  echo "# $DK_DISPLAY — $label — $(dk_now)"; echo "# files changed: $changed (working tree included)"; echo
+-  echo "## commits"; g log --oneline "$base..HEAD"; echo
+-  echo "## stat"; gi diff --cached --stat "$base"; echo
+-  echo "## diff (-U10)"; gi diff --cached -U10 "$base"
++  echo "# $DK_DISPLAY — $label — $(dk_now)"; echo "# files changed: $total (working tree included)"; echo
++  cat "$body"
+ } > "$out"
+-[ "$changed" -gt 0 ] || echo "dk-review-pack: no changes since ${base:0:7}; $out holds only the header" >&2
++[ "$total" -gt 0 ] || echo "dk-review-pack: no changes since ${base:0:7}; $out holds only the header" >&2
+ echo "$out"
+diff --git a/.dkbo/bin/dk-spawn b/.dkbo/bin/dk-spawn
+index 0db785d..054539c 100755
+--- a/.dkbo/bin/dk-spawn
++++ b/.dkbo/bin/dk-spawn
+@@ -1,37 +1,62 @@
+ #!/usr/bin/env bash
+ # dk-spawn <role> [alias] [--tier S|M|L] [--kind K] [--isolated] [--resume] [--split right|down]
+ set -euo pipefail
+ . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
+-. "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"; . "$DK_ROOT/lib/layout.sh"; . "$DK_ROOT/lib/herdr.sh"
++. "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/prompt.sh"; . "$DK_ROOT/lib/layout.sh"; . "$DK_ROOT/lib/herdr.sh"; . "$DK_ROOT/lib/repos.sh"
+ dk_require_herdr
+ dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
+ role="${1:-}"; shift || true; [ -n "$role" ] || dk_die "usage: dk-spawn <role> [alias] [--tier T] [--kind K] [--isolated] [--resume] [--split right|down]"
+ alias=""; tier=M; kind=""; isolated=0; resume=0; notes=""; split_override=""; handoff=""
+ while [ $# -gt 0 ]; do case "$1" in
+   --tier) tier="$2"; shift 2;; --kind) kind="$2"; notes="$notes override-kind"; shift 2;;
+   --isolated) isolated=1; notes="$notes isolated"; shift;; --resume) resume=1; notes="$notes resume"; shift;;
+   --split) split_override="$2"; [[ "$split_override" =~ ^(right|down)$ ]] || dk_die "--split must be right or down"; shift 2;;
+   --handoff) handoff="${2:-}"; [ -n "$handoff" ] || dk_die "--handoff 要帶原因：dk-spawn <role> [alias] --handoff \"<為什麼換人>\""
+              resume=1; notes="$notes handoff"; shift 2;;
+   --*) dk_die "unknown flag $1";; *) alias="$1"; shift;; esac; done
+ rf="$DK_ROOT/roles/$role.md"; [ -f "$rf" ] || dk_die "no role file $rf (use add-role skill first)"
+ [ -n "$kind" ] || kind=$(dk_fm "$rf" kind)
+ spec=$(dk_fm_tier "$rf" "$tier"); [ -n "$spec" ] || dk_die "role $role has no tier $tier"
+ if [ "$kind" != "$(dk_fm "$rf" kind)" ]; then dk_kind_load "$kind"; spec=$(echo "$KIND_DEFAULT_TIERS" | tr ' ' '\n' | awk -F= -v t="$tier" '$1==t{print $2}'); fi
++# --add-dir 清單：主樹（切片、state、report 都在它的 .dkbo/ 下）加上每個 repo 的 worktree。
++# 三個 kind 的 kind_args 只負責把它展開，所以一定要在 dk_kind_args 之前組好並 export。
++# 單 repo 模式只放主樹，與 0.9.2 一字不差（全域約束 AC1）：那一列的 worktree 就是 pane 的
++# cwd，本來就在授權範圍內，多加一個 --add-dir 只是把既有斷言改掉而已。
++add_dirs="$DK_PROJECT_ROOT"
++if dk_repos_multi; then
++  while read -r _rname _rroot rwt _rbase; do
++    [ -n "${rwt:-}" ] || continue
++    case " $add_dirs " in *" $rwt "*) ;; *) add_dirs="$add_dirs $rwt";; esac
++  done <<< "$(dk_repos_rows "$dir" 2>/dev/null || true)"
++fi
++DK_ADD_DIRS="$add_dirs"; export DK_ADD_DIRS
+ args=$(dk_kind_args "$kind" "$spec")
+ group=$(dk_fm "$rf" group); group="${group:-dev}"
+ agent=$(dk_agent_name "$role" "$alias"); sname=$(dk_state_name "$role" "$alias"); state="$dir/state/$sname.md"
+ [[ "$agent" =~ ^[a-z][a-z0-9_-]{0,31}$ ]] || dk_die "agent name '$agent' must match [a-z][a-z0-9_-]{0,31} (shorten the alias)"
+ brief_for="$dir/brief.md"; [ -f "$dir/briefs/$sname.md" ] && brief_for="$dir/briefs/$sname.md"
+ report="$dir/state/$sname.report.md"
+ 
++# 成員的家 = 它第一個可改 glob 所在 repo 的 worktree（決策⑧：不另立欄位，第一個 glob 就是宣告）。
++# DK_WORKTREE 為空＝任務還沒實體化（計畫階段的 reviewer），那時只有主樹可用。
++mcwd="${DK_WORKTREE:-$DK_PROJECT_ROOT}"; mrepo=""; mrepo_wt=""
++if [ -n "${DK_WORKTREE:-}" ]; then
++  first_glob=$(dk_brief_owners "$dir/brief.md" 2>/dev/null | awk -F'|' -v m="$sname" '$1==m{print $2; exit}' | cut -d, -f1 | sed 's/^ *//; s/ *$//')
++  if [ -n "$first_glob" ]; then
++    mrepo=$(dk_glob_split "$first_glob" | cut -f1)
++    mrepo_wt=""
++    [ -z "$mrepo" ] || mrepo_wt=$(dk_repo_field "$dir" "$mrepo" wt)
++    if [ -n "$mrepo_wt" ]; then mcwd="$mrepo_wt"; else mrepo=""; fi
++  fi
++fi
++
+ upstream=""   # 只有真的被排進這一波的 review 成員要等人；reviewer 不在波次表裡，它讀的是收齊後的 diff pack
+ if [ "$group" = review ] && [ -n "${DK_WAVE:-}" ] && [ -f "$dir/brief.md" ] \
+    && dk_brief_wave_members "$dir/brief.md" "$DK_WAVE" | sed 's/(.*//' | grep -qx "$sname"; then
+   upstream=$(dk_brief_wave_upstream "$dir/brief.md" "$DK_WAVE" | tr '\n' ' ' | sed 's/ *$//')
+ fi
+ 
+ if [ "$resume" = 1 ]; then
+   old=$(awk -v a="$agent" '$1==a{print $2}' "$dir/.panes" | tail -1 || true)
+   if [ -n "$old" ]; then
+     herdr pane close "$old" >/dev/null 2>&1 </dev/null || true
+@@ -51,27 +76,27 @@ else
+   if [ "$tab_no" = NEWTAB ]; then
+     tab_no="$slot"; slot=1
+     # shellcheck disable=SC2086  # DK_TABS is a space-separated list
+     stale=$(printf '%s\n' ${DK_TABS:-} | awk -F= -v t="$tab_no" '$1==t{print $2}' | head -1)
+     if [ -n "$stale" ]; then
+       herdr tab close "$stale" >/dev/null 2>&1 </dev/null || true
+       dk_process "tab $tab_no $stale closed (recreated)"
+       # shellcheck disable=SC2086  # DK_TABS is a space-separated list
+       DK_TABS=$(printf '%s\n' ${DK_TABS:-} | grep -v "^$tab_no=" | tr '\n' ' ' | sed 's/ $//') || true
+     fi
+-    out=$(herdr tab create --workspace "$DK_WORKSPACE" --cwd "$DK_WORKTREE" --label "$DK_SHORT-$tab_no" --no-focus "${env_args[@]}") || dk_die "tab create failed"
++    out=$(herdr tab create --workspace "$DK_WORKSPACE" --cwd "$mcwd" --label "$DK_SHORT-$tab_no" --no-focus "${env_args[@]}") || dk_die "tab create failed"
+     tab_id=$(echo "$out" | dk_json '.result.tab.tab_id // empty'); pane=$(echo "$out" | dk_json '.result.root_pane.pane_id // empty')
+     [ -n "$tab_id" ] && [ -n "$pane" ] || dk_die "tab create returned no tab_id/root pane"
+     dk_env_set DK_TABS "${DK_TABS:+$DK_TABS }$tab_no=$tab_id"; dk_process "tab $tab_no $tab_id opened"
+   else
+     pane=$(herdr pane split --pane "$anchor" --direction "${split_override:-$direction}" --ratio "$(dk_layout_ratio_arg "$share")" \
+-      --cwd "$DK_WORKTREE" --no-focus "${env_args[@]}" | dk_json '.result.pane.pane_id')
++      --cwd "$mcwd" --no-focus "${env_args[@]}" | dk_json '.result.pane.pane_id')
+   fi
+ fi
+ [ -n "$pane" ] || dk_die "pane split returned no pane_id"
+ # shellcheck disable=SC2086
+ if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
+   # pane 刻意保留：agent start 失敗多半是 CLI 在啟動時跳了東西（資料夾信任詢問、升級提示、
+   # 登入過期），那個畫面就在 pane 裡。關掉它等於把唯一的證據銷毀，領導只會看到「失敗」兩個字。
+   dk_process "spawn $agent failed: pane $pane kept for diagnosis"
+   dk_die "agent start failed for $agent; pane $pane 保留著 —— herdr pane read $pane --source recent-unwrapped 看它卡在什麼，處理後 herdr pane close $pane"
+ fi
+@@ -89,18 +114,18 @@ if [ -f "$state" ]; then cksum < "$state"; else printf ''; fi > "$dir/.blocked/$
+ # 一行「換人」的假裁定，而那次換手其實沒發生。
+ [ -z "$handoff" ] || dk_process "ruling: 換 $kind/$tier 接手 $agent 的修復 — $handoff — 若換人也修不好，下一輪就是 ESCALATE，代價是多一輪 pane"
+ 
+ dk_kind_load "$kind"; have=$(kind_mcp_list || true); missing=""
+ for m in $(dk_fm_list "$rf" mcp); do echo "$have" | grep -qx "$m" || missing="$missing $m"; done
+ if [ -n "$missing" ]; then echo "dk-spawn: mcp missing for $kind:$missing" >&2; dk_process "mcp-missing $agent:$missing"; fi
+ 
+ "$DK_ROOT/bin/dk-watch" --ensure >/dev/null 2>&1 || true   # a pane just appeared; make sure the safety net is alive
+ # --until working：確認提示被接受且 agent 開始跑。預設的 --wait 是等「這一輪結束」
+ # （herdr: matches idle, done or blocked），第一輪超過逾時就會被誤判成提示沒送到。
+-if herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume" "$brief_for" "$report" "$upstream" "$handoff" "$group")" --wait --until working --timeout 15000 >/dev/null; then
++if herdr agent prompt "$agent" "$(dk_first_prompt "$agent" "$role" "$dir" "$state" "$resume" "$brief_for" "$report" "$upstream" "$handoff" "$group" "$mrepo" "$mrepo_wt")" --wait --until working --timeout 15000 >/dev/null; then
+   dk_process "spawn $agent ($kind $tier)$notes"
+   echo "$agent $pane"
+ else
+   dk_process "spawn $agent ($kind $tier)$notes prompt-failed"
+   echo "dk-spawn: first prompt to $agent failed or timed out; pane $pane is live — herdr agent read $agent, then re-prompt or dk-wave-close --force" >&2
+   echo "$agent $pane"; exit 1
+ fi
+diff --git a/.dkbo/bin/dk-task-close b/.dkbo/bin/dk-task-close
+index 337fd0b..4615d55 100755
+--- a/.dkbo/bin/dk-task-close
++++ b/.dkbo/bin/dk-task-close
+@@ -1,72 +1,175 @@
+ #!/usr/bin/env bash
+ # dk-task-close [--abandon "<reason>"]
++# 退出碼（共用契約）：0 合併成功／1 前置不過／3 預檢衝突（一個 repo 都沒合）／
++#   4 真合併中途失敗（印 merged／failed／not attempted）／5 主樹有會被覆蓋的本地變更
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+ dk_require_herdr
+-dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
++dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
++multi=0; if dk_repos_multi; then multi=1; fi
++pfx() { if [ "$multi" = 1 ]; then printf '%s: ' "$1"; fi; }   # 單 repo 模式不印 repo 前綴
++repo_rows() { dk_repos_rows "$dir" 2>/dev/null || true; }     # 沒有 .repos 就是空的
+ # AC9：結案把時間表填進 report.md 的「## 時間」段。放在 dk_process "task-close …" 之後、
+-# dk_commit_memory 之前 —— 早一步算不到結案那一刻，晚一步就沒進任務記憶的 commit。
++# commit_memory 之前 —— 早一步算不到結案那一刻，晚一步就沒進任務記憶的 commit。
+ fill_timeline() {
+   local tl f="$dir/report.md"
+   [ -f "$f" ] || return 0
+   tl=$("$DK_ROOT/bin/dk-timeline" "$(basename "$dir")" 2>&1) || {
+     echo "dk-task-close: dk-timeline 失敗，report.md 的「## 時間」沒填：$tl" >&2; return 0; }
+   if grep -q '^## 時間$' "$f"; then   # 範本已有這一段：整段換成算出來的表，指引行不留
+     awk -v tl="$tl" '/^## 時間$/{print; print tl; s=1; next} s && /^## /{s=0} s{next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+   else printf '## 時間\n%s\n' "$tl" >> "$f"; fi
+ }
++commit_memory() {
++  dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" \
++    || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
++}
++index_set() {
++  dk_index_set "$DK_DISPLAY" "$1" "$2" \
++    || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
++}
++# 決策⑫：不自動關 workspace —— 跑這支腳本的執行領導就住在它的根 pane 上，關掉等於腳本殺掉
++# 自己、結案訊息沒人看得到。最後一行印出要人自己下的指令（AC14）。計畫階段就放棄的任務
++# 沒有任務 workspace（DK_WORKSPACE 還是人的），那就不印。
++finish_note() {
++  [ -f "$dir/.repos" ] || return 0
++  [ -n "${DK_WORKSPACE:-}" ] || return 0
++  echo "任務 workspace 沒有自動關（你就住在它的根 pane 上）。看完 report 再自己關：herdr workspace close $DK_WORKSPACE"
++}
+ abandon=0; reason=""
+ [ "${1:-}" = --abandon ] && { abandon=1; reason="${2:-（未填原因）}"; }
+ if [ "$abandon" = 0 ]; then [ -f "$dir/report.md" ] || { echo "dk-task-close: write $dir/report.md first (gate 3)"; exit 1; }; fi
+ # 軟警告，不擋:一條風格意見不該卡住結案（同 dk-wave-close 的 unreported change）。
+ if [ "$abandon" = 0 ] && [ -n "$(dk_minor_lines "$dir/process.md")" ]; then
+   mn=$(dk_minor_count "$dir/process.md")
+   # 範本自己的指引行（templates/report.md 的「未完成 / 遺留」段）本身就含「Minor」三個
+   # 字，逐字比對會被它自己消掉；忽略 `（` 開頭的指引行再比對。
+   grep -v '^（' "$dir/report.md" 2>/dev/null | grep -qi 'minor' \
+     || echo "dk-task-close: process.md 有 $mn 條 minor，但 report.md 沒提到 —— 整枝評議 triage 過的話，把沒修的寫進「未完成 / 遺留」段" >&2
+ fi
+ [ ! -s "$dir/.panes" ] || { echo "dk-task-close: live panes remain; run dk-wave-close first"; exit 1; }
+ 
+ legacy=0; if dk_legacy_task; then legacy=1; echo "dk-task-close: legacy task (no DK_BASE); removing the worktree via herdr" >&2; fi
+ cleanup() {
++  local rname rroot rwt t
+   [ -n "${DK_WATCH_PID:-}" ] && kill "$DK_WATCH_PID" 2>/dev/null || true
+   [ -n "${DK_EVENTS_PID:-}" ] && kill "$DK_EVENTS_PID" 2>/dev/null || true
+-  if [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ]; then
+-    if [ "$legacy" = 1 ]; then [ -n "${DK_WORKSPACE:-}" ] && herdr worktree remove --workspace "$DK_WORKSPACE" --force >/dev/null 2>&1 || true
+-    else git -C "$DK_PROJECT_ROOT" worktree remove --force "$DK_WORKTREE" >/dev/null 2>&1 || true; fi
++  if [ "$legacy" = 1 ]; then
++    [ -n "${DK_WORKSPACE:-}" ] && herdr worktree remove --workspace "$DK_WORKSPACE" --force >/dev/null 2>&1 || true
++  else
++    while read -r rname rroot rwt _; do
++      [ -n "$rname" ] || continue
++      [ "$rwt" != "$rroot" ] || continue   # --no-worktree 的任務：就地做，沒有 worktree 可刪
++      git -C "$rroot" worktree remove --force "$rwt" >/dev/null 2>&1 || true
++    done <<< "$(repo_rows)"
+   fi
+   for t in ${DK_TABS:-}; do herdr tab close "${t#*=}" >/dev/null 2>&1 </dev/null || true; done
+   rm -rf "$dir/.panes" "$dir/.blocked" "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
+   herdr agent rename "$HERDR_PANE_ID" --clear >/dev/null 2>&1 || true
+ }
++del_branches() { # -d（合併過，安全）或 -D（放棄）
++  local rname rroot any=0
++  while read -r rname rroot _ _; do
++    [ -n "$rname" ] || continue
++    any=1; git -C "$rroot" branch "$1" "$DK_BRANCH" >/dev/null 2>&1 || true
++  done <<< "$(repo_rows)"
++  # 沒有 .repos（計畫階段就放棄、或 legacy 任務）：主 repo 上可能還有一個分支，照舊收掉
++  if [ "$any" = 0 ]; then git -C "$DK_PROJECT_ROOT" branch "$1" "$DK_BRANCH" >/dev/null 2>&1 || true; fi
++}
+ if [ "$abandon" = 1 ]; then
+   printf '# %s 結案\n結果：abandoned   分支：%s\n## 原因\n%s\n' "$DK_DISPLAY" "$DK_BRANCH" "$reason" > "$dir/report.md"
+-  cleanup; git -C "$DK_PROJECT_ROOT" branch -D "$DK_BRANCH" >/dev/null 2>&1 || true
+-  dk_index_set "$DK_DISPLAY" abandoned "$reason" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
++  # 計畫階段就放棄時這裡沒有 worktree、沒有分支、沒有 workspace 要收（AC2）：cleanup 的
++  # 逐 repo 迴圈是空的，del_branches 的退路對不存在的分支是 no-op。剩下的就是標 INDEX、
++  # commit 記憶、清 .sessions 與 pane 名字。
++  cleanup; del_branches -D
++  index_set abandoned "$reason"
+   dk_process "task-close abandoned: $reason"
+-  dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
+-  echo abandoned; exit 0
++  commit_memory
++  echo abandoned; finish_note; exit 0
+ fi
+-if [ "$DK_WORKTREE" != "$DK_PROJECT_ROOT" ] && [ -d "$DK_WORKTREE" ] && [ -n "$(git -C "$DK_WORKTREE" status --porcelain 2>/dev/null)" ]; then
+-  echo "dk-task-close: $DK_WORKTREE has uncommitted changes; commit them in the worktree first (or --abandon to discard)"; exit 1
++if [ "$legacy" = 0 ] && [ ! -f "$dir/.repos" ]; then
++  echo "dk-task-close: 任務尚未實體化（沒有 $dir/.repos），沒有分支可以合併；要收掉就 dk-task-close --abandon \"<原因>\""; exit 1
+ fi
++# 逐 repo 的 worktree 乾淨檢查。訊息在多 repo 模式帶 <名>: 前綴。
++dirty=""
++while read -r rname rroot rwt _; do
++  [ -n "$rname" ] || continue
++  [ "$rwt" != "$rroot" ] || continue
++  [ -d "$rwt" ] || continue
++  if [ -n "$(git -C "$rwt" status --porcelain 2>/dev/null)" ]; then dirty="$dirty $(pfx "$rname")$rwt"; fi
++done <<< "$(repo_rows)"
++if [ -n "$dirty" ]; then
++  echo "dk-task-close: 這些 worktree 有 uncommitted changes，先在 worktree 裡 commit（或 --abandon 丟掉）：${dirty# }"; exit 1
++fi
++
++# 任務記憶在合併之前先 commit（AC13）。BACKLOG 2026-09-19「暫存中的改名擋住 merge」：
++# 任務目錄與 INDEX 還在未追蹤／已修改狀態時，merge 會因為「會被覆蓋的本地變更」而死。
++# 合併之後還會再 commit 一次，撿走 INDEX 的狀態與合併後才寫的 process 行。
++fill_timeline
++commit_memory
++
+ if [ "$DK_WORKTREE" = "$DK_PROJECT_ROOT" ]; then   # --no-worktree task: work already on the current branch, nothing to merge
+   sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD); cleanup
+-  dk_index_set "$DK_DISPLAY" "done" "in-tree $sha" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
++  index_set "done" "in-tree $sha"
+   dk_process "task-close in-tree $sha"
+-  fill_timeline
+-  dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
+-  echo "closed $sha"; exit 0
++  commit_memory
++  echo "closed $sha"; finish_note; exit 0
+ fi
+-if ! git -C "$DK_PROJECT_ROOT" merge --no-ff "$DK_BRANCH" -m "task $DK_SHORT: $DK_DISPLAY" >/dev/null 2>&1; then
+-  git -C "$DK_PROJECT_ROOT" merge --abort 2>/dev/null || true
+-  dk_process "merge-conflict $DK_BRANCH"; echo "dk-task-close: merge conflict on $DK_BRANCH; ask the human or run an it repair wave"; exit 3
++
++# ── 兩階段合併（AC13）─────────────────────────────────────────────────────────
++# 先對每個 repo 預檢（merge --no-commit --no-ff 之後立刻 abort），全過才逐 repo 真合併。
++# 一個 repo 衝突就整批不合：半套合併沒有一鍵回復，人得自己記住哪幾個已經進了主樹。
++conflict=""; localchg=""; pout=""
++while read -r rname rroot _ _; do
++  [ -n "$rname" ] || continue
++  # LC_ALL=C：下面是拿 git 的訊息分「衝突」還是「會被覆蓋的本地變更」，兩者的退出碼與
++  # 補救方式都不同。不鎖語系的話，翻譯過的 git 會讓每個本地變更都被誤報成衝突，人去找
++  # 一個根本不存在的衝突。
++  if pout=$(LC_ALL=C git -C "$rroot" merge --no-commit --no-ff "$DK_BRANCH" 2>&1); then
++    git -C "$rroot" merge --abort >/dev/null 2>&1 || true   # 快轉或 already up to date 時沒有 MERGE_HEAD
++  else
++    git -C "$rroot" merge --abort >/dev/null 2>&1 || true
++    # 「會被覆蓋的本地變更」不是衝突，補救方式也不同（去 commit 或 stash 主樹的改動），
++    # 所以給它自己的退出碼 5，不要混進 3 裡讓人去找一個根本不存在的衝突。
++    case "$pout" in
++      *"would be overwritten"*|*"local changes"*) localchg="$localchg $rname";;
++      *) conflict="$conflict $rname";;
++    esac
++  fi
++done <<< "$(repo_rows)"
++# 失敗路徑上也 commit 一次記憶：上面那行 dk_process 才剛把 process.md 改髒，留著它的話
++# 下一次結案的預檢又會撞上「會被覆蓋的本地變更」，人會以為是自己的檔案在擋。
++if [ -n "$localchg" ]; then
++  dk_process "task-close local-changes:$localchg"; commit_memory
++  echo "dk-task-close: 主樹有會被合併覆蓋的本地變更（repo:$localchg）；先 commit 或 stash 它們再結案。一個 repo 都沒有合併。"; exit 5
++fi
++if [ -n "$conflict" ]; then
++  dk_process "merge-conflict $DK_BRANCH repos:$conflict"; commit_memory
++  echo "dk-task-close: merge conflict on $DK_BRANCH（repo:$conflict）；一個 repo 都沒有合併。找人或開一個 it 修復波"; exit 3
++fi
++
++merged=""; failed=""; rest=""
++while read -r rname rroot _ _; do
++  [ -n "$rname" ] || continue
++  if [ -n "$failed" ]; then rest="$rest $rname"; continue; fi
++  if git -C "$rroot" merge --no-ff "$DK_BRANCH" -m "task $DK_SHORT: $DK_DISPLAY" >/dev/null 2>&1; then
++    merged="$merged $rname"
++  else
++    git -C "$rroot" merge --abort >/dev/null 2>&1 || true
++    failed="$rname"
++  fi
++done <<< "$(repo_rows)"
++if [ -n "$failed" ]; then
++  # 預檢過了卻還是炸（鉤子、磁碟、另一個行程同時動主樹）。停在原地，worktree 與分支
++  # 一律不刪，把「誰合了、誰炸了、誰還沒碰」印清楚讓人手收尾。
++  dk_process "task-close merge-failed merged:$merged failed: $failed not-attempted:$rest"; commit_memory
++  printf 'dk-task-close: 合併中途失敗，worktree 與分支一律保留。\n  merged:%s\n  failed: %s\n  not attempted:%s\n' \
++    "${merged:- （無）}" "$failed" "${rest:- （無）}"
++  exit 4
+ fi
+ sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD)
+-cleanup; git -C "$DK_PROJECT_ROOT" branch -d "$DK_BRANCH" >/dev/null 2>&1 || true   # merged above, so -d is safe
+-dk_index_set "$DK_DISPLAY" "done" "merged $sha" || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
++cleanup; del_branches -d   # merged above, so -d is safe
++index_set "done" "merged $sha"
+ dk_process "task-close merged $sha"
+-fill_timeline
+-dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
+-echo "merged $sha"
++commit_memory
++echo "merged $sha"; finish_note
+diff --git a/.dkbo/bin/dk-task-new b/.dkbo/bin/dk-task-new
+index b7c71e1..669e8d9 100755
+--- a/.dkbo/bin/dk-task-new
++++ b/.dkbo/bin/dk-task-new
+@@ -1,15 +1,15 @@
+ #!/usr/bin/env bash
+ # dk-task-new <short> "<display>" [--from <plan>] [--no-worktree]
+ # dk-task-new <short> --gate1
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+ dk_require_herdr
+ short="${1:-}"; shift || true
+ [[ "$short" =~ ^[a-z][a-z0-9-]{0,11}$ ]] || dk_die "short name must be ascii lowercase, ≤12 chars: '$short'"
+ display=""; from="人的口頭需求"; worktree=1; gate1=0
+ while [ $# -gt 0 ]; do case "$1" in
+   --from) from="$2"; shift 2;; --no-worktree) worktree=0; shift;; --gate1) gate1=1; shift;;
+   --*) dk_die "unknown flag $1";; *) display="$1"; shift;; esac; done
+ 
+ if [ "$gate1" = 1 ]; then
+   existing=$(compgen -G "$DK_ROOT/tasks/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$short" | tail -1 || true); [ -n "$existing" ] || dk_die "no task $short"
+@@ -35,20 +35,26 @@ if [ "$gate1" = 1 ]; then
+     done
+   fi
+   live=$(grep -oE "^$DK_SHORT-reviewer-p[0-9]+" "$existing/.panes" 2>/dev/null | sort -u | tr '\n' ' ' || true)
+   [ -z "${live// /}" ] || dk_die "計畫審查的 pane 還開著：${live% } —— 先 dk-wave-close --agent <agent> 逐個關掉。留著它們會佔版面格子、被守望當活人算逾時，而且第一波的 dk-wave-close 會因為它們沒 done 而永遠關不掉。"
+   dk_process "gate1 approved"
+   dk_index_set "$DK_DISPLAY" running "—" || echo "dk-task-new: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
+   exit 0
+ fi
+ [ -n "$display" ] || dk_die "display name required"
+ [[ "$display" != *[\"\$\`\\]* ]] || dk_die "display name must not contain \" \$ \` or backslash"
++# DK_REPOS 的便宜三項：名字合法且唯一、第一個是主 repo、每個路徑是 git 根。三項都只看設定與
++# 磁碟佈局，不看工作樹狀態，所以在建任何東西之前就驗（早失敗）。「工作樹乾淨」是 --no-clean
++# 跳掉的那一項 —— 計畫可能拖幾天，乾不乾淨要以 dk-leader --run 真的要從 HEAD 切 worktree
++# 的那一刻為準，不是現在。
++dk_settings
++dk_repos_check --no-clean
+ date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
+ [ ! -e "$dir" ] || dk_die "task exists: $dir"
+ ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
+ 
+ # 0.10.0：這裡只建任務資料夾。worktree、分支、herdr workspace 與依賴鉤子全都延到
+ # `/dkbo-run` 的 `dk-leader <short> --run`（plan.md 決策①③）—— 計畫完可能不做，不先付成本；
+ # base sha 也以交棒當下的 HEAD 為準，計畫拖幾天才開工時那才是對的起點。
+ branch="dk/$short"
+ ws="${HERDR_WORKSPACE_ID:-}"; root_pane="${HERDR_PANE_ID:-}"   # 人的 workspace 與 pane；計畫階段的 reviewer 填在這裡的右側
+ rollback() { # 後面任一步死掉都不該留下半寫的任務資料夾或綁定
+diff --git a/.dkbo/bin/dk-wave-close b/.dkbo/bin/dk-wave-close
+index 9a67ebf..ead471c 100755
+--- a/.dkbo/bin/dk-wave-close
++++ b/.dkbo/bin/dk-wave-close
+@@ -23,20 +23,27 @@ force=0; cmsg=""
+ while [ $# -gt 0 ]; do case "$1" in
+   --force) force=1; shift;;
+   -m) cmsg="${2:-}"; [ -n "$cmsg" ] || dk_die "-m needs a commit message"; shift 2;;
+   *) dk_die "unknown flag $1";; esac; done
+ [ -s "$dir/.panes" ] || dk_die "no live panes recorded in $dir/.panes"
+ legacy=0
+ if ! grep -q '^DK_WAVE=' "$dir/.task.env" || awk 'NF<6{bad=1} END{exit !bad}' "$dir/.panes"; then
+   legacy=1; echo "dk-wave-close: legacy task or two-column .panes; review/report/test gates skipped" >&2
+ fi
+ n="${DK_WAVE:-}"; problems=""
++# repo 維度的共用資料：gate c、gate d 與逐 repo commit 三處都要。沒有 .repos 的是 0.9.2 之前
++# 建立的任務 —— 退回單列（名字 main、路徑 DK_WORKTREE），三處才只有一條路。
++repo_rows=$(dk_repos_rows "$dir" 2>/dev/null || true)
++[ -n "$repo_rows" ] || repo_rows="main $DK_PROJECT_ROOT ${DK_WORKTREE:-} -"
++mainrepo=$(printf '%s\n' "$repo_rows" | awk 'NR==1{print $1}')
++multi=0; dk_repos_multi && multi=1
++changed=""; dgate=0   # dgate=1 ⟺ gate d 真的比到了 diff（gate c 的「本波有變更」靠它）
+ while read -r agent _pane _; do   # gate 0: everyone done
+   sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
+   if [ ! -f "$sf" ] || ! grep -q '^status: done' "$sf"; then problems="$problems\n  not done: $agent"; fi
+ done < "$dir/.panes"
+ if [ "$legacy" = 0 ]; then
+   if [ -z "$n" ]; then problems="$problems\n  no wave open (DK_WAVE empty); dk-wave-open N first"
+   elif ! grep -Eq "^[^ ]+ review $n (verdict|skipped:)" "$dir/process.md"; then   # gate a
+     problems="$problems\n  no 'review $n verdict …' or 'review $n skipped: <理由>' line in process.md (dk-review, then dk-process)"
+   else
+     # gate a2: 裁定要交代每一位真的派出去的 reviewer。少一位就靜默放行，等於第二意見白花。
+@@ -60,57 +67,103 @@ if [ "$legacy" = 0 ]; then
+         n[s]++
+         if (n[s]==1 && $0 ~ /^不適用[:：]/) ok[s]=1   # 沒有測試的波：首行就是豁免宣告（半形／全形冒號都算）
+         if (n[s]>=2) ok[s]=1                      # 指令列＋輸出，至少兩行
+       }
+       END{exit !(ok["r"] && ok["g"])}' "$rf"; then
+       problems="$problems\n  report $rf 的 '## 測試' 缺證據：'### 紅' 與 '### 綠' 各要指令列與輸出兩行以上（沒有測試的波首行寫「不適用: <理由>」）"
+     fi
+   done < "$dir/.panes"
+   members=$(dk_brief_wave_members "$dir/brief.md" "${n:-0}" | sed 's/(.*//')   # state names, no (tier)
+   base=$(dk_wave_base "$dir" "${n:-}")   # gate d: the real diff, not the employees' self-reported touched
++  # 不見了的 worktree 要當場擋下。dk_changed_repo_files 會跳過不存在的目錄（它服務的是
++  # 「這個 repo 這一波沒被實體化」），閘門這一側若照單全收就變成靜默放行。
++  missing=""
++  while read -r rname _rroot rwt _rbase; do
++    [ -n "$rname" ] || continue
++    [ -d "${rwt:-}" ] || missing="${missing:+$missing }${rwt:-（空路徑）}"
++  done <<< "$repo_rows"
+   if [ -z "$base" ]; then
+     echo "dk-wave-close: no recorded base for wave ${n:-?} in process.md; ownership diff gate skipped" >&2
+-  elif ! changed=$(dk_changed_files "$DK_WORKTREE" "$base"); then
+-    problems="$problems\n  cannot read the worktree diff ($DK_WORKTREE since ${base:0:7})"
++  elif [ -n "$missing" ]; then
++    problems="$problems\n  cannot read the worktree diff ($missing since ${base:0:7})"
++  elif ! changed=$(dk_changed_repo_files "$dir" "${n:-}"); then
++    problems="$problems\n  cannot read the worktree diff (${DK_WORKTREE:-} since ${base:0:7})"
+   else
++    dgate=1
+     reported=$(for m in $members; do [ -f "$dir/state/$m.md" ] || continue; dk_touched "$dir/state/$m.md"; done)
+     while IFS= read -r p; do
+       [ -n "$p" ] || continue
+       owner=""
+       for m in $members; do if dk_owned "$dir/brief.md" "$m" "$p"; then owner="$m"; break; fi; done
+       if [ -z "$owner" ]; then
+         problems="$problems\n  unowned change: $p (no wave ${n:-?} member may change it)"
+         dk_process "violation unowned: $p"
+       elif ! printf '%s\n' "$reported" | grep -qxF "$p"; then
+         echo "dk-wave-close: unreported change: $p (owner $owner); $owner's state left it out of touched"
+         dk_process "unreported $p (owner $owner)"
+       fi
+     done <<< "$changed"
+   fi
+ fi
+ if [ -n "$problems" ] && [ "$force" = 0 ]; then printf 'dk-wave-close: refused (use --force to close anyway):%b\n' "$problems"; exit 1; fi
+ tests="skipped (no DK_TEST_CMD)"
+-if [ "$legacy" = 0 ] && [ -n "${DK_TEST_CMD:-}" ]; then   # gate c
+-  mkdir -p "$dir/waves"; log="$dir/waves/${n:-forced}.test.log"
++if [ "$legacy" = 0 ]; then   # gate c
++  mkdir -p "$dir/waves"
+   # 測試指令拿到的是一個不含任何 DK_* 的環境。領導這一側的 DK_ROOT／DK_PROJECT_ROOT／DK_WORKTREE
+   # 整包傳下去的話，測試裡任何 source lib/common.sh 的東西都會照 `${DK_X:-預設}` 吃到繼承值而打到
+   # 真 repo —— 2026-09-19 領導在自己 session 跑 gate c，就這樣在源碼倉建了 7 個 worktree 與 8 個
+   # 分支（BACKLOG）。PATH、HOME 等非 DK_* 照舊，測試指令本身還是要找得到工具。
+   # env 的第一個元素讓陣列永不為空：bash 3.2 對空陣列展開在 set -u 下會死。
+   clean=(env)
+   # shellcheck disable=SC2086  # ${!DK_@} 要斷詞，一個變數名一個元素
+   for v in ${!DK_@}; do clean+=(-u "$v"); done
+-  if (cd "$DK_WORKTREE" && "${clean[@]}" bash -c "$DK_TEST_CMD") > "$log" 2>&1; then tests="ok ($DK_TEST_CMD)"
++  if [ "$multi" = 0 ]; then   # 單 repo：0.9.2 的行為一字不動（本波有沒有變更都跑）
++    if [ -n "${DK_TEST_CMD:-}" ]; then
++      log="$dir/waves/${n:-forced}.test.log"
++      if (cd "$DK_WORKTREE" && "${clean[@]}" bash -c "$DK_TEST_CMD") > "$log" 2>&1; then tests="ok ($DK_TEST_CMD)"
++      else
++        echo "dk-wave-close: tests failed ($DK_TEST_CMD); last 20 lines of $log:"; tail -n 20 "$log"
++        if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($DK_TEST_CMD)"; exit 1; fi
++        tests="failed ($DK_TEST_CMD, forced)"
++      fi
++    fi
+   else
+-    echo "dk-wave-close: tests failed ($DK_TEST_CMD); last 20 lines of $log:"; tail -n 20 "$log"
+-    if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($DK_TEST_CMD)"; exit 1; fi
+-    tests="failed ($DK_TEST_CMD, forced)"
++    # 多 repo：只對本波真的有變更的 repo 跑它自己的指令（決策⑨）。沒比到 diff（gate d 被
++    # 跳過）時退回「全部都跑」—— 不知道誰動過的時候，少跑比多跑危險。
++    if [ "$dgate" = 1 ]; then
++      changed_repos=" $(printf '%s\n' "$changed" | sed -n 's/^\([a-z][a-z0-9_]*\):.*/\1/p' | sort -u | tr '\n' ' ')"
++    else
++      changed_repos=" $(printf '%s\n' "$repo_rows" | awk '{print $1}' | tr '\n' ' ')"
++    fi
++    parts=""
++    while read -r rname _rroot rwt _rbase; do
++      [ -n "$rname" ] && [ -n "${rwt:-}" ] && [ -d "$rwt" ] || continue
++      case "$changed_repos" in
++        *" $rname "*) ;;
++        *) parts="$parts $rname skipped (no change)"; continue;;
++      esac
++      if [ "$rname" = "$mainrepo" ]; then key=DK_TEST_CMD; else key="DK_TEST_CMD_$rname"; fi
++      cmd="${!key:-}"
++      if [ -z "$cmd" ]; then
++        parts="$parts $rname skipped (no $key)"
++        echo "dk-wave-close: repo $rname 這一波有變更但沒有 $key，測試沒跑" >&2
++        continue
++      fi
++      log="$dir/waves/${n:-forced}.$rname.test.log"
++      if (cd "$rwt" && "${clean[@]}" bash -c "$cmd") > "$log" 2>&1; then parts="$parts $rname ok ($cmd)"
++      else
++        echo "dk-wave-close: tests failed ($rname: $cmd); last 20 lines of $log:"; tail -n 20 "$log"
++        if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($rname: $cmd)"; exit 1; fi
++        parts="$parts $rname failed ($cmd, forced)"
++      fi
++    done <<< "$repo_rows"
++    tests="${parts# }"
+   fi
+ fi
+ closed=0; tabs=""
+ while read -r agent pane _epoch _group tab _; do
+   sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
+   if [ -f "$sf" ]; then   # ownership is checked against the real diff above (gate d), not this file
+     [ "$(wc -l < "$sf")" -le 20 ] || echo "dk-wave-close: state too long: $sf"
+   fi
+   herdr pane close "$pane" >/dev/null </dev/null && closed=$((closed+1))
+   if [ -n "${tab:-}" ] && [[ " $tabs " != *" $tab "* ]]; then tabs="$tabs $tab"; fi
+@@ -131,20 +184,25 @@ else
+   r_skip=$(dk_ts_pick "$dir/process.md" review "${n:-}" "skipped:")
+   if [ -z "$r_verdict" ] && [ -n "$r_skip" ]; then r_span="skip"; else r_span=$(dk_span "$r_spawn" "$r_verdict"); fi
+   span="wave ${n:-?} 耗時 $(dk_span "$w_open" "$(dk_now)")（dev $(dk_span "$w_open" "$w_dev")、審查 $r_span）"
+   echo "$span"; dk_process "$span"
+   for t in $tabs; do if [ "$t" -ge 1 ]; then dk_layout_even "$t" || true; fi; done
+ fi
+ echo "closed $closed"
+ if [ "$legacy" = 0 ]; then   # the wave boundary is a commit boundary; the leader no longer commits by hand
+   peers=$(printf '%s' "${members:-}" | tr '\n' ' ' | sed 's/ *$//')
+   msg="${cmsg:-wave ${n:-?}${peers:+: $peers}}"
+-  if [ -n "$(git -C "$DK_WORKTREE" status --porcelain 2>/dev/null)" ]; then
+-    if git -C "$DK_WORKTREE" add -A && git -C "$DK_WORKTREE" commit -q -m "$msg"; then
+-      sha=$(git -C "$DK_WORKTREE" rev-parse --short=7 HEAD)
+-      echo "wave ${n:-?} committed $sha"; dk_process "commit $sha wave ${n:-?}"
++  committed=0
++  while read -r rname _rroot rwt _rbase; do   # 每個有變更的 repo 各 commit 一次，訊息相同（決策⑪）
++    [ -n "$rname" ] && [ -n "${rwt:-}" ] && [ -d "$rwt" ] || continue
++    [ -n "$(git -C "$rwt" status --porcelain 2>/dev/null)" ] || continue
++    suffix=""; [ "$multi" = 0 ] || suffix=" repo $rname"
++    if git -C "$rwt" add -A && git -C "$rwt" commit -q -m "$msg"; then
++      committed=1; sha=$(git -C "$rwt" rev-parse --short=7 HEAD)
++      echo "wave ${n:-?}$suffix committed $sha"; dk_process "commit $sha wave ${n:-?}$suffix"
+     else
+-      echo "dk-wave-close: commit failed in $DK_WORKTREE; commit by hand before dk-task-close" >&2
+-      dk_process "commit failed wave ${n:-?}"; exit 1
++      echo "dk-wave-close: commit failed in $rwt$suffix; commit by hand before dk-task-close" >&2
++      dk_process "commit failed wave ${n:-?}$suffix"; exit 1
+     fi
+-  else echo "wave ${n:-?}: nothing to commit"; fi
++  done <<< "$repo_rows"
++  [ "$committed" = 1 ] || echo "wave ${n:-?}: nothing to commit"
+ fi
+diff --git a/.dkbo/bin/dk-wave-open b/.dkbo/bin/dk-wave-open
+index c29ca5c..927ecec 100755
+--- a/.dkbo/bin/dk-wave-open
++++ b/.dkbo/bin/dk-wave-open
+@@ -1,37 +1,52 @@
+ #!/usr/bin/env bash
+ # dk-wave-open <N> — open wave N: record the base sha, set DK_WAVE, render one brief slice per member.
+ set -euo pipefail
+-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"
++. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/repos.sh"
+ dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+ n="${1:-}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-wave-open <N>"
++# 計畫階段的任務還沒有 worktree（dk-task-new 只建資料夾）。擋在這裡而不是讓 git -C "" 自己
++# 炸掉：領導看到的必須是下一步該跑什麼，不是一行 git 的 fatal。
++[ -n "${DK_WORKTREE:-}" ] || dk_die "任務尚未實體化（.task.env 的 DK_WORKTREE 還是空的）：先 dk-leader $DK_SHORT --run 切 worktree、開 workspace 並交棒"
+ live=$(awk 'NF>=6 && $5==0 {next} NF>0 {n++} END{print n+0}' "$dir/.panes")   # worktree:false advisors (tab 0) are not wave members
+ if [ "$live" -ne 0 ]; then
+   names=$(awk 'NF>=6 && $5==0 {next} NF>0 {print $1}' "$dir/.panes")
+   # 全部都是計畫審查 pane 時，「dk-wave-close first」跟 gate1 的「no wave open」互指、指不出真正的出路
+   if ! printf '%s\n' "$names" | grep -vqE -- '-reviewer-p[0-9]+$'; then
+     agents=$(printf '%s' "$names" | tr '\n' ' ' | sed 's/ *$//')
+     dk_die "計畫審查的 pane 還開著（$agents）：先逐個 dk-wave-close --agent <agent> 關掉，再 dk-task-new $DK_SHORT --gate1 過關卡①（見 .dkbo/skills/plan/SKILL.md 第 6 步）"
+   fi
+   dk_die "live panes remain ($live); run dk-wave-close first"
+ fi
+ [ -z "${DK_WAVE:-}" ] || dk_die "wave $DK_WAVE is open; run dk-wave-close first"
+ ! grep -q " wave-open $n " "$dir/process.md" || dk_die "wave $n was already opened (see process.md)"
+ brief="$dir/brief.md"
+ members=$(dk_brief_wave_members "$brief" "$n"); [ -n "$members" ] || dk_die "wave $n has no members in the 波次表 of $brief"
+ base=$(git -C "$DK_WORKTREE" rev-parse HEAD)
++# repo 維度：每個 repo 各記一行 base，並把 worktree 路徑攤成切片的「## 倉庫」段。
++# 沒有 .repos 的是 0.9.2 之前建立的任務 —— 退回單列（名字 main、路徑 DK_WORKTREE），
++# 呼叫端（dk_changed_repo_files、dk-review-pack）才只有一條路。
++repo_rows=$(dk_repos_rows "$dir" 2>/dev/null || true)
++[ -n "$repo_rows" ] || repo_rows="main $DK_PROJECT_ROOT $DK_WORKTREE $base"
++repos_list=$(printf '%s\n' "$repo_rows" | awk '{print $1 " → " $3}')
+ goal=$(dk_brief_section "$brief" "## 目標"); contract=$(dk_brief_section "$brief" "## 共用契約"); acc=$(dk_brief_section "$brief" "## 驗收標準")
+ constraints=$(dk_brief_constraints "$brief")
+ peers=$(echo "$members" | tr '\n' ' ' | sed 's/ $//')
+ mkdir -p "$dir/briefs"
+ for m in $members; do m="${m%%(*}"
+   rows=$(dk_brief_waves "$brief" | awk -F'|' -v m="$m" -v n="$n" '$1==n && $3==m {printf "| %s | %s | %s | %s | %s | %s | %s |\n", $1,$2,$3,$4,$5,$6,$7}')
+   own=$(dk_brief_owners "$brief" | awk -F'|' -v m="$m" '$1==m {printf "| %s | %s | %s |\n", $1,$2,$3}')
+   [ -n "$own" ] || echo "dk-wave-open: $m has no row in 檔案所有權 (run dk-brief-check)" >&2
+   dk_render "$DK_ROOT/templates/brief-member.md" "DISPLAY=$DK_DISPLAY" "MEMBER=$m" "WAVE=$n" "BRIEF=$brief" "GOAL=$goal" \
+     "CONSTRAINTS=$constraints" \
+-    "WAVE_ROWS=$rows" "OWNER_ROWS=$own" "CONTRACT=$contract" "ACCEPTANCE=$acc" "PEERS=$peers" > "$dir/briefs/$m.md"
++    "WAVE_ROWS=$rows" "OWNER_ROWS=$own" "CONTRACT=$contract" "ACCEPTANCE=$acc" "PEERS=$peers" "REPOS=$repos_list" > "$dir/briefs/$m.md"
+ done
+ dk_env_set DK_WAVE "$n"; dk_env_set DK_WAVE_STARTED "$(date +%s)"
++# 逐 repo 的 base 先落盤，總結那一行最後 —— dk_ts_pick 取的是最後一筆相符的行，
++# 本波耗時（dk-wave-close 的 dk_ts_pick … wave-open N）要的是總結行的時間戳。
++while read -r rname _rroot rwt _rbase; do
++  [ -n "$rname" ] && [ -d "$rwt" ] || continue
++  dk_process "wave-open $n repo $rname base $(git -C "$rwt" rev-parse --short=7 HEAD)"
++done <<< "$repo_rows"
+ dk_process "wave-open $n base ${base:0:7} members $peers"
+ "$DK_ROOT/bin/dk-watch" --ensure >/dev/null 2>&1 || true   # a pane just appeared; make sure the safety net is alive
+ echo "wave $n open (base ${base:0:7}); slices in $dir/briefs/"
+diff --git a/.dkbo/lib/prompt.sh b/.dkbo/lib/prompt.sh
+index f4a747a..ba60576 100644
+--- a/.dkbo/lib/prompt.sh
++++ b/.dkbo/lib/prompt.sh
+@@ -1,13 +1,16 @@
+ # shellcheck shell=bash
+-dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME BRIEF_FILE REPORT_FILE [UPSTREAM] [HANDOFF] [GROUP]
++dk_first_prompt() { # AGENT ROLE TASK_DIR STATE_FILE RESUME BRIEF_FILE REPORT_FILE [UPSTREAM] [HANDOFF] [GROUP] [REPO] [REPO_WT]
+   local resume=""; [ "${5:-0}" = 1 ] && resume="你是重新啟動的員工：先讀 $4，從 state 檔續作，不要重做已完成的項目。"
+   # 接手與續作是兩件事：續作的人要接著往下做，接手的人要重做，只是不能重走死路。
+   [ -z "${9:-}" ] || resume="你是接手的員工（換人原因：${9}）。上一位修過一次沒成功 —— 先讀 $4 與 $7，看它試過什麼、排除了什麼，再讀 \$DK_ROOT/methods/debugging.md，然後自己重新判斷根因。不要照著它的路再走一次。"
+   # 上游還沒交差時 worktree 裡是半成品，對它下判定只會產出假結論（見 lib/brief.sh 的
+   # dk_brief_wave_upstream）。不擋前置工作，只擋判定。
+   local wait_for=""; [ -n "${8:-}" ] && wait_for="本波的 dev 成員是：${8}。在它們的 state 檔（$3/state/<成員>.md）出現 status: done、或它們送來 [DONE] 之前，worktree 裡是半成品 —— 這段時間你只做不依賴它們產出的前置（環境、測試帳號、探測腳本骨架），不要下驗收判定、不要發 [BUG]、不要把中途看到的狀態寫進報告。"
+   # reviewer 不寫任何碼、qa 只驗不修：TDD 那句跟它們自己的報告格式（規格合規／
+   # Important／Minor，或逐條驗收方式）矛盾，只發給 group: dev。
+   local tdd=""; [ "${10:-dev}" = dev ] && tdd="寫程式的順序是：先寫一條會失敗的測試、跑它確認真的失敗、再寫最小實作讓它過；兩次的指令與輸出分別貼進報告的「### 紅」與「### 綠」（沒有測試的波兩節都寫「不適用: <理由>」）。"
+-  printf '%s' "你是 $1，角色 $2。先讀：$DK_ROOT/roles/$2.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md、$6。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）；報告檔是 $7（不限行數，照 $DK_ROOT/templates/report-employee.md，「## 測試」必填）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 $DK_ROOT/bin/dk-msg。讀完後建立 state 檔並開始做分給你的項目。${tdd}碰到 bug 或測試紅了，先讀 $DK_ROOT/methods/debugging.md 再動手。送 [DONE] 前 state 與報告都要寫好，然後 dk-msg 交接對象與 leader。$wait_for$resume"
++  # 多 repo 才有這一句：單 repo 模式下 dk-spawn 傳空字串，任何面向人的輸出都不印 repo 前綴。
++  local repo=""
++  [ -z "${11:-}" ] || repo="你的 pane 在「${11}」的 worktree（${12:-}）；其他 repo 的 worktree 見切片的「## 倉庫」段，你可以直接在那裡工作；touched 與所有權一律以「${11}:」這樣的 <名>: 前綴開頭。"
++  printf '%s' "你是 $1，角色 $2。先讀：$DK_ROOT/roles/$2.md、$DK_ROOT/PROTOCOL.md、$DK_ROOT/PROJECT.md、$6。你的 state 檔是 $4（≤20 行，每完成一個子步驟就覆寫）；報告檔是 $7（不限行數，照 $DK_ROOT/templates/report-employee.md，「## 測試」必填）。只能修改 brief 檔案所有權劃給你的檔案。禁止使用 subagent、禁止自行開 pane。所有訊息用 $DK_ROOT/bin/dk-msg。讀完後建立 state 檔並開始做分給你的項目。$repo${tdd}碰到 bug 或測試紅了，先讀 $DK_ROOT/methods/debugging.md 再動手。送 [DONE] 前 state 與報告都要寫好，然後 dk-msg 交接對象與 leader。$wait_for$resume"
+ }
+diff --git a/.dkbo/templates/brief-member.md b/.dkbo/templates/brief-member.md
+index 2aac79f..82331d0 100644
+--- a/.dkbo/templates/brief-member.md
++++ b/.dkbo/templates/brief-member.md
+@@ -5,20 +5,23 @@
+ {{GOAL}}
+ 
+ ## 全域約束（全文）
+ {{CONSTRAINTS}}
+ 
+ ## 你的波次
+ | 波 | 型態 | 成員 | 做什麼 | 難度 | 完成條件 | 審查 |
+ |---|---|---|---|---|---|---|
+ {{WAVE_ROWS}}
+ 
++## 倉庫
++{{REPOS}}
++
+ ## 你的檔案所有權
+ | 成員 | 可改 | 只讀 |
+ |---|---|---|
+ {{OWNER_ROWS}}
+ 
+ ## 共用契約（全文）
+ {{CONTRACT}}
+ 
+ ## 驗收標準（全文）
+ {{ACCEPTANCE}}
+diff --git a/tests/unit/05_task_new.bats b/tests/unit/05_task_new.bats
+index 0eea935..0fcb2ff 100644
+--- a/tests/unit/05_task_new.bats
++++ b/tests/unit/05_task_new.bats
+@@ -187,10 +187,39 @@ teardown() { teardown_project; }
+ }
+ @test "gate1 拒絕還開著的計畫審查 pane" {
+   d=$(dk-task-new login "使用者登入")
+   dk-process "brief-review skipped: 測試"
+   echo "login-reviewer-p1 wC:p9 $(date +%s) review 1 2" >> "$d/.panes"
+   run dk-task-new login --gate1
+   [ "$status" -eq 1 ]; [[ "$output" == *"login-reviewer-p1"* ]]; [[ "$output" == *"dk-wave-close --agent"* ]]
+   : > "$d/.panes"
+   run dk-task-new login --gate1; [ "$status" -eq 0 ]
+ }
++
++# --- 開場的 dk_repos_check 便宜三項（AC2／AC4 的早失敗那一半，0.10.0）-----------
++# 名字、第一個是主 repo、路徑是 git 根：三項都不必碰工作樹狀態，所以在建資料夾之前就驗。
++# 「工作樹乾淨」留到 dk-leader --run 真的要從 HEAD 切 worktree 的那一刻（--no-clean）。
++
++@test "task-new 在 DK_REPOS 名字不合法時拒絕，什麼都不建" {
++  printf 'DK_REPOS="main=. Bad=%s"\n' "$PROJECT-api" >> "$DK_ROOT/settings.env"
++  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"Bad"* ]]
++  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
++  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
++}
++@test "task-new 在第一個 repo 不是主 repo 時拒絕" {
++  setup_multirepo
++  sed -i "s#^DK_REPOS=.*#DK_REPOS=\"api=$REPO_API main=.\"#" "$DK_ROOT/settings.env"
++  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"主 repo"* ]]
++  [ ! -d "$DK_ROOT/tasks/$(date +%F)-login" ]
++}
++@test "task-new 在 repo 路徑不是 git 根時拒絕並點名" {
++  mkdir -p "$PROJECT-plain"
++  printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-plain" >> "$DK_ROOT/settings.env"
++  run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
++  rm -r "$PROJECT-plain"
++}
++@test "task-new 不驗工作樹乾不乾淨（--no-clean；那一項是 dk-leader --run 的事）" {
++  setup_multirepo
++  repo_dirty_tracked "$REPO_API"
++  run dk-task-new login x; [ "$status" -eq 0 ]
++  [ -d "$DK_ROOT/tasks/$(date +%F)-login" ]
++}
+diff --git a/tests/unit/07_spawn.bats b/tests/unit/07_spawn.bats
+index bb4147c..3fc0332 100644
+--- a/tests/unit/07_spawn.bats
++++ b/tests/unit/07_spawn.bats
+@@ -144,10 +144,69 @@ teardown() { teardown_project; }
+ }
+ @test "--handoff 的 ruling 只在 pane 與 agent 真的起來後才落盤" {
+   # Minor 7：ruling 原本在 pane split／agent start 之前就落盤，agent start 失敗時
+   # process.md 會留下一行「換人」的假裁定，而那次換手其實沒發生。
+   fixture_brief "$d"; dk-wave-open 1 >/dev/null
+   dk-spawn backend >/dev/null
+   HERDR_STUB_FAIL="agent start" run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+   [ "$status" -eq 1 ]
+   refute_grep 'ruling: 換 codex' "$d/process.md"
+ }
++
++# ── 多 repo（AC8）────────────────────────────────────────────────────────────
++multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再來一次
++  teardown_project; setup_project; setup_multirepo
++  d=$(fixture_task login 使用者登入); fixture_brief "$d"
++  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/**, shared:src/** | main:src/web/** |#' "$d/brief.md"
++  sed -i 's#^| qa | tests/\*\* | — |$#| qa | main:tests/** | — |#' "$d/brief.md"
++  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
++}
++
++@test "AC8: cwd 是成員第一個可改 glob 的 repo worktree，--add-dir 主樹加每個 worktree" {
++  multirepo_task
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  api_wt=$(dk_repo_field "$d" api wt)
++  grep -q -- "--cwd $api_wt --no-focus" "$HERDR_STUB_LOG"
++  start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
++  [[ "$start" == *"--add-dir $PROJECT "* ]] || [[ "$start" == *"--add-dir $PROJECT" ]]
++  for r in main api shared; do
++    [[ "$start" == *"--add-dir $(dk_repo_field "$d" "$r" wt)"* ]]
++  done
++  # qa 的第一個 glob 在 main
++  : > "$HERDR_STUB_LOG"
++  run dk-spawn qa; [ "$status" -eq 0 ]
++  grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
++}
++
++@test "AC8: 首輪提示點名自己的 repo；單 repo 模式不印這一句" {
++  multirepo_task
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  p=$(grep '^agent prompt login-backend' "$HERDR_STUB_LOG")
++  [[ "$p" == *"你的 pane 在「api」的 worktree"* ]]
++  [[ "$p" == *"$(dk_repo_field "$d" api wt)"* ]]
++  [[ "$p" == *"「## 倉庫」"* ]]
++  [[ "$p" == *"以「api:」"* ]]
++  teardown_project; setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  refute_grep '你的 pane 在' "$HERDR_STUB_LOG"
++}
++
++@test "AC8: 單 repo 模式的 --add-dir 只有主樹（0.9.2 不變）" {
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
++  [[ "$start" == *"--add-dir $PROJECT" ]]                 # 就這一個，而且在行尾
++  [ "$(grep -o -- '--add-dir' <<< "$start" | wc -l)" -eq 1 ]
++}
++
++@test "AC8: DK_WORKTREE 為空（計畫階段的 reviewer）時 cwd 退回主樹" {
++  # 計畫階段的任務只有資料夾：沒有 worktree，也還沒有 .repos
++  sed -i 's/^DK_WORKTREE=.*/DK_WORKTREE=""/' "$d/.task.env"; rm -f "$d/.repos"
++  run dk-spawn reviewer p1 --isolated; [ "$status" -eq 0 ]
++  grep -q -- "--cwd $PROJECT --no-focus" "$HERDR_STUB_LOG"
++  grep -q -- '--add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
++}
++
++@test "AC8: 所有權表沒有這位成員時 cwd 退回 DK_WORKTREE（主 repo）" {
++  multirepo_task
++  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
++  grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
++}
+diff --git a/tests/unit/08_wave_close.bats b/tests/unit/08_wave_close.bats
+index fd94efa..f659560 100644
+--- a/tests/unit/08_wave_close.bats
++++ b/tests/unit/08_wave_close.bats
+@@ -206,10 +206,88 @@ P
+ }
+ @test "AC6: 缺 dev-done 該欄印 —，純文件波審查欄印 skip" {
+   T=$(date +%Y-%m-%d); base=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+   cat > "$d/process.md" <<P
+ ${T}T00:00 wave-open 1 base $base members backend qa
+ ${T}T00:05 review 1 skipped: 純文件波
+ P
+   run dk-wave-close; [ "$status" -eq 0 ]
+   [[ "$output" == *"（dev —、審查 skip）"* ]] || { echo "$output"; false; }
+ }
++
++# ── 多 repo（AC11／AC12）─────────────────────────────────────────────────────
++# setup 建的是單 repo fixture；多 repo 要從頭再來一次，並用真的 dk-wave-open 把逐 repo 的
++# base 行寫進 process.md（gate c 與 gate d 都靠它分辨「本波有沒有變更」）。
++multirepo_close() {
++  teardown_project; setup_project; setup_multirepo
++  d=$(fixture_task login 使用者登入); fixture_brief "$d"
++  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/**, main:src/api/**, shared:src/** | main:src/web/** |#' "$d/brief.md"
++  sed -i 's#^| qa | tests/\*\* | — |$#| qa | main:tests/** | — |#' "$d/brief.md"
++  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
++  dk-wave-open 1 >/dev/null
++  printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
++  printf 'status: done\nwave: 1\ntouched:\n  - api:src/a.ts\n  - main:src/api/login.ts\n  - shared:src/s.ts\n' > "$d/state/backend.md"
++  printf 'status: done\nwave: 1\ntouched:\n' > "$d/state/qa.md"
++  printf '# r\n## 測試\n### 紅\n$ bats\nFAIL 1\n### 綠\n$ bats\n1 ok\n' > "$d/state/backend.report.md"
++  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
++  main_wt=$(dk_repo_field "$d" main wt); api_wt=$(dk_repo_field "$d" api wt); shared_wt=$(dk_repo_field "$d" shared wt)
++}
++
++@test "AC11: gate c 逐 repo 跑各自的指令，log 檔名帶 repo，缺指令記 skipped 不擋" {
++  multirepo_close
++  mkdir -p "$main_wt/src/api" "$api_wt/src" "$shared_wt/src"
++  echo m > "$main_wt/src/api/login.ts"; echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
++  echo 'DK_TEST_CMD="echo main-ran"' >> "$DK_ROOT/settings.env"   # helpers 已給 DK_TEST_CMD_api="true"
++  run dk-wave-close; [ "$status" -eq 0 ]
++  [ -f "$d/waves/1.main.test.log" ]; [ -f "$d/waves/1.api.test.log" ]
++  [ ! -f "$d/waves/1.test.log" ]
++  grep -q 'main-ran' "$d/waves/1.main.test.log"
++  grep -q 'main ok (echo main-ran)' "$d/process.md"
++  grep -q 'api ok (true)' "$d/process.md"
++  grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
++  [ ! -f "$d/waves/1.shared.test.log" ]
++}
++
++@test "AC11: 本波沒變更的 repo 不跑它的測試" {
++  multirepo_close
++  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
++  echo 'DK_TEST_CMD="echo main-ran"' >> "$DK_ROOT/settings.env"
++  run dk-wave-close; [ "$status" -eq 0 ]
++  [ -f "$d/waves/1.api.test.log" ]; [ ! -f "$d/waves/1.main.test.log" ]
++  grep -q 'main skipped (no change)' "$d/process.md"
++}
++
++@test "AC11: 某個 repo 的測試紅了要點名它，pane 不關" {
++  multirepo_close
++  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
++  echo 'DK_TEST_CMD_api="echo boom; exit 1"' >> "$DK_ROOT/settings.env"
++  run dk-wave-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"api"* ]]; [[ "$output" == *"boom"* ]]
++  refute_grep '^pane close' "$HERDR_STUB_LOG"
++  grep -q 'wave-close 1 tests failed' "$d/process.md"
++}
++
++@test "AC12: gate d 的 unowned／unreported 訊息帶 <名>: 前綴" {
++  multirepo_close
++  mkdir -p "$shared_wt/docs"; echo x > "$shared_wt/docs/x.md"      # 沒人擁有 shared:docs/**
++  run dk-wave-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"unowned change: shared:docs/x.md"* ]]
++  refute_grep '^pane close' "$HERDR_STUB_LOG"
++  rm -r "$shared_wt/docs"
++  mkdir -p "$api_wt/src"; echo o > "$api_wt/src/other.ts"          # backend 擁有但沒寫進 touched
++  run dk-wave-close; [ "$status" -eq 0 ]
++  [[ "$output" == *"unreported change: api:src/other.ts (owner backend)"* ]]
++}
++
++@test "AC12: 每個有變更的 repo 各 commit 一次，沒變更的不 commit" {
++  multirepo_close
++  mkdir -p "$api_wt/src" "$shared_wt/src"
++  echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
++  run dk-wave-close; [ "$status" -eq 0 ]
++  [ "$(git -C "$api_wt" log -1 --pretty=%s)" = "wave 1: backend qa" ]
++  [ "$(git -C "$shared_wt" log -1 --pretty=%s)" = "wave 1: backend qa" ]
++  [ "$(git -C "$main_wt" log -1 --pretty=%s)" = init ]
++  [ -z "$(git -C "$api_wt" status --porcelain)" ]
++  [[ "$output" == *"api"* ]]
++  grep -qE ' commit [0-9a-f]{7} wave 1 repo api$' "$d/process.md"
++  refute_grep ' repo main$' "$d/process.md"
++}
+diff --git a/tests/unit/10_resume.bats b/tests/unit/10_resume.bats
+index 9ec4494..8ba92fe 100644
+--- a/tests/unit/10_resume.bats
++++ b/tests/unit/10_resume.bats
+@@ -81,10 +81,40 @@ teardown() { teardown_project; }
+   [[ "$output" =~ 本波已進行\ ([0-9]+)m（自\ wave-open） ]] || { echo "no 本波已進行 line"; false; }
+   w=$(( 10#${BASH_REMATCH[1]} )); [ "$w" -ge "$((10#$M))" ] && [ "$w" -le "$((10#$M+1))" ]
+   [[ "$output" == *"login-frontend(working 等了 10 min)"* ]]
+ }
+ @test "沒有開波時只印任務那行" {
+   sed -i "1i $(date +%Y-%m-%d)T00:00 task-new login" "$d/process.md"
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+   run dk-resume; [ "$status" -eq 0 ]
+   [[ "$output" == *"任務已進行 "* ]]; [[ "$output" != *"本波已進行"* ]]
+ }
++
++# --- 0.10.0：本波段之前印一張 .repos 表 ---------------------------------------
++
++@test "resume 在本波段之前印倉庫段；單 repo 一列且不印前綴欄" {
++  run dk-resume; [ "$status" -eq 0 ]
++  printf '%s\n' "$output" | grep -qx '## 倉庫'
++  printf '%s\n' "$output" | grep -qx "$WORKTREE_PATH"
++  refute_grep -qx "main → $WORKTREE_PATH" <(printf '%s\n' "$output")
++  a=$(printf '%s\n' "$output" | grep -n '^## 倉庫$' | cut -d: -f1)
++  b=$(printf '%s\n' "$output" | grep -n '^## 本波$' | cut -d: -f1)
++  [ "$a" -lt "$b" ]
++}
++
++@test "resume 多 repo 逐列印 <名> → <worktree>" {
++  printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-api" >> "$DK_ROOT/settings.env"
++  cat > "$d/.repos" <<R
++main $PROJECT $PROJECT/.worktrees/login/main aaaaaaa
++api $PROJECT-api $PROJECT/.worktrees/login/api bbbbbbb
++R
++  run dk-resume; [ "$status" -eq 0 ]
++  printf '%s\n' "$output" | grep -qx "main → $PROJECT/.worktrees/login/main"
++  printf '%s\n' "$output" | grep -qx "api → $PROJECT/.worktrees/login/api"
++}
++
++@test "resume 在還沒交棒（沒有 .repos）時印尚未交棒並指向 --run" {
++  rm -f "$d/.repos"
++  run dk-resume; [ "$status" -eq 0 ]
++  [[ "$output" == *"尚未交棒"* ]]; [[ "$output" == *"dk-leader login --run"* ]]
++  [ "${#lines[@]}" -le 150 ]
++}
+diff --git a/tests/unit/12_task_close.bats b/tests/unit/12_task_close.bats
+index 3c79031..2477ae2 100644
+--- a/tests/unit/12_task_close.bats
++++ b/tests/unit/12_task_close.bats
+@@ -108,21 +108,161 @@ teardown() { teardown_project; }
+ 2026-09-19T21:11 review 1 verdict a: ok
+ 2026-09-19T21:12 wave-close 1 tests ok (x) 2 agents closed
+ P
+   printf '# r 結案\n## 完成\nx\n## 時間\n（由 dk-task-close 填）\n' > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+   grep -qx '| 計畫 | 2026-09-19T20:39 | 2026-09-19T20:45 | 6m | — | — |' "$d/report.md"
+   grep -qx '| 波 1 | 2026-09-19T20:45 | 2026-09-19T21:12 | 27m | 19m | 7m |' "$d/report.md"
+   grep -q '^| 任務 | 2026-09-19T20:39 | ' "$d/report.md"   # 結束欄是這次 task-close 的當下
+   refute_grep -F '由 dk-task-close 填' "$d/report.md"      # 範本的指引行被實際內容取代
+   grep -qx '## 完成' "$d/report.md"                         # 其他段落不動
+-  git -C "$PROJECT" show --stat HEAD | grep -q report.md    # 填完才 commit 任務記憶
++  # 0.10.0：任務記憶在合併之前先 commit 一次（AC13），所以 report.md 落在那一筆裡而不是
++  # HEAD（HEAD 是合併後撿 INDEX 與 process 尾巴的第二筆）。錨點跟著換，強度不變。
++  m=$(git -C "$PROJECT" log --format='%H %s' | grep 'dkbo memory: task login' | tail -1 | cut -d' ' -f1)
++  git -C "$PROJECT" show --stat "$m" | grep -q report.md    # 填完才 commit 任務記憶
+ }
+ @test "AC9: --abandon 不附時間表" {
+   echo '2026-09-19T20:39 task-new login' > "$d/process.md"
+   run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
+   refute_grep -F '| 階段 |' "$d/report.md"
+ }
+ @test "AC9: 範本有 ## 時間 段且註明由 dk-task-close 填" {
+   grep -qx '## 時間' "$REPO_ROOT/.dkbo/templates/report.md"
+   grep -q 'dk-task-close' "$REPO_ROOT/.dkbo/templates/report.md"
+ }
++
++# --- 0.10.0：記憶先 commit、兩階段合併、exit 3/4/5、不關 workspace（AC13 AC14）------
++
++# setup() 已經用單 repo 建過一次任務（worktree 在 .worktrees/login），多 repo 的佈局是
++# .worktrees/login/<名>，兩者在同一個路徑上打架 —— 先把單 repo 那份收掉再重建。
++remk_multirepo() {
++  git -C "$PROJECT" worktree remove --force "$WORKTREE_PATH" >/dev/null 2>&1 || true
++  git -C "$PROJECT" branch -D dk/login >/dev/null 2>&1 || true
++  rm -rf "$DK_ROOT/tasks/$(date +%F)-login"
++  setup_multirepo
++  d=$(fixture_task login 使用者登入)
++  : > "$d/.panes"
++}
++# 三個 repo 的分支上各改一次 f.txt（內容＝repo 名），讓每個 repo 都真的有東西要合。
++seed_branch_commits() {
++  local n wt
++  for n in main api shared; do
++    wt="$PROJECT/.worktrees/login/$n"
++    echo "${1:-$n}" > "$wt/f.txt"; git -C "$wt" add f.txt
++    git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m wave1
++  done
++}
++
++@test "AC13: 任務記憶在合併之前就先 commit 一次" {
++  # BACKLOG 2026-09-19「暫存中的改名擋住 merge」：任務目錄還在未追蹤狀態時 merge 會被擋。
++  echo '# r' > "$d/report.md"
++  run dk-task-close; [ "$status" -eq 0 ]
++  m=$(git -C "$PROJECT" log --format='%H %s' | grep 'dkbo memory: task login' | tail -1 | cut -d' ' -f1)
++  mg=$(git -C "$PROJECT" log --format='%H %s' | grep -m1 'task login: 使用者登入' | cut -d' ' -f1)
++  [ -n "$m" ]; [ -n "$mg" ]
++  git -C "$PROJECT" merge-base --is-ancestor "$m" "$mg"   # 記憶那一筆在合併那一筆之前
++  git -C "$PROJECT" show --stat "$m" | grep -q report.md
++}
++
++@test "AC14: 結案不呼叫 herdr workspace close，最後一行叫人自己關" {
++  echo '# r' > "$d/report.md"
++  run dk-task-close; [ "$status" -eq 0 ]
++  refute_grep '^workspace close' "$HERDR_STUB_LOG"
++  [[ "${lines[$((${#lines[@]}-1))]}" == *"herdr workspace close wB"* ]]
++}
++
++@test "AC13: 主樹有會被覆蓋的本地變更 → exit 5，一個 repo 都沒合" {
++  echo '# r' > "$d/report.md"
++  echo local > "$PROJECT/f.txt"     # 分支上也有 f.txt，合併會覆蓋它
++  run dk-task-close; [ "$status" -eq 5 ]
++  [[ "$output" == *"本地變更"* ]]
++  refute_grep 'task-close merged' "$d/process.md"
++  [ -f "$DK_ROOT/.sessions/wB:p1" ]; [ -d "$WORKTREE_PATH" ]
++  [ "$(cat "$PROJECT/f.txt")" = local ]
++}
++
++@test "AC13: 多 repo 任一個衝突 → exit 3、列出全部衝突 repo、誰都不合" {
++  remk_multirepo
++  echo '# r' > "$d/report.md"
++  # 三個 repo 都在分支上改了 f.txt；api 與 shared 的主樹也各自改了同一個檔 → 衝突
++  seed_branch_commits branch
++  for r in "$REPO_API" "$REPO_SHARED"; do
++    echo trunk > "$r/f.txt"; git -C "$r" add f.txt
++    git -C "$r" -c user.name=t -c user.email=t@t commit -q -m clash
++  done
++  run dk-task-close; [ "$status" -eq 3 ]
++  [[ "$output" == *"api"* ]]; [[ "$output" == *"shared"* ]]
++  grep -q 'merge-conflict' "$d/process.md"
++  [ ! -e "$PROJECT/f.txt" ]                          # 主 repo 也沒被合進去
++  git -C "$PROJECT" diff --quiet                     # 預檢的 merge 都 abort 乾淨了
++  git -C "$REPO_API" diff --quiet
++  [ -d "$PROJECT/.worktrees/login/api" ]             # worktree 與分支一律保留
++}
++
++@test "AC13: 真合併中途失敗 → exit 4，印 merged／failed／not attempted" {
++  remk_multirepo
++  echo '# r' > "$d/report.md"
++  seed_branch_commits branch
++  # 預檢用 --no-commit，不跑 commit-msg 鉤子；真合併要建 commit 才跑。這是「預檢過、
++  # 真合併炸」唯一能在測試裡穩定造出來的縫。
++  printf '#!/bin/sh\nexit 1\n' > "$REPO_API/.git/hooks/commit-msg"
++  chmod +x "$REPO_API/.git/hooks/commit-msg"
++  run dk-task-close; [ "$status" -eq 4 ]
++  [[ "$output" == *"merged"* ]]; [[ "$output" == *"main"* ]]
++  [[ "$output" == *"failed"* ]]; [[ "$output" == *"api"* ]]
++  [[ "$output" == *"not attempted"* ]]; [[ "$output" == *"shared"* ]]
++  [ -d "$PROJECT/.worktrees/login/shared" ]          # worktree 與分支一律不刪
++  git -C "$REPO_SHARED" rev-parse --verify -q dk/login
++  [ -f "$DK_ROOT/.sessions/wB:p1" ]
++}
++
++@test "AC13: 多 repo 全過 → 逐 repo 合併、逐 repo 刪 worktree 與分支" {
++  remk_multirepo
++  echo '# r' > "$d/report.md"
++  seed_branch_commits
++  run dk-task-close; [ "$status" -eq 0 ]
++  [ "$(cat "$PROJECT/f.txt")" = main ]
++  [ "$(cat "$REPO_API/f.txt")" = api ]
++  [ "$(cat "$REPO_SHARED/f.txt")" = shared ]
++  for n in main api shared; do [ ! -d "$PROJECT/.worktrees/login/$n" ]; done
++  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
++  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
++  refute_grep '^workspace close' "$HERDR_STUB_LOG"
++}
++
++@test "AC13: 某個 repo 的 worktree 髒了就擋下，訊息帶 repo 前綴" {
++  remk_multirepo
++  echo '# r' > "$d/report.md"
++  echo dirty > "$PROJECT/.worktrees/login/shared/g.txt"
++  run dk-task-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"uncommitted"* ]]; [[ "$output" == *"shared:"* ]]
++  [ -f "$DK_ROOT/.sessions/wB:p1" ]
++}
++
++@test "AC2/AC13: 計畫階段（沒有 .repos）--abandon 也收得乾淨" {
++  rm -f "$d/.repos"
++  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#; s#^DK_BASE=.*#DK_BASE=""#' "$d/.task.env"
++  run dk-task-close --abandon "計畫完不做了"; [ "$status" -eq 0 ]
++  grep -q '計畫完不做了' "$d/report.md"
++  grep -q '| abandoned | 計畫完不做了 |' "$DK_ROOT/tasks/INDEX.md"
++  [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
++  grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
++  [ -z "$(git -C "$PROJECT" status --porcelain -- "$d")" ]   # 記憶進了 git
++}
++
++@test "AC13: --abandon 逐 repo 刪 worktree 與分支" {
++  remk_multirepo
++  run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
++  for n in main api shared; do [ ! -d "$PROJECT/.worktrees/login/$n" ]; done
++  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
++  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
++}
++
++@test "AC13 反面: 沒有 .repos 又不是 --abandon → exit 1，不去合一個不存在的分支" {
++  rm -f "$d/.repos"
++  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#; s#^DK_BASE=.*#DK_BASE=""#' "$d/.task.env"
++  echo '# r' > "$d/report.md"
++  run dk-task-close; [ "$status" -eq 1 ]
++  [[ "$output" == *"尚未實體化"* ]]; [[ "$output" == *"--abandon"* ]]
++  [ -f "$DK_ROOT/.sessions/wB:p1" ]
++  refute_grep 'task-close' "$d/process.md"
++}
+diff --git a/tests/unit/13_leader.bats b/tests/unit/13_leader.bats
+index 771cbc8..19a3abc 100644
+--- a/tests/unit/13_leader.bats
++++ b/tests/unit/13_leader.bats
+@@ -25,21 +25,21 @@ teardown() { teardown_project; }
+   dk-leader pay "金流" >/dev/null
+   p=$(grep '^agent prompt leader-pay ' "$HERDR_STUB_LOG")
+   [[ "$p" == *"--wait --until working"* ]]
+   : > "$HERDR_STUB_LOG"
+   HERDR_STUB_FAIL="agent prompt" run dk-leader pay "金流"
+   [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+   refute_grep '^pane close' "$HERDR_STUB_LOG"
+ }
+ 
+ # --- dk-leader <short> --run：實體化 + 交棒（0.10.0） ---------------------------
+-# 單 repo 模式。多 repo（DK_REPOS）在波 2。
++# 單 repo 與多 repo（DK_REPOS）兩種模式。
+ 
+ mk() { # 一個過了關卡①、還沒實體化的任務
+   dk-task-new login "使用者登入" >/dev/null
+   dk-process "brief-review skipped: 單元測試"
+   dk-task-new login --gate1 >/dev/null
+   d="$DK_ROOT/tasks/$(date +%F)-login"
+ }
+ 
+ @test "--run 實體化 worktree 與 workspace、改寫 .task.env、交棒給根 pane" {
+   mk
+@@ -148,10 +148,125 @@ mk() { # 一個過了關卡①、還沒實體化的任務
+ @test "--run 已實體化但根 pane 沒有領導：跳過實體化，只重做交棒" {
+   mk
+   dk-leader login --run >/dev/null
+   rm -f "$HERDR_STUB_RESPONSES/agent_get.wC:p1.json"   # 執行領導掛了
+   : > "$HERDR_STUB_LOG"
+   run dk-leader login --run; [ "$status" -eq 0 ]
+   refute_grep '^workspace create' "$HERDR_STUB_LOG"
+   grep -q '^agent start leader-login --kind claude --pane wC:p1 -- ' "$HERDR_STUB_LOG"
+   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+ }
++
++# --- 多 repo（DK_REPOS 非空）：AC3 AC4 AC20 ------------------------------------
++
++@test "--run 多 repo：每個 repo 一個 worktree、.repos 三列、DK_WORKTREE 是主 repo 的" {
++  setup_multirepo; mk
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  for n in main api shared; do
++    [ -d "$PROJECT/.worktrees/login/$n" ]
++    [ "$(git -C "$PROJECT/.worktrees/login/$n" rev-parse --abbrev-ref HEAD)" = dk/login ]
++  done
++  [ "$(grep -c . "$d/.repos")" -eq 3 ]
++  grep -q "^main $PROJECT $PROJECT/.worktrees/login/main [0-9a-f]\{40\}$" "$d/.repos"
++  grep -q "^api $REPO_API $PROJECT/.worktrees/login/api [0-9a-f]\{40\}$" "$d/.repos"
++  grep -q "^shared $REPO_SHARED $PROJECT/.worktrees/login/shared [0-9a-f]\{40\}$" "$d/.repos"
++  [ "$(head -1 "$d/.repos" | awk '{print $1}')" = main ]   # 主 repo 永遠第一列
++  grep -q "^DK_WORKTREE=\"$PROJECT/.worktrees/login/main\"\$" "$d/.task.env"
++  grep -q "^DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"\$" "$d/.task.env"
++  grep -q 'materialize repos main api shared workspace wC' "$d/process.md"
++}
++
++@test "--run 單 repo 也寫 .repos：一列，名字 main" {
++  mk
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  [ "$(grep -c . "$d/.repos")" -eq 1 ]
++  grep -q "^main $PROJECT $WORKTREE_PATH [0-9a-f]\{40\}\$" "$d/.repos"
++}
++
++@test "--run 多 repo 下拒絕 DK_NO_WORKTREE" {
++  setup_multirepo
++  dk-task-new login "使用者登入" --no-worktree >/dev/null
++  dk-process "brief-review skipped: 單元測試"; dk-task-new login --gate1 >/dev/null
++  d="$DK_ROOT/tasks/$(date +%F)-login"
++  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"DK_NO_WORKTREE"* ]]
++  refute_grep '^workspace create' "$HERDR_STUB_LOG"
++  [ ! -e "$d/.repos" ]; [ ! -e "$PROJECT/.worktrees/login" ]
++}
++
++@test "--run 任一 repo 工作樹不乾淨就拒絕並點名該 repo" {
++  setup_multirepo; mk
++  repo_dirty_tracked "$REPO_API"
++  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
++  [ ! -e "$PROJECT/.worktrees/login" ]; [ ! -e "$d/.repos" ]
++  refute_grep '^workspace create' "$HERDR_STUB_LOG"
++}
++
++@test "--run 多 repo：workspace create 失敗就清掉全部 worktree、分支與 .repos" {
++  setup_multirepo; mk
++  HERDR_STUB_FAIL="workspace create" run dk-leader login --run; [ "$status" -ne 0 ]
++  [ ! -e "$PROJECT/.worktrees/login/main" ]
++  [ ! -e "$PROJECT/.worktrees/login/api" ]
++  [ ! -e "$PROJECT/.worktrees/login/shared" ]
++  refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
++  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
++  refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
++  [ ! -e "$d/.repos" ]
++  grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
++}
++
++@test "--run 某個 repo 的 dk/<short> 分支已存在時點名它並清掉先切好的" {
++  setup_multirepo; mk
++  git -C "$REPO_SHARED" branch dk/login
++  run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"shared"* ]]
++  [ ! -e "$PROJECT/.worktrees/login/main" ]; [ ! -e "$PROJECT/.worktrees/login/api" ]
++  refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
++  [ ! -e "$d/.repos" ]
++  refute_grep '^workspace create' "$HERDR_STUB_LOG"
++}
++
++@test "AC20: 每個 worktree 切好後在該 worktree 內、乾淨環境跑 DK_SETUP_CMD_<名>" {
++  setup_multirepo
++  cat > "$PROJECT/setup.sh" <<'S'
++#!/usr/bin/env bash
++pwd > setup-ran.txt
++env | grep -c '^DK_' >> setup-ran.txt || true
++S
++  chmod +x "$PROJECT/setup.sh"
++  printf 'DK_SETUP_CMD_api="%s"\n' "$PROJECT/setup.sh" >> "$DK_ROOT/settings.env"
++  mk
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  f="$PROJECT/.worktrees/login/api/setup-ran.txt"
++  [ -f "$f" ]
++  [ "$(sed -n 1p "$f")" = "$PROJECT/.worktrees/login/api" ]   # cwd 是那個 repo 的 worktree
++  [ "$(sed -n 2p "$f")" = 0 ]                                  # 一個 DK_* 都沒漏進去
++  [ ! -e "$PROJECT/.worktrees/login/main/setup-ran.txt" ]      # 沒設 DK_SETUP_CMD 就不跑
++  [ ! -e "$PROJECT/.worktrees/login/shared/setup-ran.txt" ]
++}
++
++@test "AC20: 鉤子失敗只警告並記 process，不 rollback" {
++  setup_multirepo
++  printf 'DK_SETUP_CMD_api="exit 7"\n' >> "$DK_ROOT/settings.env"
++  mk
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  [[ "$output" == *"setup"* ]]
++  grep -q 'setup api failed' "$d/process.md"
++  [ -d "$PROJECT/.worktrees/login/api" ]        # worktree 本身是好的，不因鉤子而收掉
++  grep -q '^agent start leader-login ' "$HERDR_STUB_LOG"
++}
++
++@test "AC20: 單 repo 模式也跑 DK_SETUP_CMD" {
++  printf 'DK_SETUP_CMD="pwd > setup-ran.txt"\n' >> "$DK_ROOT/settings.env"
++  mk
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  [ "$(cat "$WORKTREE_PATH/setup-ran.txt")" = "$WORKTREE_PATH" ]
++}
++
++@test "--run 的已實體化判別器是 .repos，不是 DK_WORKTREE" {
++  mk
++  dk-leader login --run >/dev/null
++  rm -f "$HERDR_STUB_RESPONSES/agent_get.wC:p1.json"   # 執行領導掛了，要重交棒
++  sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#' "$d/.task.env"
++  : > "$HERDR_STUB_LOG"
++  run dk-leader login --run; [ "$status" -eq 0 ]
++  refute_grep '^workspace create' "$HERDR_STUB_LOG"
++  git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
++}
+diff --git a/tests/unit/18_wave_open.bats b/tests/unit/18_wave_open.bats
+index c18051f..cfc06f1 100644
+--- a/tests/unit/18_wave_open.bats
++++ b/tests/unit/18_wave_open.bats
+@@ -36,10 +36,56 @@ teardown() { teardown_project; }
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"; sed -i '/ wave-open 1 /d' "$d/process.md"
+   echo "login-qa wC:p3 0 review 1 1" >> "$d/.panes"
+   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"live panes remain (1)"* ]]
+ }
+ 
+ @test "wave-open 記下這一波的開始時間" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]
+   v=$(sed -n 's/^DK_WAVE_STARTED="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$v" =~ ^[0-9]+$ ]]
+   [ "$v" -ge "$(( $(date +%s) - 60 ))" ]
+ }
++
++# ── 多 repo（AC9）────────────────────────────────────────────────────────────
++# setup 已經建好單 repo 的 fixture；多 repo 要從頭再來一次（setup_multirepo 得在
++# fixture_task 之前跑，fixture_task 才會照 DK_REPOS 逐 repo 切 worktree、寫 .repos）。
++multirepo_task() {
++  teardown_project; setup_project; setup_multirepo
++  d=$(fixture_task login 使用者登入); fixture_brief "$d"
++  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
++}
++
++@test "AC9: DK_WORKTREE 為空（還沒交棒）時拒絕並指向 dk-leader --run" {
++  sed -i 's/^DK_WORKTREE=.*/DK_WORKTREE=""/' "$d/.task.env"
++  run dk-wave-open 1
++  [ "$status" -eq 1 ]; [[ "$output" == *"dk-leader login --run"* ]]
++  refute_grep '^DK_WAVE="1"$' "$d/.task.env"
++  refute_grep ' wave-open 1 ' "$d/process.md"
++}
++
++@test "AC9: 每 repo 記一行 wave-open N repo <名> base <sha>，dk_wave_base 讀得到" {
++  multirepo_task
++  run dk-wave-open 1; [ "$status" -eq 0 ]
++  for r in main api shared; do
++    sha=$(git -C "$(dk_repo_field "$d" "$r" wt)" rev-parse --short=7 HEAD)
++    grep -q " wave-open 1 repo $r base $sha$" "$d/process.md"
++    [ "$(dk_wave_base "$d" 1 "$r")" = "$sha" ]
++  done
++  # 主 repo 的 sha 同時留在既有那一行（dk_wave_base 舊呼叫不變）
++  msha=$(git -C "$(dk_repo_field "$d" main wt)" rev-parse --short=7 HEAD)
++  grep -q " wave-open 1 base $msha members backend(M) qa(S)$" "$d/process.md"
++  [ "$(dk_wave_base "$d" 1)" = "$msha" ]
++}
++
++@test "AC9: 切片有「## 倉庫」段，逐列 <名> → <worktree 路徑>" {
++  multirepo_task
++  run dk-wave-open 1; [ "$status" -eq 0 ]
++  grep -q '^## 倉庫$' "$d/briefs/backend.md"
++  for r in main api shared; do
++    grep -qF "$r → $(dk_repo_field "$d" "$r" wt)" "$d/briefs/backend.md"
++  done
++}
++
++@test "AC9: 單 repo 模式的切片也有「## 倉庫」段，就一列 main" {
++  run dk-wave-open 1; [ "$status" -eq 0 ]
++  grep -q '^## 倉庫$' "$d/briefs/backend.md"
++  grep -qF "main → $WORKTREE_PATH" "$d/briefs/backend.md"
++}
+diff --git a/tests/unit/19_review_pack.bats b/tests/unit/19_review_pack.bats
+index 4b6408e..13106e3 100644
+--- a/tests/unit/19_review_pack.bats
++++ b/tests/unit/19_review_pack.bats
+@@ -19,10 +19,56 @@ teardown() { teardown_project; }
+ }
+ @test "unknown wave or no open wave dies" {
+   run dk-review-pack 7; [ "$status" -eq 1 ]; [[ "$output" == *"wave-open 7"* ]]
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"; run dk-review-pack; [ "$status" -eq 1 ]; [[ "$output" == *"usage"* ]]
+ }
+ @test "--task diffs the whole branch from DK_BASE; legacy task dies" {
+   echo 'x' > "$WORKTREE_PATH/a.txt"; wt add -A; wt commit -q -m 'wave 0'
+   run dk-review-pack --task; [ "$status" -eq 0 ]; [ "$output" = "$d/waves/task.diff" ]; grep -q 'wave 0' "$d/waves/task.diff"; grep -q '^+x' "$d/waves/task.diff"
+   sed -i '/^DK_BASE=/d' "$d/.task.env"; run dk-review-pack --task; [ "$status" -eq 1 ]; [[ "$output" == *"DK_BASE"* ]]
+ }
++
++# ── 多 repo（AC10）───────────────────────────────────────────────────────────
++multirepo_open() {   # 重建成多 repo 的 fixture 並開波 1
++  teardown_project; setup_project; setup_multirepo
++  d=$(fixture_task login 使用者登入); fixture_brief "$d"
++  . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
++  dk-wave-open 1 >/dev/null
++}
++
++@test "AC10: 每個有變更的 repo 各一段 ## repo <名>，files changed 是總和" {
++  multirepo_open
++  main_wt=$(dk_repo_field "$d" main wt); api_wt=$(dk_repo_field "$d" api wt)
++  mkdir -p "$main_wt/src"; echo m > "$main_wt/src/m.ts"
++  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"; echo b > "$api_wt/src/b.ts"
++  run dk-review-pack; [ "$status" -eq 0 ]
++  f="$d/waves/1.diff"
++  grep -q '^# files changed: 3 (working tree included)$' "$f"
++  grep -q '^## repo main$' "$f"; grep -q '^## repo api$' "$f"
++  refute_grep '^## repo shared$' "$f"          # 沒動過的 repo 不出段
++  [ "$(grep -c '^## commits$' "$f")" -eq 2 ]
++  grep -q '^+m$' "$f"; grep -q '^+a$' "$f"; grep -q 'src/b.ts' "$f"
++}
++
++@test "AC10: 多 repo 全都沒變更時仍寫檔並警告" {
++  multirepo_open
++  run dk-review-pack; [ "$status" -eq 0 ]; [ -f "$d/waves/1.diff" ]; [[ "$output" == *"no changes"* ]]
++  grep -q '^# files changed: 0 (working tree included)$' "$d/waves/1.diff"
++}
++
++@test "AC10: 單 repo 模式不印 repo 段（面向人的輸出不帶前綴）" {
++  echo x > "$WORKTREE_PATH/a.txt"
++  run dk-review-pack; [ "$status" -eq 0 ]
++  refute_grep '^## repo ' "$d/waves/1.diff"
++  grep -q '^## commits$' "$d/waves/1.diff"
++}
++
++@test "AC10: --task 也逐 repo 分段，base 取 .repos 記的實體化 sha" {
++  multirepo_open
++  api_wt=$(dk_repo_field "$d" api wt)
++  mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
++  git -C "$api_wt" -c user.name=t -c user.email=t@t add -A
++  git -C "$api_wt" -c user.name=t -c user.email=t@t commit -q -m 'api: a'
++  run dk-review-pack --task; [ "$status" -eq 0 ]; [ "$output" = "$d/waves/task.diff" ]
++  grep -q '^## repo api$' "$d/waves/task.diff"; grep -q 'api: a' "$d/waves/task.diff"
++  refute_grep '^## repo main$' "$d/waves/task.diff"
++}

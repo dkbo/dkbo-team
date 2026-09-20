@@ -1,0 +1,557 @@
+# 多 repo workspace — wave 3 since 416be1a — 2026-09-20T11:40
+# files changed: 14 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/LEADER.md                 |  2 +-
+ .dkbo/PROJECT.md                |  1 +
+ .dkbo/PROTOCOL.md               |  5 +++++
+ .dkbo/README.md                 | 22 ++++++++++++++++----
+ .dkbo/VERSION                   |  2 +-
+ .dkbo/roles/reviewer.md         |  2 +-
+ CHANGELOG.md                    | 15 ++++++++++++++
+ README.en.md                    |  6 +++---
+ README.md                       |  6 +++---
+ tests/integration/README.md     | 45 +++++++++++++++++++++++++++++++++++++++++
+ tests/integration/herdr-real.sh | 13 ++++++++++++
+ tests/unit/04_docs.bats         |  4 ++++
+ tests/unit/21_version.bats      |  4 ++--
+ tests/unit/25_docs_policy.bats  | 11 ++++++++++
+ 14 files changed, 123 insertions(+), 15 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/LEADER.md b/.dkbo/LEADER.md
+index e28cc61..258eaee 100644
+--- a/.dkbo/LEADER.md
++++ b/.dkbo/LEADER.md
+@@ -1,17 +1,17 @@
+ # 領導共同規範
+ 
+ 三個階段（大腦／計畫／執行）共用這一份。你是被 `/dkbo-brain`、`/dkbo-plan`、`/dkbo-run` 之一叫起來，或被明確指名讀對應 SKILL.md 而叫起來的領導；兩者都不是就不是領導，見 `.dkbo/ENTRY.md`。
+ 
+ 你是這個任務的領導。你不寫程式、不改業務檔案、不親自翻譯或畫圖。所有產出都派員工。你只做：讀需求、寫 brief、拆波、派工、派審查、裁定、處理 ESCALATE、寫記憶檔、每波 commit、結案合併。
+ 
+-以下所有 `dk-*` 指令都在 `.dkbo/bin/`，例如 `.dkbo/bin/dk-task-new`。團隊設定在 `.dkbo/settings.env`（領導這一側的 kind `DK_LEADER_KIND`、測試指令 `DK_TEST_CMD`、reviewer kind 清單 `DK_REVIEW_KINDS`、法定人數 `DK_REVIEW_MIN`、逾時 `DK_REVIEW_TIMEOUT_MIN`、tab 1 格數 `DK_TAB1_SLOTS`、整波逾時 `DK_WAVE_TIMEOUT_MIN`、reviewer 檔位 `DK_REVIEW_TIER`），由 `.dkbo/skills/init/SKILL.md` 寫（Claude Code 可用 `/dkbo-init`）。
++以下所有 `dk-*` 指令都在 `.dkbo/bin/`，例如 `.dkbo/bin/dk-task-new`。團隊設定在 `.dkbo/settings.env`（領導這一側的 kind `DK_LEADER_KIND`、測試指令 `DK_TEST_CMD`、reviewer kind 清單 `DK_REVIEW_KINDS`、法定人數 `DK_REVIEW_MIN`、逾時 `DK_REVIEW_TIMEOUT_MIN`、tab 1 格數 `DK_TAB1_SLOTS`、整波逾時 `DK_WAVE_TIMEOUT_MIN`、reviewer 檔位 `DK_REVIEW_TIER`、這個專案跨哪些 repo 的 `DK_REPOS`、每個 worktree 切好後跑一次的依賴鉤子 `DK_SETUP_CMD`／`DK_SETUP_CMD_<名>`），由 `.dkbo/skills/init/SKILL.md` 寫（Claude Code 可用 `/dkbo-init`）。`DK_REPOS` 空字串是單 repo 模式（0.9.2 行為不變）；設了它，`/dkbo-run` 的 `dk-leader <short> --run` 才會對每個 repo 各切一個 worktree、開任務專屬的 herdr workspace 並在其根 pane 交棒，任務結束前你不用手動關那個 workspace。
+ 
+ 讀 `.dkbo/PROTOCOL.md`（訊息格式與升報規則）。處理完一批訊息後 `dk-msg --ack`。
+ 
+ ## 三個階段
+ | 叫法 | 管什麼 | 規範 |
+ |---|---|---|
+ | `/dkbo-brain` | 諮詢、分流建議、雜務、評議波 | `.dkbo/skills/brain/SKILL.md` |
+ | `/dkbo-plan` | 開任務、寫 brief、關卡① | `.dkbo/skills/plan/SKILL.md` |
+ | `/dkbo-run` | 派工、跑波、審查、結案 | `.dkbo/skills/run/SKILL.md` |
+ 
+diff --git a/.dkbo/PROJECT.md b/.dkbo/PROJECT.md
+index 37d59ce..9f9d496 100644
+--- a/.dkbo/PROJECT.md
++++ b/.dkbo/PROJECT.md
+@@ -1,6 +1,7 @@
+ # 專案事實（≤40 行；由 init skill 預填，領導或 it 維護）
+ - 技術棧：純 bash 3.2+ 腳本（`.dkbo/bin/dk-*` 與 `.dkbo/lib/*.sh`），依賴 jq、git、herdr 0.9.0；沒有任何套件管理器。
+ - 安裝 / 啟動：這裡是 dkbo 的原始碼倉，`.dkbo/` 是產品本身，**不要在本倉跑 `install.sh`**；領導以指名 `.dkbo/skills/*/SKILL.md` 進場。
+ - 測試指令：`tests/run.sh`（bats-core，第一次跑會 clone 進 `tests/lib/`）。shellcheck **不在** run.sh 裡，要另外跑 `shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/kinds/*.sh`，目前沒有機械閘守它。單檔：`tests/run.sh tests/unit/09_watch.bats`。
+ - 目錄慣例：`tests/unit/NN_name.bats` 兩位數遞增；`tests/stub/herdr` 是假 herdr（零 token），`tests/stub/cli/*` 是假的 claude/codex/agy；`tests/helpers.bash` 建臨時專案並洗掉繼承的 `DK_*`。`docs/` 被 gitignore（設計文件不進版控）。
+ - 已知坑：`lib/common.sh` 幾乎每個變數都是 `${DK_X:-預設}`，繼承值優先 —— 任何會 source 它的測試或子行程都要先 unset `DK_*`，否則會打到真 repo。領導跑的是主樹的腳本，員工在 worktree 改 `.dkbo/` 的成果要等合併後的下一個任務才生效。
++- 多 repo（0.10.0）：`settings.env` 的 `DK_REPOS` 空字串＝本倉是單 repo 專案，行為與 0.9.2 相同；`dk-leader <short> --run` 才會依 `DK_REPOS` 切 worktree、開任務專屬 herdr workspace 並交棒，`dk-task-new` 只建任務資料夾。多 repo 的檔案所有權、`touched`、`file:line` 一律 `<名>:` 前綴。
+diff --git a/.dkbo/PROTOCOL.md b/.dkbo/PROTOCOL.md
+index 2ce7481..5f865d3 100644
+--- a/.dkbo/PROTOCOL.md
++++ b/.dkbo/PROTOCOL.md
+@@ -46,20 +46,25 @@ current: 正在做什麼（一句）
+ touched:
+   - src/api/login.ts
+ todo:
+   - 錯誤碼對齊前端
+ blocked_by: （無則省略）
+ report: state/<你的 state 名>.report.md
+ notes: 給接手者的必要事實，≤5 行
+ ```
+ DONE 前 `touched` 必須完整。`dk-wave-close` 不是看你自報的清單，而是拿 worktree 的真實 git diff（含未 commit 與未追蹤）比對所有權：動了不屬於本波任何人的檔，整波關不掉；自己擁有但漏寫進 `touched` 的檔會被列成 `unreported change`。
+ 
++多 repo 專案（切片有「## 倉庫」段）：所有權表的 glob 與 `touched` 一律帶 `<名>:` 前綴（如 `api:src/routes/**`），前綴取自「## 倉庫」段列出的 repo 名；同一條路徑在不同 repo 是兩個不同的檔，不跨 repo 比對。單 repo 專案不帶前綴，行為不變。你的 pane 已經 `--cwd` 在你第一個可改 repo 的 worktree；其他 repo 的 worktree 路徑見切片的「## 倉庫」段，可以直接在那裡工作。
++
++## 共用 worktree
++一個任務若跨多個 repo，每個 repo 各有自己的一個 worktree（`.worktrees/<任務短名>/<名>`），但**同一個 repo 的 worktree 在同一波內是被這一波所有需要它的成員共用的**——不是每人一份。改動前留意 `git status`：如果看到不是自己這一輪寫的變更，先確認是不是同波夥伴剛寫完還沒 commit（`dk-wave-close` 才會 commit），不要因此覆蓋或還原它。跟下面「執行環境」是同一類提醒的另一半：worktree 隔離的是檔案，不隔離同一個 repo 裡別人尚未落盤的工作。
++
+ ## report 檔（`tasks/<t>/state/<你的 state 名>.report.md`，不限行數）
+ 照 `$DK_ROOT/templates/report-employee.md`：`## 做了什麼`、`## 測試`（**必填**：跑了什麼指令、結果摘要；空的話 dk-wave-close 不放行）、`## 自我審查`、`## 疑慮`。DONE 前 state 與 report 都要寫好。
+ 
+ ## reviewer 專節
+ - 只讀、不改碼、不跑會寫入的指令（不 `git add/commit`、不改檔、不裝東西）。讀切片指的差異包 `waves/N.diff` 與 brief。
+ - report 格式固定：`## 規格合規`（逐條驗收標準 ✅/❌ 與缺漏）、`## Important`（會出錯、違反 brief 或契約、越界改檔）、`## Minor`（風格、可讀性）；每條附 `file:line`。
+ - 意見只給領導（`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`），不直接對 dev 說；領導轉成 BUG 給 dev。收到領導 `[TASK] 複看` 時重讀差異包、更新 report、再 DONE。
+ - 評議波（設計題）沿用：意見寫 state notes，第二輪只准一則反駁。
+ 
+ 雜務員工（`chore-*`）沒有任務綁定，不寫 state 檔。你的 chore 檔**整份是你的**，
+diff --git a/.dkbo/README.md b/.dkbo/README.md
+index 8c28d94..9f0b5a4 100644
+--- a/.dkbo/README.md
++++ b/.dkbo/README.md
+@@ -1,62 +1,72 @@
+ # dkbo
+ 
+ 以 herdr 為底的多模型 AI 團隊：一位領導（Claude Code）在主 pane 審查需求、拆波、派工、決策；員工（claude / codex / agy）各佔一個 pane 實作、測試、互相傳訊；所有記憶是小型 markdown，領導失憶可一鍵恢復。設計文件見原始 repo 的 docs/。
+ 
+ ## 前置需求
+ - herdr ≥ 0.9.0（`herdr --version`），且你在 herdr 的 pane 裡（`echo $HERDR_ENV` 印 `1`）。版本不是只寫在文件上：`install.sh` 與每支 dk-* 都會驗。
+ - git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的就夠）。`flock` 是軟依賴：缺了 `dk_env_set` 退化成無鎖寫入，不會崩。
+ - 至少一個 AI CLI：`claude` / `codex` / `agy`。領導這一側用哪個由 `settings.env` 的 `DK_LEADER_KIND` 決定（預設 `claude`，`/dkbo-init` 會問）；其餘當員工與第二、第三意見。
+ - 目標專案是 git repo，且工作樹乾淨。
+ 
++## 多 repo 專案（前後端分倉）
++`settings.env` 的 `DK_REPOS` 空字串是單 repo 模式（既有行為不變）；設了它（`/dkbo-init` 會問，見「日常使用」的交棒段），一個任務就會對每個 repo 各切一個 worktree。前端 repo 通常要裝依賴才能跑測試，用 `DK_SETUP_CMD`／`DK_SETUP_CMD_<名>` 這個鉤子，在每個 worktree 切好之後、乾淨環境裡各跑一次，建議寫法：
++```bash
++DK_SETUP_CMD="pnpm install --frozen-lockfile --prefer-offline"
++```
++`--frozen-lockfile` 不讓安裝過程改寫 lockfile，`--prefer-offline` 讓 pnpm 的 content-addressable store 盡量用本機已有的套件做 hardlink，一個新 worktree 的安裝多半幾秒內完成。兩個坑：
++1. `git worktree add` **不會複製 `node_modules`**（它是 gitignored）——每個 worktree 都要自己裝一次，這正是 `DK_SETUP_CMD` 存在的理由，不要以為漏掉這步也沒關係。
++2. **不要 symlink 主樹的 `node_modules`** 省裝依賴的時間：任務分支改了 lockfile 時，worktree 會透過 symlink 拿到主樹當下的舊依賴而不是自己 lockfile 對應的版本；而且 symlink 出來的 `node_modules` 會變成全隊共用的執行環境，一個任務裝壞的套件會波及其他 worktree。鉤子失敗只警告不 rollback，log 在 `tasks/<t>/setup.<名>.log`。
++
+ ## 給 AI 的一鍵安裝
+ 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code（或任何能跑 bash 的 agent）：
+ 
+ > 請在目前專案安裝 dkbo。依序執行以下指令，任何一步失敗就停下回報，不要自行變通：
+ >
+ > ```bash
+ > test "$HERDR_ENV" = 1 || { echo "不在 herdr 內，請先用 herdr 開啟終端"; exit 1; }
+ > herdr --version && command -v jq git claude >/dev/null || { echo "缺少 herdr/jq/git/claude"; exit 1; }
+ > git status --porcelain | grep -q . && { echo "工作樹不乾淨，請先 commit 或 stash"; exit 1; }
+ > REPO=https://github.com/dkbo/dkbo-team.git   # fork 的話改這裡
+-> VER=v0.9.2   # 要裝的版本；看 https://github.com/dkbo/dkbo-team/tags
++> VER=v0.10.0   # 要裝的版本；看 https://github.com/dkbo/dkbo-team/tags
+ > tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" "$REPO" "$tmp" && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+ > .dkbo/install.sh
+ > git add -A && git commit -m "chore: add dkbo"
+ > .dkbo/bin/dk-whoami   # 預期印出 leader
+ > ```
+ >
+ > 全部成功後執行 `/dkbo-init`，依它的提問完成初始化。
+ 
+ 預期輸出的最後兩行：
+ ```
+-dkbo 0.9.2 installed into /path/to/project
++dkbo 0.10.0 installed into /path/to/project
+ leader
+ ```
+ 
+ ## 手動安裝（同一件事拆開）
+ 1. 複製 `.dkbo/` 到專案根目錄。
+ 2. `.dkbo/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkbo-init`、`dkbo-add-role`、`dkbo-brain`、`dkbo-plan`、`dkbo-run` 五個 symlink；在 `AGENTS.md` 尾端追加一行指向 `.dkbo/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `.dkbo/.sessions/`。既有內容一律不動。
+ 3. `git add -A && git commit`。員工在 worktree 工作，只看得到已 commit 的檔案，這步不能省。
+ 4. 在 herdr 內的 Claude Code 執行 `/dkbo-init`：偵測已裝的 AI CLI、選主模型與第二三意見、改寫角色檔的 model/effort、預填 `.dkbo/PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突、檢查 MCP 需求。
+ 
+ ## 驗證
+ ```bash
+ .dkbo/bin/dk-whoami            # leader
+-.dkbo/bin/dk-version           # dkbo 0.9.2
++.dkbo/bin/dk-version           # dkbo 0.10.0
+ ls -l .claude/skills .agents/skills | grep dkbo   # 十個 symlink
+ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
+ ```
+ 
+ ## 日常使用
+ 沒叫 skill 時，dkbo 不會啟動 —— 在專案裡開一個 session 就是一個普通的 session。要用才叫：斜線指令只有 claude 有，領導若是 codex 或 agy（`DK_LEADER_KIND`），沒有斜線指令可打，改指名對應的 SKILL.md：`.dkbo/skills/plan/SKILL.md`、`.dkbo/skills/run/SKILL.md`、`.dkbo/skills/brain/SKILL.md`。
+ - 開任務：`/dkbo-plan`，然後說「開任務 login，顯示名『使用者登入』，需求是…」。它會寫 `request.md`、`brief.md`，`dk-brief-check` 過了才進入審查；接著 `dk-brief-review` 派 2 到 3 個不同 kind 讀需求原文與 brief，領導裁定並改完 brief，才把三份（需求原文、brief、裁定摘要）給你確認（關卡①）後停下來；你確認完叫 `/dkbo-run` 開始分波派工，員工升報時問你（關卡②），結案時給你 report 拍板（關卡③）。
++- 交棒（0.10.0 起）：`dk-task-new` 只建任務資料夾，不切 worktree、不開 workspace——計畫完可能不做，不先付那些成本。你叫 `/dkbo-run` 的那一刻，`dk-leader <short> --run` 才把任務「實體化」：對 `settings.env` 的 `DK_REPOS` 每個 repo 各切一個 `dk/<short>` 的 worktree、跑一次 `DK_SETUP_CMD` 依賴鉤子、用 `herdr workspace create` 開一個 label 與 tab 名都是 `dk/<short>` 的專屬 workspace，並在它的根 pane 起一位執行領導交棒——你這個 session 的任務就結束了，員工格子從此填在那個 workspace，你的 session 可以空出來開下一個 `/dkbo-plan`。單 repo 專案（`DK_REPOS` 是空字串）一樣走 workspace 與交棒，只是只切一個 worktree。任何一步在 agent 起來之前失敗都會整組 rollback（worktree、分支、workspace、`.task.env`），重跑 `--run` 是幂等的。
+ - 雜務與諮詢：`/dkbo-brain`，然後說「翻譯 README 成英文」「先修登入頁那個 bug」「這個設計該走哪條路」。它評估後派一位員工或給你三選一，不自己動手。
+ - 領導失憶：在領導 pane `/clear`，然後叫 `/dkbo-run`（它第一步就是 `dk-resume`）。
+ - 想知道現在做到哪：隨時跑 `.dkbo/bin/dk-resume`，不必先叫 skill —— 它是唯讀看板，開頭就印任務與本波已進行多久、每位員工等了幾分鐘。
+ - 想知道時間花在哪：`.dkbo/bin/dk-timeline [<任務>]` 從 process.md 算出每波開了多久、dev 多久、審查多久，印一張 markdown 表。只讀、零 token；結案時 `dk-task-close` 會自動把它附進 `report.md` 的「## 時間」段。
+ - 新角色：`/dkbo-add-role`。
+ - 第二位領導：在任何 herdr shell 執行 `.dkbo/bin/dk-leader pay "金流"`。它的 kind 取 `DK_LEADER_KIND`，model/effort 取該 kind `KIND_DEFAULT_TIERS` 的 L 檔；`--kind` / `--model` / `--effort` 可逐次覆寫。
+ - 每波自動附審查：dev DONE 後領導派 1–3 位 reviewer（kind 依 `.dkbo/settings.env` 的 `DK_REVIEW_KINDS`，檔位依 `DK_REVIEW_TIER`，預設 M）與 qa 並行；wave-close 會檢查裁定、每位 dev 的 report、`DK_TEST_CMD`，以及拿 worktree 的真實 git diff 比對本波的檔案所有權（沒人擁有的檔一律不放行），四道全過才關 pane 並在 worktree 內 commit 這一波。純文件波在 brief 審查欄寫 `skip: <理由>`。
+ - 人多時的版面：領導在 tab 1 左欄，員工填右側 2×2（或 3×2）；第 5 位起自動開 `<short>-2` 等 tab，每 tab 6 位。
+ 
+ ## 目錄
+@@ -68,30 +78,34 @@ tail -1 AGENTS.md CLAUDE.md     # 分別是入口行與 @AGENTS.md
+ | `roles/` | 角色檔（kind、S/M/L 三檔、職責） |
+ | `kinds/` | 各 AI CLI 的旗標對應 |
+ | `bin/` | `dk-*` 腳本，全部封裝 herdr |
+ | `tasks/<日期-短名>/` | 一個任務的全部記憶：request.md、brief、process、report、messages.log、state/ |
+ | `tasks/INDEX.md`、`tasks/BACKLOG.md`、`decisions.md`、`PROJECT.md` | 跨任務記憶 |
+ 
+ ## 更新 dkbo
+ 只更新核心，保留你的 `tasks/`、`PROJECT.md`、`decisions.md` 與自訂角色：
+ 先用 .dkbo/bin/dk-version 看目前版本，再到 tags 頁挑要升的版本。
+ ```bash
+-VER=v0.9.2 && tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp"
++VER=v0.10.0 && tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp"
+ rsync -a --exclude=tasks --exclude=PROJECT.md --exclude=decisions.md --exclude='roles/*' --exclude=.sessions --exclude=settings.env "$tmp/.dkbo/" ./.dkbo/
+ rsync -a --ignore-existing "$tmp/.dkbo/roles/" ./.dkbo/roles/   # 只補新角色，不覆蓋既有
+ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update dkbo"
+ ```
+ 
+ ## 疑難排解
+ | 症狀 | 原因 / 處理 |
+ |---|---|
+ | `dk: not running inside herdr` | 不是從 herdr 的 pane 執行。`herdr` 開啟終端後再試。 |
+ | 員工 pane 說找不到 `.dkbo/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
+ | 員工卡住不動 | 卡在審批對話框。dk-watch 會通知（任務員工與雜務員工都會）；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
+ | `herdr 0.8.x is older than the 0.9.0 dkbo needs` | dkbo 對 herdr 的 JSON 形狀與 `--ratio`／`--amount` 語義是實測 0.9.0 得到的，舊版會讓版面歪掉、watcher 靜靜失效，所以直接拒跑。升級 herdr。 |
+ | `herdr X is newer than the 0.9.x series dkbo verified` | 只是提醒，照跑。跑一次 `tests/integration/herdr-real.sh`（零 token）確認形狀沒變，沒問題就把 `.dkbo/lib/common.sh` 的 `DK_HERDR_VERIFIED` 往上調。 |
+ | 想確認守望還在 | 跑 `dk-resume` 看 `watch:` 那行，或 `dk-watch --ensure`（幂等，死了就重啟）。雜務那一側是 `dk-watch --chores --ensure`，pid 記在 `.dkbo/.sessions/chores.watch.pid`。 |
+ | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
+ | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md` 與當前階段那篇（`skills/{brain,plan,run}/SKILL.md`）；必要時 `/clear` 後重新叫該 skill。 |
+ | 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 `skills/run/SKILL.md` 補位。 |
+ | `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗、`unowned change`（本波改了沒人擁有的檔）。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |
+ | 跑了 `git clean -xdf` 之後雜務關不掉 | `.dkbo/.sessions/chores/<agent>` 是正在跑的雜務的身分證，因為是 gitignored 所以 `git clean -xdf` 會把它連同其他忽略檔一起清掉；雜務本身（pane、worktree、branch）沒事，但 `dk-chore-close` 從此找不到它。復原：`dk-chore-close <agent> --abandon`（清掉 pane、worktree、branch，不 merge）。 |
++| `dk-task-close` exit 3 | 多 repo 的預檢有 repo 衝突：訊息列出全部衝突的 repo，**一個 repo 都還沒合併**。去衝突的 repo 手動解，或開一個 it 修復波，解完重跑 `dk-task-close`。 |
++| `dk-task-close` exit 4 | 預檢都過了，真的合併時中途失敗：訊息印 merged／failed／not attempted 三份清單，已合併的 repo **不會**自動回捲（`merge --abort` 只救得了正在合併的那一個）。先看 failed 的那個 repo 出了什麼事，修好後對還沒合的 repo 補跑合併，不要整個重跑。 |
++| `dk-task-close` exit 5 | 主樹（不是 worktree）有會被覆蓋的本地變更：先 commit 或 stash 主樹自己的改動，跟任何 repo 的合併衝突無關。 |
++| 任務結束了但側邊欄還留著那個 workspace | 這是設計行為，不是 bug：`dk-task-close` 不會呼叫 `herdr workspace close`，因為執行領導自己就住在那個 workspace 的根 pane 上，結案指令的最後一行會印 `herdr workspace close <id>` 提醒你——看完 report 自己手動關即可。 |
+diff --git a/.dkbo/VERSION b/.dkbo/VERSION
+index 2003b63..78bc1ab 100644
+--- a/.dkbo/VERSION
++++ b/.dkbo/VERSION
+@@ -1 +1 @@
+-0.9.2
++0.10.0
+diff --git a/.dkbo/roles/reviewer.md b/.dkbo/roles/reviewer.md
+index 5f08392..4fbd70a 100644
+--- a/.dkbo/roles/reviewer.md
++++ b/.dkbo/roles/reviewer.md
+@@ -9,13 +9,13 @@ group: review
+ mcp: []
+ ---
+ ## 職責
+ 三種工作，**報告格式一律以切片為準**（下面的完成定義是實作波審查那一種）：
+ - 實作波審查與結案評議：讀 `waves/N.diff` 與 brief，逐條驗收標準判合規，找出會出錯、違反契約、越界改檔的地方。
+ - 計畫審查（`dk-brief-review`，開工前）：讀需求原文與 brief，回答「這份計畫做出來會不會是人要的東西」。沒有 diff、沒有 `file:line`，改為指名 brief 的段落或波次表的列。
+ - 評議波（設計題）：把意見寫在 state 的 notes（≤15 行），第二輪只准發一則反駁。
+ 
+ 不改任何程式、不跑會寫入的指令。
+ ## 完成定義
+-report 寫好（`## 規格合規` ✅/❌、`## Important`、`## Minor`，每條附 `file:line`），state `status: done`，`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`。
++report 寫好（`## 規格合規` ✅/❌、`## Important`、`## Minor`，每條附 `file:line`；多 repo 專案的差異包逐 repo 分成 `## repo <名>` 一段，`file:line` 要帶 `<名>:` 前綴，如 `api:src/routes/login.ts:42`，單 repo 專案不帶），state `status: done`，`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`。
+ ## 交接對象
+ 領導裁定並轉 BUG；收到 `[TASK] 複看` 就重讀差異包更新 report。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e392b71..4e65aec 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,12 +1,27 @@
+ # Changelog
+ 
++## 0.10.0 — 2026-09-20
++
++- feat(workspace)!: 一個任務從此有自己的 herdr workspace，在 `/dkbo-run` 那一刻才建。`dk-task-new` 只建任務資料夾——不切 worktree、不開 workspace，`.task.env` 的 `DK_WORKTREE`／`DK_BASE` 是空的，計畫完可能不做就不先付成本。`dk-leader <short> --run` 把任務「實體化」：切 worktree、跑依賴鉤子、用 `herdr workspace create --cwd <主樹>` 開 label 與 tab 名皆為 `dk/<short>` 的 workspace、在根 pane 起執行領導（`agent start --name dk/<short>`，claude 才帶這個旗標）並改綁 `.sessions`、`DK_LEADER_PANE`。`agent start` 之前任一步失敗，rollback 還原全部 worktree、分支、workspace 與 `.task.env`；重跑是幂等的。單 repo 專案（`DK_REPOS` 空字串）行為相同，只是只切一個 worktree。
++- feat(repos)!: 一個任務可以跨 N 個獨立 git repo。新的 `settings.env` 鍵 `DK_REPOS="<名>=<路徑> …"`（第一個是主 repo）；設了它，檔案所有權、`touched`、差異包、`dk-wave-close` 的越界比對、合併全部長出 repo 這個維度，所有面向人的輸出（切片、報告、越界訊息、`file:line`）在多 repo 模式下一律印 `<名>:` 前綴，單 repo 模式一律不印。新函式庫 `.dkbo/lib/repos.sh`：`dk_repos_parse`／`dk_repos_check`／`dk_repos_write`／`dk_glob_split`／`dk_glob_check`／`dk_repo_setup_cmd` 等。`DK_REPOS` 空字串時 0.9.2 的既有測試語意不變。
++- feat(setup): 新增 `DK_SETUP_CMD`／`DK_SETUP_CMD_<名>` 依賴鉤子，每個 worktree 切好之後在乾淨環境（`env -u DK_*`，同 gate c 那一套）各跑一次；失敗只警告不 rollback，log 落 `tasks/<t>/setup.<名>.log`。前端 repo 建議 `pnpm install --frozen-lockfile --prefer-offline`——不 symlink 主樹的 `node_modules`（見 `.dkbo/README.md` 的「多 repo 專案」段兩個坑）。
++- feat(task-close)!: `dk-task-close` 重寫合併流程為兩階段：先逐 repo 預檢（`merge --no-commit --no-ff` 後 abort），任一衝突就整批不合併並 exit 3、全部列名；主樹本地變更會被覆蓋則 exit 5；預檢全過才真的逐 repo 合併，中途失敗 exit 4 並印 merged／failed／not attempted 三份清單（已合併的不會自動回捲）。任務記憶固定在合併之前先 commit 一次（修掉「暫存中的改名擋住 merge」那個舊債）。**不再自動 `herdr workspace close`**——執行領導自己住在那個 workspace 的根 pane 上，成功結案的最後一行改印 `herdr workspace close <id>` 提醒人手動關。
++- feat(gates): `dk-wave-open`／`dk-review-pack`／`dk-wave-close`／`dk-spawn` 全部學會多 repo：`dk-wave-open` 逐 repo 記 base 並在切片印「## 倉庫」段；`dk-review-pack` 逐 repo 分段 `## repo <名>`；`dk-wave-close` 的 gate c 只對本波有變更的 repo 跑各自的 `DK_TEST_CMD`／`DK_TEST_CMD_<名>`、gate d 逐 repo 比對所有權並逐 repo commit；`dk-spawn` 的 pane cwd 落在成員第一個可改 glob 所在 repo 的 worktree，`DK_ADD_DIRS` 對 `.repos` 每一列各出一個 `--add-dir`（單 repo 模式維持只有主樹，不放寬既有斷言）。
++- fix(dk-task-new): 開場多驗「主 repo 是 git 根」（`dk_repos_check --no-clean` 的便宜三項），比 0.9.2 早——0.9.2 是靠 `git worktree add` 隱含這個要求，`dk-task-new` 瘦身後不再切 worktree，失敗點從 `/dkbo-run` 提前到 `/dkbo-plan`。
++- fix(repos): `dk_repos_check` 的乾淨檢查只看已追蹤檔（`git status --porcelain --untracked-files=no`）——`.dkbo/` 不進版控的專案，未追蹤檔不算髒。
++- fix(common): `dk_task_dir` 在 `DK_TASK_DIR` 分支結尾的裸 `return` 改成 `return 0`；裸 `return` 在 EXIT trap 裡回的是觸發 trap 的狀態，會讓掛了 rollback trap 的失敗路徑上 `dk_env_set` 第一行靜默退出。
++- fix(brief-check): 所有權與獨佔資源欄用了未加引號的 `for … in $(…)`，被 cwd 的真實檔名做 pathname expansion 展開，多 repo 模式的前綴檢查形同虛設；改成 `while IFS= read -r … <<< "$(…)"`。
++- docs: 三份 README 加交棒（`/dkbo-run` 才建 workspace）、多 repo 前綴、`dk-task-close` exit 3/4/5 與 workspace 不自動關、`DK_SETUP_CMD` 的 pnpm 寫法與 `node_modules` 兩個坑；`PROTOCOL.md` 加 `<名>:` 前綴與共用 worktree 段；`LEADER.md` 補 `DK_REPOS`／`DK_SETUP_CMD`；`roles/reviewer.md` 補 `file:line` 前綴；`PROJECT.md` 補多 repo 事實。
++- 測試：535 bats（+109）；shellcheck 零警告。
++- 升級：新增三把 `settings.env` 鍵（`DK_REPOS`、`DK_SETUP_CMD`，加上多 repo 專案逐 repo 的 `DK_TEST_CMD_<名>`／`DK_SETUP_CMD_<名>`），沒有新依賴、沒有新 skill、`install.sh` 沒有新 symlink。既有單 repo 專案不設 `DK_REPOS` 就是 0.9.2 的行為，唯一可見差異是 `dk-task-new` 早驗主 repo 是 git 根、`dk-task-close` 不再自動關 workspace（0.9.2 本來就沒有任務專屬 workspace 可關）。
++
+ ## 0.9.2 — 2026-09-19
+ 
+ - fix(watch): assess()/reviewer 逾時判定加 agent_status=working 與 state done 前提，跳過畫面判定不再誤判額度／審批
+ - feat(time): 領導看不到時間 —— process.md 每一行都有時間戳，卻沒有任何一支腳本讀它，於是「這一波跑多久了」「該不該催」全憑感覺，結案 report 也說不出時間花在哪。這一版把那些既有時間戳接起來：`lib/common.sh` 新增 `dk_ts_minutes "YYYY-MM-DDTHH:MM"`（純算術的 days_from_civil；`date -d` 是 GNU 限定、`date -j` 是 BSD 限定、`mktime` 是 gawk 限定，三條路各自會在另外兩種機器上斷掉），三支腳本共用同一份換算與同一套「缺來源印 `—`」的政策。`dk-resume` 的「本波」段多兩行（`任務已進行 Xh Ym`、`本波已進行 Ym`），「在線員工」每位附 `等了 N min`（dev 與 reviewer 一致）。`dk-wave-close` 成功關波時印並記一行 `wave N 耗時 Mm（dev Am、審查 Rm）`。新腳本 `dk-timeline [<任務>]` 只讀 process.md 印一張 markdown 表（任務、計畫、每波的開關與 dev／審查、結案），零 token、不寫任何檔；`dk-task-close` 結案時把它填進 `report.md` 的「## 時間」段（`templates/report.md` 同步加這一段）。只認 process.md 既有的行首 token，不新增任何要員工或領導多填的欄位。回歸樣本用真跑過的 log（`tests/fixtures/` 的 highfix 與 flowgap 原樣複製，數字與領導人手算的逐欄一致），外加一份手改成跨午夜的 `crossday-process.md` —— 曆法是自己算的，只在同一天內對的實作在單日樣本上完全看不出來。
+ - 測試：426 bats（+27）；shellcheck 零警告。
+ 
+ ## 0.9.1 — 2026-09-19
+ 
+ - fix(watch): dev 完成聚合只看 state 的 `^status: done`，而 state 檔跨波共用、`.devdone` 標記逐波 —— 成員跨兩波時，**開波到員工寫下第一份 state 之間的空窗會被判成「dev 全員完成」**（flowgap 實測兩次），誤發後標記寫成 `delivered`，真正完成時永遠不再通知，領導從此只能手動追蹤。改法：`dk-spawn` 在每次 spawn（含 `--resume`／`--handoff` 重派）當下把 state 內容的 `cksum` 存成 `.blocked/<agent>.spawn`，聚合要求「`status: done` 且內容與快照不同」才算這一輪的交付；認定過就落一個 `.blocked/wave-N.<成員>.done` latch，重派不會把已認定的完成打回未完成。不看 state 的 `wave:` 欄（員工漏填會靜默永不通知，比誤報更糟），也不看 mtime（`date -r` 在 GNU 與 BSD 語義不同）。沒有快照檔的 legacy 任務照舊只看 status。`dk-wave-close` 收波與 `--agent` 關單人時一併清 latch。
+ - fix(wave-close): gate c 用 `bash -c "$DK_TEST_CMD"` 跑測試，把領導整包 `DK_*` 環境餵給子行程；專案的測試只要 source 到會寫 `${DK_X:-預設}` 的東西就會照繼承值打到真 repo（2026-09-19 領導在自己 session 跑 gate c，在源碼倉建了 7 個 worktree 與 8 個分支）。改成以 `env -u` 逐一剝掉所有 `DK_*` 再執行，`PATH`、`HOME` 等非 `DK_*` 照舊；仍在 `DK_WORKTREE` 內跑，測試非零仍拒絕關波，`--force` 照舊放行。
+diff --git a/README.en.md b/README.en.md
+index 56a4392..ca3b8c6 100644
+--- a/README.en.md
++++ b/README.en.md
+@@ -1,17 +1,17 @@
+ # dkbo
+ 
+ [繁體中文](README.md) · **English**
+ 
+ A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
+ 
+-- Current version: `.dkbo/VERSION` (0.9.2); history in [CHANGELOG.md](CHANGELOG.md)
++- Current version: `.dkbo/VERSION` (0.10.0); history in [CHANGELOG.md](CHANGELOG.md)
+ - Repo: https://github.com/dkbo/dkbo-team
+ - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
+ 
+ ## Why
+ 
+ A single agent working on a medium-sized feature hits three walls: it forgets things once its context fills up, it confirms its own mistakes without a second opinion, and it steps on files that belong to someone else. dkbo answers with three mechanisms:
+ 
+ - **Memory lives on disk.** Everything about a task (brief, process log, each worker's state and report, the message log) is a file. After `/clear`, invoke `/dkbo-run` to carry on (its first step is `dk-resume`). A dead worker is re-spawned with `--resume`.
+ - **A multi-model review gate on every wave.** When a wave's implementation is done the leader dispatches one to three read-only reviewers, optionally of different kinds. `dk-wave-close` refuses until a verdict is recorded, every dev report has a filled test section, the project's test command passes, and the real diff stays inside the wave's declared ownership.
+ - **File ownership.** Each member's writable globs are declared in the brief and may not overlap. `dk-brief-check` blocks overlaps up front; afterwards `dk-wave-close` compares the worktree's **real git diff** (uncommitted and untracked work included) against those globs and refuses to close a wave that changed a file no member of it owns.
+@@ -26,40 +26,40 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
+         backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
+                 │  dk-msg: [DONE] [BUG] [FIXED] [QUESTION] [ESCALATE] …
+                 ▼
+         .dkbo/tasks/<date-short>/  brief.md · process.md · state/ · messages.log · report.md
+ ```
+ 
+ **Life of a task**
+ 
+ 1. You invoke `/dkbo-plan` and tell it: "open task login, display name 'User login', requirements are…".
+ 2. The leader writes `brief.md`: goal, acceptance criteria, file ownership, shared contracts, and a wave table with one row per member tagged S/M/L. It runs `dk-brief-check` and only then moves on to review. Next `dk-brief-review` dispatches 2 to 3 reviewers of different kinds to read the raw request and the brief; the leader rules on their feedback, revises the brief, and only then hands you all three — the raw request, the brief, and a summary of the ruling — to confirm. This is **gate 1**.
+-3. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own. When done they write their state and report and send `dk-msg leader "[DONE] …"`.
++3. You invoke `/dkbo-run`: only then does `dk-leader <short> --run` "materialize" the task — one worktree per repo in `DK_REPOS` (a multi-repo project; see [.dkbo/README.md](.dkbo/README.md), Traditional Chinese), a task-specific herdr workspace, and a handoff to an execution leader in its root pane, freeing your session for the next task. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own (in a multi-repo project, ownership and `touched` carry a `<name>:` prefix). When done they write their state and report and send `dk-msg leader "[DONE] …"`.
+ 4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
+ 5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
+ 6. Once qa is done and the review has a verdict, `dk-wave-close` applies four gates — the verdict line, every dev's `## 測試` section, `DK_TEST_CMD`, and an ownership check against the worktree's real diff — then closes the panes and commits the wave inside the worktree (`-m` sets the message).
+ 7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
+ 
+ **Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
+ 
+ **Layout.** The leader owns the left column of tab 1; workers fill a 2×2 or 3×2 grid on the right. From the fifth worker a new tab is opened automatically, and closed panes trigger a re-balance.
+ 
+ ## Quick start
+ 
+ Prerequisites: herdr ≥ 0.9.0 and a shell inside one of its panes (`echo $HERDR_ENV` prints `1`; the version is enforced by every dk-* command and by `install.sh` — older refuses to run, newer than the verified 0.9.x prints a one-off nudge to run the integration test), git >= 2.17, jq >= 1.5, bash 3.2+ (the version macOS ships is enough; `flock` is a soft dependency and its absence degrades to unlocked writes), and at least one of the three AI CLIs (`claude`, `codex`, `agy`). Which one drives the leader is set by `DK_LEADER_KIND` (default `claude`); the rest serve as workers and second/third opinions. The target project must be a clean git repo.
+ 
+ Paste this into a Claude Code session running inside herdr at the project root:
+ 
+ ```bash
+ test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
+ git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
+-VER=v0.9.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
++VER=v0.10.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+ .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+ .dkbo/bin/dk-whoami   # expected: leader
+ ```
+ 
+ Then run `/dkbo-init`. It detects installed AI CLIs, lets you pick the leader kind (`DK_LEADER_KIND`) and the workers' primary model plus second/third-opinion kinds, writes `settings.env`, wires the entry files, pre-fills `PROJECT.md`, and scans your existing CLAUDE.md / AGENTS.md for rules that conflict with dkbo's. Manual install and upgrade steps are in [.dkbo/README.md](.dkbo/README.md).
+ 
+ ## Roles and kinds
+ 
+ Role files live in `.dkbo/roles/<role>.md`. The frontmatter declares the kind and the S/M/L tiers (model and effort); the body is the job description and the definition of done. `/dkbo-add-role` adds a new one.
+diff --git a/README.md b/README.md
+index 5264d11..d629ee0 100644
+--- a/README.md
++++ b/README.md
+@@ -1,17 +1,17 @@
+ # dkbo
+ 
+ **繁體中文** · [English](README.en.md)
+ 
+ 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
+ 
+-- 目前版本：`.dkbo/VERSION`（0.9.2），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
++- 目前版本：`.dkbo/VERSION`（0.10.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+ - Repo：https://github.com/dkbo/dkbo-team
+ - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
+ 
+ ## 為什麼需要它
+ 
+ 單一 agent 做中型以上的功能會撞到三個牆：上下文吃緊就開始忘事、沒有第二意見就會自我確認、改到別人的檔就會互相踩。dkbo 用三個機制回應：
+ 
+ - **記憶外置**：任務的全部狀態（brief、process、每位員工的 state 與 report、訊息紀錄）都是檔案。領導 `/clear` 之後叫 `/dkbo-run` 就能接續（它第一步就是 `dk-resume`），員工掛掉用 `--resume` 重派。
+ - **多模型審查閘**：每一波實作完成，領導派 1 到 3 位不同 kind 的 reviewer 只讀差異包出意見；wave-close 會檢查裁定、每位 dev 的測試段與專案測試指令，缺一不放行。
+ - **檔案所有權**：brief 裡每個成員可改的檔案 glob 不得重疊，`dk-brief-check` 事前擋、`dk-wave-close` 事後拿 worktree 的**真實 git diff**（含未 commit 與未追蹤）比對；出現本波沒人擁有的檔就不放行。
+@@ -26,40 +26,40 @@
+         backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
+                 │  dk-msg：[DONE] [BUG] [FIXED] [QUESTION] [ESCALATE] …
+                 ▼
+         .dkbo/tasks/<日期-短名>/  brief.md · process.md · state/ · messages.log · report.md
+ ```
+ 
+ **一個任務的生命週期**
+ 
+ 1. 你叫 `/dkbo-plan`，對它說「開任務 login，顯示名『使用者登入』，需求是…」。
+ 2. 領導寫 `brief.md`：目標、驗收標準、檔案所有權、共用契約、波次表（每列一位成員，標 S/M/L 難度）。`dk-brief-check` 過了才進入審查。接著 `dk-brief-review` 派 2 到 3 個不同 kind 讀需求原文與 brief，領導裁定並改完 brief，才把三份（需求原文、brief、裁定摘要）給你確認。這是**關卡①**。
+-3. 每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔，做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
++3. 你叫 `/dkbo-run`：`dk-leader <short> --run` 這一刻才把任務「實體化」——依 `DK_REPOS`（多 repo 專案，見 [.dkbo/README.md](.dkbo/README.md)）各切一個 worktree、開一個任務專屬的 herdr workspace，並在它的根 pane 起執行領導交棒，你的 session 空出來可以開下一個任務。每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔（多 repo 時所有權與 `touched` 帶 `<名>:` 前綴），做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
+ 4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
+ 5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；不能判的問你。這是**關卡②**。
+ 6. qa DONE 且審查裁定完成，`dk-wave-close`：四道閘 —— 裁定行、每位 dev 的 `## 測試`、`DK_TEST_CMD`、真實 diff 的越界比對 —— 缺一不放行，然後關 pane 並在 worktree 內 commit（`-m` 可指定訊息）。
+ 7. 所有波結束，領導先做整分支評議，再寫 `report.md` 給你拍板。這是**關卡③**。`dk-task-close` 合併回主分支、移除 worktree、INDEX 記 done。
+ 
+ **雜務**：「翻譯 README 成英文」「先修登入頁那個 bug」這類不屬於任務的小事，領導用 `dk-chore` 派一位員工，`--code` 的會在獨立 worktree 分支工作並於 `dk-chore-close` 時合併回來。雜務員工用 `dk-msg leader` 回報，腳本會等領導閒置再送，不會漏訊。
+ 
+ **版面**：領導佔 tab 1 左欄，員工填右側 2×2 或 3×2；第 5 位起自動開新 tab，關 pane 後自動均分。
+ 
+ ## 快速開始
+ 
+ 前置：herdr ≥ 0.9.0 且在它的 pane 內（`echo $HERDR_ENV` 印 `1`；版本由每支 dk-* 與 `install.sh` 實際驗，低於就拒跑，高於已驗證的 0.9.x 會提醒你跑一次整合測試）、git ≥ 2.17、jq ≥ 1.5、bash 3.2+（macOS 內建的版本就夠；`flock` 是軟依賴，缺了退化成無鎖寫入）、三種 AI CLI 至少一種（`claude` / `codex` / `agy`）。領導這一側用哪個由 `DK_LEADER_KIND` 決定（預設 `claude`），其餘當員工與第二三意見。目標專案要是乾淨的 git repo。
+ 
+ 把下面整段貼給在 herdr 內、目標專案根目錄開啟的 Claude Code：
+ 
+ ```bash
+ test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
+ git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
+-VER=v0.9.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
++VER=v0.10.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+ .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
+ .dkbo/bin/dk-whoami   # 預期印出 leader
+ ```
+ 
+ 然後執行 `/dkbo-init`：它偵測已裝的 AI CLI、選領導 kind（`DK_LEADER_KIND`）與員工主模型、選第二三意見、寫 `settings.env`、佈線入口檔、預填 `PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突。細節、手動安裝與更新方式見 [.dkbo/README.md](.dkbo/README.md)。
+ 
+ ## 角色與 kind
+ 
+ 角色檔在 `.dkbo/roles/<角色>.md`，frontmatter 定義 kind 與 S/M/L 三檔（模型／effort），正文是職責與完成定義。`/dkbo-add-role` 可加新角色。
+diff --git a/tests/integration/README.md b/tests/integration/README.md
+index 003c91a..2a01bb6 100644
+--- a/tests/integration/README.md
++++ b/tests/integration/README.md
+@@ -143,10 +143,55 @@ What changed, and why:
+   stays valid for the unit suite (which fakes herdr and doesn't care what the real CLI
+   does), and `dk-watch`'s existing fallback already covers the real plain-text case.
+ - `tab_create.json` and `pane_layout.json` real captures (`$tmp/tab_create.json`,
+   `$tmp/pane_layout.json`) matched the stub's field names exactly (the real payloads carry
+   extra fields — `cwd`, `revision`, `scroll`, `terminal_id`, etc. on `root_pane` — that the
+   stub omits); per the brief, extra-field-only differences don't warrant a stub change, so
+   `tests/stub/responses/tab_create.json` and `pane_layout.json` are unchanged.
+ 
+ Unit suite (`tests/run.sh`) re-checked at 145/145 passing after the `DK_RATIO_MEANS`
+ default change.
++
++### 2026-09-20, 0.10.0 AC17: workspace create --label / workspace get probes
++
++Two probes added ahead of the multirepo/workspace release (`dk-leader --run` is the first
++production caller of both): `workspace create --cwd <主樹> --label dk/<short>` and
++`workspace get <id>` (reads `.result.workspace.active_tab_id`, used to rename the tab).
++
++A third probe — `agent start <name> --kind claude --pane <root_pane> -- … --name
++dk/<short>` on that workspace's root pane, to cover AC17's "root-pane agent start" leg —
++was drafted, run once, and then **removed on leader ruling 2026-09-20**: this script's
++documented contract at the top of this file is "zero-token: it never starts a real coding
++agent", and starting one (even just to reach the interactive-ready banner, no prompt sent)
++crosses that line regardless of whether it burns tokens. Exercising a real `agent start`
++against herdr belongs to layer 3 (`tests/smoke/`), not here. AC17 stands satisfied by the
++two probes below; the leader's ruling narrowed AC17's "根 pane agent start" requirement to
++"covered by the layer-3 smoke suite, not layer 2."
++
++For the record, the removed probe's one finding before it was pulled: `agent start` on a
++pane whose cwd it had never seen returned `{"error":{"code":"agent_not_ready","message":
++"agent <name> is blocked during startup and is not ready for prompts"}}` — herdr detected
++the process but claude itself was sitting at its one-time folder-trust confirmation, not
++its normal prompt. Not a herdr-shape mismatch, and not new: `skills/run/SKILL.md` already
++documents this exact failure mode for `dk-spawn` in production ("CLI 在啟動時跳了資料夾
++信任詢問"). Also tried `--dangerously-skip-permissions` to get a clean "ready" reading
++instead — the sandbox's own auto-mode classifier denied that call outright ("Create Unsafe
++Agents") and left the `dktest` session's `workspace`-scoped calls denied for the rest of
++that shell until `herdr session stop/delete dktest` tore the session down and it was
++rebuilt. Both are moot now that the probe is gone, but left here so nobody re-adds it and
++re-discovers the same dead end.
++
++Bootstrapped a throwaway `dktest` session server (see "Running from inside a herdr pane"
++above, this run was itself inside a herdr pane) and ran `tests/integration/herdr-real.sh`
++once against real herdr 0.9.0 with the two-probe version. Result: all checks `OK`, exit 0:
++
++```
++OK   workspace create root_pane=w2:p1
++OK   workspace create --label shape ws=w3 root=w3:p1
++OK   workspace get has .result.workspace.active_tab_id=w3:t1
++```
++
++(plus the pre-existing `--ratio`/`--amount`/`pane read` `NOTE` lines further down, unaffected
++by this change).
++
++Unit suite (`tests/run.sh`) unaffected — no stub or `.dkbo/` script changes were needed for
++this addition, only the integration script and this doc.
+diff --git a/tests/integration/herdr-real.sh b/tests/integration/herdr-real.sh
+index e7799ac..b81a785 100755
+--- a/tests/integration/herdr-real.sh
++++ b/tests/integration/herdr-real.sh
+@@ -8,20 +8,33 @@ ok(){ echo "OK   $*"; }; fail(){ echo "FAIL $*"; rc=1; }; rc=0
+ hv=$(herdr --version 2>/dev/null | awk 'NR==1{print $2}')
+ case "$hv" in
+   "$DK_HERDR_VERIFIED"|"$DK_HERDR_VERIFIED".*) ok "herdr $hv is the series dkbo declares verified";;
+   *) echo "NOTE herdr $hv is outside the verified $DK_HERDR_VERIFIED.x series; if everything below passes, bump DK_HERDR_VERIFIED in .dkbo/lib/common.sh";;
+ esac
+ tmp=$(mktemp -d); git -C "$tmp" init -q; git -C "$tmp" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+ H="herdr --session dktest"
+ ws=$($H workspace create --cwd "$tmp" --no-focus 2>&1) || { echo "$ws"; fail "workspace create"; exit 1; }
+ ws0=$(echo "$ws" | jq -r '.result.workspace.workspace_id')
+ root=$(echo "$ws" | jq -r '.result.root_pane.pane_id'); [ -n "$root" ] && ok "workspace create root_pane=$root" || fail "workspace create shape: $ws"
++# ── AC17: workspace create --label（dk-leader --run 開任務 workspace 用的正是這個組合）
++wsl=$($H workspace create --cwd "$tmp" --label dk/probe --no-focus 2>&1)
++wsl_id=$(echo "$wsl" | jq -r '.result.workspace.workspace_id // empty'); wsl_root=$(echo "$wsl" | jq -r '.result.root_pane.pane_id // empty')
++[ -n "$wsl_id" ] && [ -n "$wsl_root" ] && ok "workspace create --label shape ws=$wsl_id root=$wsl_root" || fail "workspace create --label shape: $wsl"
++printf '%s' "$wsl" > "$tmp/workspace_create.json"
++# ── AC17: workspace get（dk-leader --run 讀 .result.workspace.active_tab_id 來 tab rename）
++wg=$($H workspace get "$wsl_id" 2>&1)
++wg_tab=$(echo "$wg" | jq -r '.result.workspace.active_tab_id // empty')
++[ -n "$wg_tab" ] && ok "workspace get has .result.workspace.active_tab_id=$wg_tab" || fail "workspace get shape: $wg"
++printf '%s' "$wg" > "$tmp/workspace_get.json"
++# 領導 2026-09-20 裁定：本腳本零 token 契約優先，不起真 agent 驗 AC17 的「根 pane agent start」，
++# 那一段拿掉，AC17 只留 workspace create 與 workspace get 兩個探針。
++$H workspace close "$wsl_id" >/dev/null 2>&1
+ sp=$($H pane split --pane "$root" --direction right --cwd "$tmp" --no-focus --env DK_TEST=42 2>&1)
+ p=$(echo "$sp" | jq -r '.result.pane.pane_id // empty'); [ -n "$p" ] && ok "pane split pane_id=$p" || fail "pane split shape: $sp"
+ $H pane run "$p" 'echo DKENV=$DK_TEST' >/dev/null 2>&1
+ $H pane wait-output "$p" --match 'DKENV=42' --timeout 10000 >/dev/null 2>&1 && ok "--env inherited by pane shell" || fail "--env not visible: $($H pane read "$p" --lines 20)"
+ rn=$($H agent rename "$p" dktest-x 2>&1) && ok "agent rename on empty pane accepted" || ok "agent rename on empty pane rejected (expected): $(echo "$rn" | head -c 200)"
+ # NOTE: real herdr 0.9.0 rejects `--workspace` and `--cwd` together on `worktree create`
+ # ("usage: ... [--workspace ID | --cwd PATH] ..."). Production code (dk-task-new, dk-chore)
+ # only ever passes --cwd, so mirror that here instead of the brief's original --workspace+--cwd combo.
+ wt=$($H worktree create --branch dk/test --base "$(git -C "$tmp" rev-parse --abbrev-ref HEAD)" --cwd "$tmp" --no-focus 2>&1)
+ echo "$wt" | jq -e '.result.workspace.workspace_id and .result.root_pane.pane_id' >/dev/null 2>&1 && ok "worktree create shape" || fail "worktree create shape: $wt"
+diff --git a/tests/unit/04_docs.bats b/tests/unit/04_docs.bats
+index 564da01..a3ac9ea 100644
+--- a/tests/unit/04_docs.bats
++++ b/tests/unit/04_docs.bats
+@@ -83,10 +83,14 @@ teardown() { teardown_project; }
+   refute_grep '修一次' "$DK_ROOT/roles/frontend.md"
+   refute_grep '修一次' "$DK_ROOT/roles/qa.md"
+   for r in backend.md frontend.md qa.md; do grep -q '兩輪' "$DK_ROOT/roles/$r"; done
+ }
+ 
+ @test "skills/run/SKILL.md 教領導把 reviewer 的 Minor 寫成 minor process 行" {
+   # 整枝評議 Important 1：dk-review --task 與 dk-task-close 都讀 process.md 的
+   # minor 行，但沒有任何一處告訴領導要寫它 —— {{MINORS}} 對其他任務永遠是空的。
+   grep -q 'dk-process "minor N: ' "$DK_ROOT/skills/run/SKILL.md"
+ }
++
++@test "AC15: PROJECT.md 補了多 repo 事實" {
++  grep -q 'DK_REPOS' "$DK_ROOT/PROJECT.md"
++}
+diff --git a/tests/unit/21_version.bats b/tests/unit/21_version.bats
+index 18611c9..f93040d 100644
+--- a/tests/unit/21_version.bats
++++ b/tests/unit/21_version.bats
+@@ -36,13 +36,13 @@ teardown() { teardown_project; }
+ @test "dk-version tolerates a missing VERSION file" {
+   rm "$DK_ROOT/VERSION"; run dk-version; [ "$status" -eq 0 ]; [ "$output" = "dkbo unknown" ]
+ }
+ @test "the newest CHANGELOG section matches .dkbo/VERSION" {
+   v=$(tr -d '[:space:]' < "$REPO_ROOT/.dkbo/VERSION")
+   top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/CHANGELOG.md" | awk '{print $2}')
+   [ "$top" = "$v" ] || { echo "CHANGELOG top is '$top' but .dkbo/VERSION is '$v'"; false; }
+ }
+ @test "CHANGELOG 首節列出本版的每一條變更" {
+   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
+-  [[ "$sec" == *"feat(time)"* ]] || { echo "首節缺 feat(time)"; false; }
+-  [[ "$sec" == *"fix(watch)"* ]] || { echo "首節缺 fix(watch)"; false; }
++  [[ "$sec" == *"feat(workspace)"* ]] || { echo "首節缺 feat(workspace)"; false; }
++  [[ "$sec" == *"feat(repos)"* ]] || { echo "首節缺 feat(repos)"; false; }
+ }
+diff --git a/tests/unit/25_docs_policy.bats b/tests/unit/25_docs_policy.bats
+index 2417e5b..910dfb8 100644
+--- a/tests/unit/25_docs_policy.bats
++++ b/tests/unit/25_docs_policy.bats
+@@ -8,10 +8,21 @@ teardown() { teardown_project; }
+   # CHANGELOG 的歷史條目是當時的事實，不改。
+   for f in README.md README.en.md .dkbo/README.md .dkbo/decisions.md .dkbo/tasks/BACKLOG.md; do
+     ! grep -q 'docs/design' "$REPO_ROOT/$f" || { echo "$f still points into docs/design"; false; }
+   done
+ }
+ 
+ @test "stage docs reach skills by SKILL.md path, not only by slash command" {
+   grep -q '.dkbo/skills/add-role/SKILL.md' "$DK_ROOT/skills/brain/SKILL.md"
+   grep -q '.dkbo/skills/init/SKILL.md' "$DK_ROOT/LEADER.md"
+ }
++
++@test "AC15: 多 repo 的 repo 前綴或交棒在各自對應的文件段落都提到" {
++  grep -q 'DK_REPOS' "$DK_ROOT/LEADER.md"
++  grep -q '<名>:' "$DK_ROOT/PROTOCOL.md"
++  grep -q '<名>:' "$DK_ROOT/roles/reviewer.md"
++  for f in README.md README.en.md .dkbo/README.md; do
++    grep -qE '交棒|handoff|workspace' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒或 workspace"; false; }
++  done
++  grep -q 'feat(workspace)' "$REPO_ROOT/CHANGELOG.md"
++  grep -q 'feat(repos)' "$REPO_ROOT/CHANGELOG.md"
++}
