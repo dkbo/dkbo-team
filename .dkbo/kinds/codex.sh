@@ -10,5 +10,7 @@ KIND_PROMPT_QUEUES=unknown
 # "You've hit your usage limit. Upgrade to Plus to continue using Codex" —— 它同樣回 idle。
 KIND_BLOCK_RE='Allow command|Run this command\?|Do you want'
 KIND_QUOTA_RE="You've hit your usage limit|usage limit|rate limit|Upgrade to Plus"
-kind_args() { echo "-m $1 -c model_reasoning_effort=$2 -a never -s workspace-write --add-dir $DK_PROJECT_ROOT"; }
+kind_args() { echo "-m $1 -c model_reasoning_effort=$2 -a never -s workspace-write$(dk_add_dirs)"; }
+# codex 沒有設 session 顯示名的旗標（`codex --help` 只有 --name 之外的東西），回空字串。
+kind_session_args() { return 0; }
 kind_mcp_list() { codex mcp list 2>/dev/null | awk 'NR>1{print $1}'; }

@@ -56,7 +56,9 @@ agent_status() { printf '%s' "$2" | jq -r --arg a "$1" '(.result.agents // [])[]
 # 送給領導的提示必須先等它閒下來：守望觸發的前提正是領導忙著，而「提示送給 working 的 agent
 # 會排隊還是被丟掉」在三個 kind 上都還是 unknown。等待要有界，否則背景迴圈會被卡住；沒送到就
 # 不寫 delivered，下一 tick 重試。桌面通知與熔斷不受影響，各自只做一次。
-# fallback 是 pane id。leader-<short> 靠 dk-task-new 的 rename 生出來，而那一步在 panova2 回了
+# fallback 是 pane id：DK_LEADER_PANE（領導在哪），缺席的舊任務退回版面錨點 DK_ROOT_PANE。
+# 交棒之後兩者不同格，而每輪都重讀 .task.env，所以訂閱器與輪詢都自動跟上。
+# leader-<short> 靠 dk-task-new 的 rename 生出來，而那一步在 panova2 回了
 # rc=0 卻沒生效 —— herdr 從此回 agent_not_found，守望的 BLOCKED／TIMEOUT 三個出口一起靜默失效，
 # 標記檔永遠等不到 delivered。pane id 不靠 rename，是唯一不會掉的把手。
 notify_leader() { # target fallback text — bounded wait for idle, then prompt; non-zero when it did not land
@@ -103,7 +105,7 @@ handle_block() { # agent immediate — immediate=1 時不等 DK_BLOCK_SEC：畫�
     herdr notification show "dkbo: $agent blocked" --body "需要人按審批" --sound request >/dev/null 2>&1 </dev/null || true
     dk_process "blocked $agent"; echo notified >> "$m"
   fi
-  if notify_leader "$(dk_leader_name)" "${DK_ROOT_PANE:-}" "[BLOCKED] from dk-watch: $agent 卡在審批"; then echo delivered >> "$m"; fi
+  if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[BLOCKED] from dk-watch: $agent 卡在審批"; then echo delivered >> "$m"; fi
 }
 
 handle_limit() { # agent — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：那行字在撞到的當下就在畫面上了
@@ -120,7 +122,7 @@ handle_limit() { # agent — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：那�
     echo notified > "$m"
   fi
   grep -q '^delivered$' "$m" && return 0
-  if notify_leader "$(dk_leader_name)" "${DK_ROOT_PANE:-}" "[LIMIT] from dk-watch: $agent 撞額度"; then echo delivered >> "$m"; fi
+  if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[LIMIT] from dk-watch: $agent 撞額度"; then echo delivered >> "$m"; fi
 }
 
 # agent_status 前提（highfix BACKLOG）：正在工作時畫面上的字是它的工作內容，不是卡住的證據 ——
@@ -243,7 +245,7 @@ tick() {
       { echo notified; echo "tag=$tag"; } > "$m"   # tag 留著，重試時訊息才一致
     fi
     tag=$(sed -n 's/^tag=//p' "$m" | head -1)
-    if notify_leader "$(dk_leader_name)" "${DK_ROOT_PANE:-}" "[TIMEOUT] from dk-watch: $agent 逾時${tag}"; then echo delivered >> "$m"; fi
+    if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[TIMEOUT] from dk-watch: $agent 逾時${tag}"; then echo delivered >> "$m"; fi
   done < "$dir/.panes"
 
   # 本波 dev 全員完成 → 推一則聚合 [DONE]，取代員工逐筆的回報。四人波原本是四次全量喚醒，
@@ -262,7 +264,7 @@ tick() {
       m="$dir/.blocked/wave-$DK_WAVE.devdone"
       if ! { [ -f "$m" ] && grep -q '^delivered$' "$m"; }; then
         if [ ! -f "$m" ]; then dk_process "dev-done wave $DK_WAVE ($cnt: $devs)"; echo notified > "$m"; fi
-        if notify_leader "$(dk_leader_name)" "${DK_ROOT_PANE:-}" \
+        if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" \
              "[DONE] from dk-watch: wave $DK_WAVE dev 全員完成（$cnt 位：$devs）→ dk-review-pack $DK_WAVE"; then
           echo delivered >> "$m"; fi
       fi
@@ -279,7 +281,7 @@ tick() {
         dk_process "timeout wave $DK_WAVE (${DK_WAVE_TIMEOUT_MIN}min)"
         echo notified > "$m"
       fi
-      if notify_leader "$(dk_leader_name)" "${DK_ROOT_PANE:-}" "[TIMEOUT] from dk-watch: wave $DK_WAVE 超過 $DK_WAVE_TIMEOUT_MIN 分鐘未收尾"; then echo delivered >> "$m"; fi
+      if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[TIMEOUT] from dk-watch: wave $DK_WAVE 超過 $DK_WAVE_TIMEOUT_MIN 分鐘未收尾"; then echo delivered >> "$m"; fi
     fi
   fi
 }

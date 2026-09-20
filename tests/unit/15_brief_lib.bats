@@ -60,3 +60,9 @@ T
   [ "${#lines[@]}" -eq 1 ]
   [ "${lines[0]}" = 'a \| b|backend|qa|x \| y|動它要先 ESCALATE' ]
 }
+
+@test "templates/brief.md 說明 repo 前綴的兩條規則" {
+  # 多 repo 必帶、單 repo 禁帶 —— 這一段是人在寫 brief 時唯一看得到的說明
+  grep -q '<名>:' "$DK_ROOT/templates/brief.md"
+  grep -q 'DK_REPOS' "$DK_ROOT/templates/brief.md"
+}

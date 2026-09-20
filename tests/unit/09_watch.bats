@@ -14,6 +14,18 @@ teardown() { teardown_project; }
   grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
   grep -q 'blocked login-qa' "$d/process.md"
 }
+@test "[BLOCKED] 的 pane 退路優先讀 DK_LEADER_PANE" {
+  echo 'DK_LEADER_PANE="wC:p1"' >> "$d/.task.env"
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  HERDR_STUB_MISSING="leader-login" dk-watch --once
+  grep -q '^agent prompt wC:p1 \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  refute_grep '^agent prompt wB:p1 ' "$HERDR_STUB_LOG"
+}
+@test "沒有 DK_LEADER_PANE 的舊任務，[BLOCKED] 退回 DK_ROOT_PANE" {
+  mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+  HERDR_STUB_MISSING="leader-login" dk-watch --once
+  grep -q '^agent prompt wB:p1 \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+}
 @test "marker clears when unblocked" {
   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
   sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"

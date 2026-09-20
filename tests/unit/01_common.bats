@@ -180,3 +180,40 @@ P
   for i in $(seq 1 20); do grep -q "^DK_K$i=\"$i\"$" "$d/.task.env"; done
   [ -f "$DK_ROOT/.sessions/$(basename "$d").lock" ]
 }
+
+@test "dk_settings: DK_REPOS 與 DK_SETUP_CMD 預設空字串，settings.env 蓋得過" {
+  dk_settings 2>/dev/null
+  [ "$DK_REPOS" = "" ]; [ "$DK_SETUP_CMD" = "" ]
+  printf 'DK_REPOS="main=. api=/tmp/api"\nDK_SETUP_CMD="pnpm install"\n' >> "$DK_ROOT/settings.env"
+  dk_settings
+  [ "$DK_REPOS" = "main=. api=/tmp/api" ]; [ "$DK_SETUP_CMD" = "pnpm install" ]
+}
+@test "dk_settings: 每 repo 一條的動態鍵也會 export 給子行程" {
+  # DK_TEST_CMD_<名> 與 DK_SETUP_CMD_<名> 沒辦法在預設區列舉，但 gate c 與依賴鉤子
+  # 都是從子行程讀它們的 —— 只 source 不 export 的話子行程看不見。
+  printf 'DK_TEST_CMD_api="pnpm -C api test"\nDK_SETUP_CMD_api="pnpm -C api install"\n' >> "$DK_ROOT/settings.env"
+  dk_settings
+  [ "$(bash -c 'echo "$DK_TEST_CMD_api"')" = "pnpm -C api test" ]
+  [ "$(bash -c 'echo "$DK_SETUP_CMD_api"')" = "pnpm -C api install" ]
+}
+@test "shipped settings.env 有 DK_REPOS 與 DK_SETUP_CMD 兩把新鑰匙，都加了引號" {
+  for k in DK_REPOS DK_SETUP_CMD; do grep -Eq "^$k=\"[^\"]*\"" "$DK_ROOT/settings.env"; done
+  dk_settings; [ "$DK_REPOS" = "" ]   # 出貨預設是單 repo
+}
+
+@test "dk_task_dir 在 EXIT trap 裡也回 0（裸 return 會回觸發 trap 的狀態）" {
+  # bash 的 return 規定：在 trap handler 裡執行時，裸 return 回的是「觸發 trap 的那個狀態」，
+  # 不是函式最後一個指令的狀態。dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，所以
+  # rollback 型的 trap EXIT 裡每一次 dk_env_set 都會在第一行靜默退出、一個欄位都沒寫。
+  # 兩條分支都要驗：裸 return 只在 DK_TASK_DIR 那一條（dk-leader <short> --run 走的就是它，
+  # 它是按短名操作任務、不是按 pane 綁定）。綁定那條結尾是 echo，本來就回 0。
+  d=$(fixture_task login 使用者登入)
+  run bash -c '
+    . "$DK_ROOT/lib/common.sh"
+    cleanup() { DK_TASK_DIR="'"$d"'" dk_task_dir >/dev/null; echo "explicit rc=$?"
+                dk_task_dir >/dev/null; echo "bound rc=$?"; }
+    trap cleanup EXIT
+    exit 7'
+  [ "$status" -eq 7 ]
+  [ "${lines[0]}" = "explicit rc=0" ]; [ "${lines[1]}" = "bound rc=0" ]
+}

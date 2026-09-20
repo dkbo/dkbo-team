@@ -90,3 +90,36 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
   assert_quota claude "You've hit your usage limit"
   assert_quota claude 'rate limit'
 }
+
+# --- DK_ADD_DIRS：多 repo 時每個 worktree 各一個 --add-dir（共用契約）-------------
+@test "kind_args 沒設 DK_ADD_DIRS 時就是主樹一項（與 0.9.2 相同）" {
+  for k in claude codex agy; do
+    a=$(dk_kind_args "$k" "$(sed -n 's/.*M=\([^ ]*\).*/\1/p' <<< "$(grep '^KIND_DEFAULT_TIERS=' "$DK_ROOT/kinds/$k.sh")")")
+    [ "$(grep -o -- '--add-dir' <<< "$a" | wc -l)" -eq 1 ] || { echo "$k: $a"; false; }
+    [[ "$a" == *"--add-dir $DK_PROJECT_ROOT"* ]] || { echo "$k: $a"; false; }
+  done
+}
+@test "kind_args 逐項展開 DK_ADD_DIRS，三個 kind 都一樣" {
+  export DK_ADD_DIRS="/m /wt/api /wt/shared"
+  for k in claude codex agy; do
+    a=$(dk_kind_args "$k" "$(sed -n 's/.*L=\([^ "]*\).*/\1/p' <<< "$(grep '^KIND_DEFAULT_TIERS=' "$DK_ROOT/kinds/$k.sh")")")
+    [ "$(grep -o -- '--add-dir' <<< "$a" | wc -l)" -eq 3 ] || { echo "$k: $a"; false; }
+    for p in /m /wt/api /wt/shared; do
+      [[ "$a" == *"--add-dir $p"* ]] || { echo "$k 少了 $p: $a"; false; }
+    done
+    refute_grep -q -- "--add-dir $DK_PROJECT_ROOT" <<< "$a"   # DK_ADD_DIRS 是完整清單，不是附加
+  done
+}
+
+# --- kind_session_args：CLI 那側的 session 顯示名（AC19）--------------------------
+@test "kind_session_args: claude 帶 --name，codex 與 agy 不帶" {
+  dk_kind_load claude; [ "$(kind_session_args 'dk/login')" = "--name dk/login" ]
+  dk_kind_load codex;  [ -z "$(kind_session_args 'dk/login')" ]
+  dk_kind_load agy;    [ -z "$(kind_session_args 'dk/login')" ]
+}
+@test "kind_session_args: 三個 kind 都宣告了它，名字空的時候不吐半截旗標" {
+  for k in claude codex agy; do
+    grep -q '^kind_session_args()' "$DK_ROOT/kinds/$k.sh" || { echo "$k 沒有 kind_session_args"; false; }
+    dk_kind_load "$k"; [ -z "$(kind_session_args '')" ] || { echo "$k 對空名字吐了東西"; false; }
+  done
+}

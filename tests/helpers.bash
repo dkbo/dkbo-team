@@ -46,16 +46,50 @@ teardown_project() {
   done
   p=$(cat "$DK_ROOT/.sessions/chores.watch.pid" 2>/dev/null || true)
   [ -n "$p" ] && kill "$p" 2>/dev/null || true
-  rm -rf "$PROJECT"
+  # setup_multirepo 的兩個 repo 是 $PROJECT 的兄弟目錄（多 repo 的路徑必須在主樹之外，
+  # 否則 git 會把它們當成主 repo 的子目錄）—— 沒呼叫過 setup_multirepo 時這兩行是 no-op。
+  rm -rf "$PROJECT" "$PROJECT-api" "$PROJECT-shared"
+}
+# 多 repo fixture：在 $PROJECT 之外另建 api 與 shared 兩個 git repo，並把 DK_REPOS 追加進
+# settings.env。旗標用 MULTIREPO 而不是 DK_MULTIREPO：setup_project 會整片洗掉 DK_*，
+# 而這個旗標要活過 setup_project 之後的每一個 helper 呼叫。
+setup_multirepo() {
+  REPO_API="$PROJECT-api"; REPO_SHARED="$PROJECT-shared"
+  local r
+  for r in "$REPO_API" "$REPO_SHARED"; do
+    mkdir -p "$r"
+    git -C "$r" init -q
+    git -C "$r" config user.name t; git -C "$r" config user.email t@t
+    git -C "$r" commit -q --allow-empty -m init
+    git -C "$r" branch -M main
+  done
+  printf 'DK_REPOS="main=. api=%s shared=%s"\n' "$REPO_API" "$REPO_SHARED" >> "$DK_ROOT/settings.env"
+  printf 'DK_TEST_CMD_api="true"\n' >> "$DK_ROOT/settings.env"
+  MULTIREPO=1
+  export REPO_API REPO_SHARED MULTIREPO
 }
 stub_calls() { cat "$HERDR_STUB_LOG"; }
+# 把一個 repo 弄成「已追蹤檔有未 commit 的改動」。dk_repos_check 的乾淨檢查只看已追蹤檔
+# （領導 2026-09-20T09:41 ruling：.dkbo/ 不進版控的專案不該每次 --run 都被自己擋下），
+# 所以要測「不乾淨」就不能只丟一個未追蹤檔進去。
+repo_dirty_tracked() { # [REPO]（預設 $PROJECT）
+  local r="${1:-$PROJECT}"
+  echo v1 > "$r/tracked.txt"
+  git -C "$r" add tracked.txt
+  git -C "$r" -c user.name=t -c user.email=t@t commit -q -m tracked
+  echo v2 > "$r/tracked.txt"        # 已追蹤、已修改、未 commit
+}
 # 雜務檔住在 _chores/<日期>/ 底下；0.5.0 之前開的 legacy 檔還在根層。兩層都算。
 # || true：兩個 glob 通常只有一個命中，ls 對另一個回非零，而 bats 在 set -e 下跑。
 chore_files() { ls "$DK_ROOT/tasks/_chores/"*/*.md "$DK_ROOT/tasks/_chores/"*.md 2>/dev/null || true; }
 # Make a bound task quickly without dk-task-new (for tests of later scripts).
-fixture_task() { # $1=short $2=display
+fixture_task() { # $1=short $2=display —— setup_multirepo 跑過的話，照 DK_REPOS 逐 repo 切 worktree
   local d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-$1"
   mkdir -p "$d/state"
+  # 多 repo 的主 repo worktree 在 .worktrees/<short>/main（決策⑥）。fixture_task 跑在
+  # 命令替換的子 shell 裡，所以這個覆寫只影響它自己寫出去的 .task.env 與 .repos —— 呼叫端的
+  # $WORKTREE_PATH 不會跟著變，要拿多 repo 的 worktree 路徑請用 dk_repo_field "$d" <名> wt。
+  [ -n "${MULTIREPO:-}" ] && WORKTREE_PATH="$PROJECT/.worktrees/$1/main"
   sed -e "s#{{DISPLAY}}#$2#g; s#{{SHORT}}#$1#g; s#{{BRANCH}}#dk/$1#g; s#{{WORKTREE}}#$WORKTREE_PATH#g; s#{{SOURCE}}#test#g" \
     "$DK_ROOT/templates/brief.md" > "$d/brief.md"
   : > "$d/process.md"; : > "$d/messages.log"; : > "$d/.panes"
@@ -74,10 +108,24 @@ DK_WAVE_STARTED=""
 DK_KIND_DOWN=""
 DK_TABS=""
 E
-  rm -rf "$WORKTREE_PATH"; mkdir -p "$(dirname "$WORKTREE_PATH")"
-  git -C "$PROJECT" worktree add -q -b "dk/$1" "$WORKTREE_PATH" main >/dev/null 2>&1
+  # .repos 在真實流程裡是 dk-leader --run 寫的；fixture 直接落一份，單 repo 模式也有（一列，
+  # 名字固定 main），這樣每個讀 .repos 的呼叫端只有一條路。
+  local n p wt
+  : > "$d/.repos"
+  for e in $(fixture_repos); do
+    n=${e%%=*}; p=${e#*=}
+    wt="$WORKTREE_PATH"; [ -n "${MULTIREPO:-}" ] && wt="$PROJECT/.worktrees/$1/$n"
+    rm -rf "$wt"; mkdir -p "$(dirname "$wt")"
+    git -C "$p" worktree add -q -b "dk/$1" "$wt" main >/dev/null 2>&1
+    printf '%s %s %s %s\n' "$n" "$p" "$wt" "$(git -C "$p" rev-parse HEAD)" >> "$d/.repos"
+  done
   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
   echo "$d"
+}
+# fixture 用的 <名>=<repo 根> 清單（單 repo 一項）。路徑不含空白，所以可以用空白分隔的字串傳。
+fixture_repos() {
+  if [ -n "${MULTIREPO:-}" ]; then echo "main=$PROJECT api=$REPO_API shared=$REPO_SHARED"
+  else echo "main=$PROJECT"; fi
 }
 fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
   cat > "$1/brief.md" <<'B'

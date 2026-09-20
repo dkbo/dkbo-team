@@ -155,7 +155,18 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   screen 'thinking...'
   HERDR_STUB_FAIL="pane wait-output" dk-watch --events --once
   [ ! -f "$d/.blocked/login-qa" ]
-  ! grep -q 'BLOCKED\|LIMIT' "$HERDR_STUB_LOG"
+  refute_grep 'BLOCKED\|LIMIT' "$HERDR_STUB_LOG"
+}
+
+@test "訂閱器推 [BLOCKED] 時也走 DK_LEADER_PANE 的退路" {
+  # 守望每輪重讀 .task.env，所以交棒之後訂閱器自動改推到執行領導那一格。
+  echo 'DK_LEADER_PANE="wC:p1"' >> "$d/.task.env"
+  printf '{"id":"cli:pane:wait-output","result":{"matched_line":"Run this command?","pane_id":"wC:p3"}}\n' \
+    > "$HERDR_STUB_RESPONSES/pane_wait-output.json"
+  screen 'Requesting permission for:\nRun this command?'
+  HERDR_STUB_MISSING="leader-login" dk-watch --events --once
+  grep -q '^agent prompt wC:p1 \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+  refute_grep '^agent prompt wB:p1 ' "$HERDR_STUB_LOG"
 }
 
 # --- AC4: 事件路徑同樣受 agent_status 前提約束 ---

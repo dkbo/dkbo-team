@@ -11,5 +11,8 @@ KIND_PROMPT_QUEUES=unknown   # layer-3 smoke updates this: does a prompt sent wh
 # claude 的審批 herdr 認得（會回 blocked），這兩行是第二道訊號，不是唯一依據。
 KIND_BLOCK_RE='Do you want|Allow this|❯ 1\. Yes'
 KIND_QUOTA_RE='usage limit|rate limit'
-kind_args() { echo "--model $1 --effort $2 --permission-mode auto --add-dir $DK_PROJECT_ROOT"; }
+kind_args() { echo "--model $1 --effort $2 --permission-mode auto$(dk_add_dirs)"; }
+# CLI 那側的 session 顯示名（session picker 與終端標題）。herdr 的註冊名是另一回事：
+# 它只吃 [a-z][a-z0-9_-]{0,31}，放不進 workspace 名字裡的斜線。
+kind_session_args() { [ -n "${1:-}" ] && echo "--name $1"; return 0; }
 kind_mcp_list() { claude mcp list 2>/dev/null | awk -F: 'NF>1{print $1}'; }

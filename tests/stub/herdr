@@ -27,5 +27,22 @@ if [ "$cmd" = agent ] && [ "$sub" = rename ] && [ -z "${HERDR_STUB_RENAME_NOOP:-
   printf '{"id":"cli:agent:get","result":{"agent":{"agent":"claude","name":%s,"agent_status":"idle","pane_id":"%s"}}}\n' \
     "$n" "${3:-}" > "${HERDR_STUB_RESPONSES:?}/agent_get.json"
 fi
+# agent start 之後，真 herdr 的 `agent get <那個 pane>` 會回剛起的 agent。stub 不記這一步的話，
+# dk-leader --run 的「已交棒就只印一行」幂等判斷無從測起 —— 它問的正是根 pane 上有沒有 leader-<short>。
+# 逐 pane 一個檔，所以只有真的被 start 過的 pane 會改答案，其他 pane 照舊讀通用的 agent_get.json。
+if [ "$cmd" = agent ] && [ "$sub" = start ]; then
+  _n="${3:-}"; _p=""; _prev=""
+  for _a in "$@"; do
+    if [ "$_prev" = --pane ]; then _p="$_a"; break; fi
+    _prev="$_a"
+  done
+  if [ -n "$_p" ]; then
+    printf '{"id":"cli:agent:get","result":{"agent":{"agent":"claude","name":"%s","agent_status":"idle","pane_id":"%s"}}}\n' \
+      "$_n" "$_p" > "${HERDR_STUB_RESPONSES:?}/agent_get.$_p.json"
+  fi
+fi
+if [ "$cmd" = agent ] && [ "$sub" = get ] && [ -f "${HERDR_STUB_RESPONSES:?}/agent_get.${3:-}.json" ]; then
+  cat "${HERDR_STUB_RESPONSES:?}/agent_get.${3:-}.json"; exit 0
+fi
 f="${HERDR_STUB_RESPONSES:?}/${key}.json"
 if [ -f "$f" ]; then cat "$f"; else echo "{\"id\":\"cli:$cmd:$sub\",\"result\":{}}"; fi
