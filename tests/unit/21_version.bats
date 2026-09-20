@@ -43,6 +43,6 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  [[ "$sec" == *"feat(time)"* ]] || { echo "首節缺 feat(time)"; false; }
-  [[ "$sec" == *"fix(watch)"* ]] || { echo "首節缺 fix(watch)"; false; }
+  [[ "$sec" == *"feat(workspace)"* ]] || { echo "首節缺 feat(workspace)"; false; }
+  [[ "$sec" == *"feat(repos)"* ]] || { echo "首節缺 feat(repos)"; false; }
 }

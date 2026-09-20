@@ -90,3 +90,7 @@ teardown() { teardown_project; }
   # minor 行，但沒有任何一處告訴領導要寫它 —— {{MINORS}} 對其他任務永遠是空的。
   grep -q 'dk-process "minor N: ' "$DK_ROOT/skills/run/SKILL.md"
 }
+
+@test "AC15: PROJECT.md 補了多 repo 事實" {
+  grep -q 'DK_REPOS' "$DK_ROOT/PROJECT.md"
+}

@@ -15,3 +15,14 @@ teardown() { teardown_project; }
   grep -q '.dkbo/skills/add-role/SKILL.md' "$DK_ROOT/skills/brain/SKILL.md"
   grep -q '.dkbo/skills/init/SKILL.md' "$DK_ROOT/LEADER.md"
 }
+
+@test "AC15: 多 repo 的 repo 前綴或交棒在各自對應的文件段落都提到" {
+  grep -q 'DK_REPOS' "$DK_ROOT/LEADER.md"
+  grep -q '<名>:' "$DK_ROOT/PROTOCOL.md"
+  grep -q '<名>:' "$DK_ROOT/roles/reviewer.md"
+  for f in README.md README.en.md .dkbo/README.md; do
+    grep -qE '交棒|handoff|workspace' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒或 workspace"; false; }
+  done
+  grep -q 'feat(workspace)' "$REPO_ROOT/CHANGELOG.md"
+  grep -q 'feat(repos)' "$REPO_ROOT/CHANGELOG.md"
+}

@@ -150,3 +150,48 @@ What changed, and why:
 
 Unit suite (`tests/run.sh`) re-checked at 145/145 passing after the `DK_RATIO_MEANS`
 default change.
+
+### 2026-09-20, 0.10.0 AC17: workspace create --label / workspace get probes
+
+Two probes added ahead of the multirepo/workspace release (`dk-leader --run` is the first
+production caller of both): `workspace create --cwd <主樹> --label dk/<short>` and
+`workspace get <id>` (reads `.result.workspace.active_tab_id`, used to rename the tab).
+
+A third probe — `agent start <name> --kind claude --pane <root_pane> -- … --name
+dk/<short>` on that workspace's root pane, to cover AC17's "root-pane agent start" leg —
+was drafted, run once, and then **removed on leader ruling 2026-09-20**: this script's
+documented contract at the top of this file is "zero-token: it never starts a real coding
+agent", and starting one (even just to reach the interactive-ready banner, no prompt sent)
+crosses that line regardless of whether it burns tokens. Exercising a real `agent start`
+against herdr belongs to layer 3 (`tests/smoke/`), not here. AC17 stands satisfied by the
+two probes below; the leader's ruling narrowed AC17's "根 pane agent start" requirement to
+"covered by the layer-3 smoke suite, not layer 2."
+
+For the record, the removed probe's one finding before it was pulled: `agent start` on a
+pane whose cwd it had never seen returned `{"error":{"code":"agent_not_ready","message":
+"agent <name> is blocked during startup and is not ready for prompts"}}` — herdr detected
+the process but claude itself was sitting at its one-time folder-trust confirmation, not
+its normal prompt. Not a herdr-shape mismatch, and not new: `skills/run/SKILL.md` already
+documents this exact failure mode for `dk-spawn` in production ("CLI 在啟動時跳了資料夾
+信任詢問"). Also tried `--dangerously-skip-permissions` to get a clean "ready" reading
+instead — the sandbox's own auto-mode classifier denied that call outright ("Create Unsafe
+Agents") and left the `dktest` session's `workspace`-scoped calls denied for the rest of
+that shell until `herdr session stop/delete dktest` tore the session down and it was
+rebuilt. Both are moot now that the probe is gone, but left here so nobody re-adds it and
+re-discovers the same dead end.
+
+Bootstrapped a throwaway `dktest` session server (see "Running from inside a herdr pane"
+above, this run was itself inside a herdr pane) and ran `tests/integration/herdr-real.sh`
+once against real herdr 0.9.0 with the two-probe version. Result: all checks `OK`, exit 0:
+
+```
+OK   workspace create root_pane=w2:p1
+OK   workspace create --label shape ws=w3 root=w3:p1
+OK   workspace get has .result.workspace.active_tab_id=w3:t1
+```
+
+(plus the pre-existing `--ratio`/`--amount`/`pane read` `NOTE` lines further down, unaffected
+by this change).
+
+Unit suite (`tests/run.sh`) unaffected — no stub or `.dkbo/` script changes were needed for
+this addition, only the integration script and this doc.

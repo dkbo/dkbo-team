@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.9.2），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.10.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -33,7 +33,7 @@
 
 1. 你叫 `/dkbo-plan`，對它說「開任務 login，顯示名『使用者登入』，需求是…」。
 2. 領導寫 `brief.md`：目標、驗收標準、檔案所有權、共用契約、波次表（每列一位成員，標 S/M/L 難度）。`dk-brief-check` 過了才進入審查。接著 `dk-brief-review` 派 2 到 3 個不同 kind 讀需求原文與 brief，領導裁定並改完 brief，才把三份（需求原文、brief、裁定摘要）給你確認。這是**關卡①**。
-3. 每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔，做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
+3. 你叫 `/dkbo-run`：`dk-leader <short> --run` 這一刻才把任務「實體化」——依 `DK_REPOS`（多 repo 專案，見 [.dkbo/README.md](.dkbo/README.md)）各切一個 worktree、開一個任務專屬的 herdr workspace，並在它的根 pane 起執行領導交棒，你的 session 空出來可以開下一個任務。每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔（多 repo 時所有權與 `touched` 帶 `<名>:` 前綴），做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
 4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
 5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；不能判的問你。這是**關卡②**。
 6. qa DONE 且審查裁定完成，`dk-wave-close`：四道閘 —— 裁定行、每位 dev 的 `## 測試`、`DK_TEST_CMD`、真實 diff 的越界比對 —— 缺一不放行，然後關 pane 並在 worktree 內 commit（`-m` 可指定訊息）。
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.9.2; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.10.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # 預期印出 leader

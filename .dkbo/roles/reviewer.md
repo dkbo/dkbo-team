@@ -16,6 +16,6 @@ mcp: []
 
 不改任何程式、不跑會寫入的指令。
 ## 完成定義
-report 寫好（`## 規格合規` ✅/❌、`## Important`、`## Minor`，每條附 `file:line`），state `status: done`，`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`。
+report 寫好（`## 規格合規` ✅/❌、`## Important`、`## Minor`，每條附 `file:line`；多 repo 專案的差異包逐 repo 分成 `## repo <名>` 一段，`file:line` 要帶 `<名>:` 前綴，如 `api:src/routes/login.ts:42`，單 repo 專案不帶），state `status: done`，`dk-msg leader "[DONE] review 波 N: Important K 條，見 report"`。
 ## 交接對象
 領導裁定並轉 BUG；收到 `[TASK] 複看` 就重讀差異包更新 report。
