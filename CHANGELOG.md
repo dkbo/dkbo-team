@@ -11,8 +11,10 @@
 - fix(repos): `dk_repos_check` 的乾淨檢查只看已追蹤檔（`git status --porcelain --untracked-files=no`）——`.dkbo/` 不進版控的專案，未追蹤檔不算髒。
 - fix(common): `dk_task_dir` 在 `DK_TASK_DIR` 分支結尾的裸 `return` 改成 `return 0`；裸 `return` 在 EXIT trap 裡回的是觸發 trap 的狀態，會讓掛了 rollback trap 的失敗路徑上 `dk_env_set` 第一行靜默退出。
 - fix(brief-check): 所有權與獨佔資源欄用了未加引號的 `for … in $(…)`，被 cwd 的真實檔名做 pathname expansion 展開，多 repo 模式的前綴檢查形同虛設；改成 `while IFS= read -r … <<< "$(…)"`。
+- fix(repos): 主 repo 的乾淨檢查排除 `.dkbo/` 底下的路徑（`git status … -- . ':!.dkbo'`）——dkbo 自己的任務記帳（`INDEX.md`／`process.md`…）從 `dk-task-new` 到 `dk-task-close` 之間永遠是已追蹤且已修改，那不是工作樹不乾淨；把 `.dkbo/` 進版控的專案（含本倉）不排除的話，`--run` 會被自己的任務記帳擋死。`.dkbo/` 只存在於主 repo，其餘 repo 這條 pathspec 排除不到東西，行為不變。
+- fix(leader,wave-close): `dk-leader --run` 的 `DK_SETUP_CMD` 鉤子與 `dk-wave-close` gate c 的測試指令都跑在 `while read <<< "$repo_rows"` 的迴圈裡；鉤子或測試指令若讀一次 stdin（互動提示、docker compose…），會吃掉迴圈的 herestring，後面的 repo 靜默不跑。兩處都加 `< /dev/null`；`dk-wave-close` 逐 repo commit 那一句雖然 `-m` 下 `git commit` 不讀 stdin，同一個迴圈、同一類曝險，一併加固。
 - docs: 三份 README 加交棒（`/dkbo-run` 才建 workspace）、多 repo 前綴、`dk-task-close` exit 3/4/5 與 workspace 不自動關、`DK_SETUP_CMD` 的 pnpm 寫法與 `node_modules` 兩個坑；`PROTOCOL.md` 加 `<名>:` 前綴與共用 worktree 段；`LEADER.md` 補 `DK_REPOS`／`DK_SETUP_CMD`；`roles/reviewer.md` 補 `file:line` 前綴；`PROJECT.md` 補多 repo 事實。
-- 測試：535 bats（+109）；shellcheck 零警告。
+- 測試：539 bats（+113）；shellcheck 零警告。
 - 升級：新增三把 `settings.env` 鍵（`DK_REPOS`、`DK_SETUP_CMD`，加上多 repo 專案逐 repo 的 `DK_TEST_CMD_<名>`／`DK_SETUP_CMD_<名>`），沒有新依賴、沒有新 skill、`install.sh` 沒有新 symlink。既有單 repo 專案不設 `DK_REPOS` 就是 0.9.2 的行為，唯一可見差異是 `dk-task-new` 早驗主 repo 是 git 根、`dk-task-close` 不再自動關 workspace（0.9.2 本來就沒有任務專屬 workspace 可關）。
 
 ## 0.9.2 — 2026-09-19

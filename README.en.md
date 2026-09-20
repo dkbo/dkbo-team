@@ -20,7 +20,7 @@ A single agent working on a medium-sized feature hits three walls: it forgets th
 
 ```
 you ──chat──▶ leader (Claude Code, left column of tab 1)
-                │  dk-task-new / dk-spawn / dk-review / dk-wave-close / dk-task-close
+                │  dk-task-new / dk-leader --run / dk-spawn / dk-review / dk-wave-close / dk-task-close
                 ▼
         worker panes (herdr splits, each inside the task worktree)
         backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
@@ -81,7 +81,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | Command | What it does |
 |---|---|
 | `dk-whoami` | Is this pane the leader or a worker |
-| `dk-task-new` / `dk-brief-check` | Create the task directory and worktree; mechanical brief check |
+| `dk-task-new` / `dk-brief-check` | Create the task directory only (no worktree — `/dkbo-run` materializes it at handoff); mechanical brief check |
 | `dk-brief-review` | Before work starts, dispatch 1 to 3 reviewers to review the brief and the raw request (an AI gate, the second one before gate 1) |
 | `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices; open a worker pane and prompt it |
 | `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
@@ -93,7 +93,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-chore` / `dk-chore-close` | Dispatch and finish a chore |
 | `dk-chore-tidy` | File chore notes under their date folder, archive `messages.log` (only when no chore is running) |
 | `dk-watch` | Background watcher: pushes `[BLOCKED]` when a worker is stuck on an approval, `[TIMEOUT]` when a reviewer overruns, and trips the breaker for that kind. `--ensure` restarts it idempotently (dk-spawn, dk-wave-open and dk-resume all call it); `--chores` watches the chore side |
-| `dk-leader` / `dk-version` | Start a second leader (kind from `DK_LEADER_KIND`, tier L of that kind); print the version |
+| `dk-leader` / `dk-version` | Start a second leader (kind from `DK_LEADER_KIND`, tier L of that kind); `--run` materializes the task (worktrees per `DK_REPOS`, a task-specific workspace) and hands off to the execution leader in that workspace's root pane; print the version |
 
 ## Layout of the repo
 

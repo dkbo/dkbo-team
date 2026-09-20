@@ -20,7 +20,7 @@
 
 ```
 你 ──對話──▶ 領導（Claude Code，tab 1 左欄）
-                │  dk-task-new / dk-spawn / dk-review / dk-wave-close / dk-task-close
+                │  dk-task-new / dk-leader --run / dk-spawn / dk-review / dk-wave-close / dk-task-close
                 ▼
         員工 pane（herdr 分割，各自在任務 worktree 內）
         backend · frontend · qa · reviewer-a(claude) · reviewer-b(codex) …
@@ -81,7 +81,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | 指令 | 做什麼 |
 |---|---|
 | `dk-whoami` | 這個 pane 是領導還是員工 |
-| `dk-task-new` / `dk-brief-check` | 開任務目錄與 worktree；brief 的機械檢查 |
+| `dk-task-new` / `dk-brief-check` | 只建任務目錄（不切 worktree，`/dkbo-run` 交棒時才實體化）；brief 的機械檢查 |
 | `dk-brief-review` | 開工前派 1 到 3 位 reviewer 審 brief 與需求原文（AI 閘，關卡①前的第二道） |
 | `dk-wave-open N` / `dk-spawn <角色>` | 開一波、切成員切片；開員工 pane 並下提示 |
 | `dk-msg <對象> "[類型] 內文"` | 等對方閒置再送訊息，記進 messages.log |
@@ -93,7 +93,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
 | `dk-chore-tidy` | 雜務檔歸位到日期資料夾、`messages.log` 歸檔（沒有雜務在跑時） |
 | `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
-| `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；印版本 |
+| `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；`--run` 實體化任務（依 `DK_REPOS` 切 worktree、開任務專屬 workspace）並交棒給該 workspace 根 pane 的執行領導；印版本 |
 
 ## 目錄
 

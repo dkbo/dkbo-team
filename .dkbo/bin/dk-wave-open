@@ -2,7 +2,7 @@
 # dk-wave-open <N> — open wave N: record the base sha, set DK_WAVE, render one brief slice per member.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/frontmatter.sh"; . "$DK_ROOT/lib/brief.sh"; . "$DK_ROOT/lib/repos.sh"
-dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_settings
 n="${1:-}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-wave-open <N>"
 # 計畫階段的任務還沒有 worktree（dk-task-new 只建資料夾）。擋在這裡而不是讓 git -C "" 自己
 # 炸掉：領導看到的必須是下一步該跑什麼，不是一行 git 的 fatal。
@@ -27,7 +27,9 @@ base=$(git -C "$DK_WORKTREE" rev-parse HEAD)
 # 呼叫端（dk_changed_repo_files、dk-review-pack）才只有一條路。
 repo_rows=$(dk_repos_rows "$dir" 2>/dev/null || true)
 [ -n "$repo_rows" ] || repo_rows="main $DK_PROJECT_ROOT $DK_WORKTREE $base"
-repos_list=$(printf '%s\n' "$repo_rows" | awk '{print $1 " → " $3}')
+# 單 repo 模式只印路徑、不印 main →（比照 dk-resume，面向人的輸出在單 repo 模式一律不帶 repo 前綴）
+if dk_repos_multi; then repos_list=$(printf '%s\n' "$repo_rows" | awk '{print $1 " → " $3}')
+else repos_list=$(printf '%s\n' "$repo_rows" | awk '{print $3}'); fi
 goal=$(dk_brief_section "$brief" "## 目標"); contract=$(dk_brief_section "$brief" "## 共用契約"); acc=$(dk_brief_section "$brief" "## 驗收標準")
 constraints=$(dk_brief_constraints "$brief")
 peers=$(echo "$members" | tr '\n' ' ' | sed 's/ $//')

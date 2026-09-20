@@ -84,8 +84,9 @@ multirepo_task() {
   done
 }
 
-@test "AC9: 單 repo 模式的切片也有「## 倉庫」段，就一列 main" {
+@test "AC9: 單 repo 模式的切片也有「## 倉庫」段，只印 worktree 路徑、不印 main →" {
   run dk-wave-open 1; [ "$status" -eq 0 ]
   grep -q '^## 倉庫$' "$d/briefs/backend.md"
-  grep -qF "main → $WORKTREE_PATH" "$d/briefs/backend.md"
+  grep -qxF "$WORKTREE_PATH" "$d/briefs/backend.md"
+  refute_grep 'main →' "$d/briefs/backend.md"
 }
