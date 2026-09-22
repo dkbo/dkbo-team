@@ -92,3 +92,4 @@
 2026-09-23T00:31 wave 4 耗時 13m（dev 4m、審查 2m）
 2026-09-23T00:31 commit 256c75f wave 4
 2026-09-23T00:38 gate3 approved
+2026-09-23T00:38 task-close merged 0a50f1f
