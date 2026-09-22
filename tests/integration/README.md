@@ -199,11 +199,11 @@ this addition, only the integration script and this doc.
 ### 2026-09-22, 0.11.0 AC17: workspace create --label 換成 tab create（改開 tab）
 
 0.11.0 把 `dk-leader --run` 開任務根的動作從 `herdr workspace create --label` 改成
-`herdr tab create --workspace <ws>`（在人所在的 workspace 裡開新 tab），AC17 的兩個探針
+`herdr tab create --workspace <ws>`（在任務所屬的 workspace 裡開新 tab；`.task.env` 的 `DK_WORKSPACE`，計畫時記下，空時退回 `HERDR_WORKSPACE_ID`），AC17 的兩個探針
 （`workspace create --label`／`workspace get`）跟著換成三個：`tab create --workspace <id>
 --cwd --label dk/probe --no-focus --env K=V` 驗 `.result.tab.tab_id` 與
 `.result.root_pane.pane_id`、`tab get <id>` 成功、`tab close <id>` 成功；不再呼叫
-`workspace get`（`DK_WORKSPACE` 從此固定是人所在的 workspace，不需要靠 `active_tab_id`
+`workspace get`（`DK_WORKSPACE` 從此固定是任務所屬的 workspace（`.task.env` 的 `DK_WORKSPACE`，計畫時記下，空時退回 `HERDR_WORKSPACE_ID`），不需要靠 `active_tab_id`
 去 rename）。
 
 在一個重新 bootstrap 的 `dktest` session（見上方「Running from inside a herdr pane」）對

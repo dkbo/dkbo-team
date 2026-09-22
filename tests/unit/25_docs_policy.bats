@@ -37,10 +37,14 @@ teardown() { teardown_project; }
 }
 
 @test "Important4: DK_WORKSPACE 講成任務所屬，不再講成人所在的那一刻" {
-  for f in README.md README.en.md .dkbo/README.md CHANGELOG.md .dkbo/LEADER.md .dkbo/PROJECT.md; do
+  while IFS= read -r f; do
+    case "$f" in
+      .dkbo/tasks/*) continue ;;
+      tests/unit/25_docs_policy.bats) continue ;;
+    esac
     refute_grep -E '人所在的 workspace|你所在的 workspace|時所在的那個 workspace' "$REPO_ROOT/$f"
     refute_grep -E "workspace you're (already )?in" "$REPO_ROOT/$f"
-  done
+  done < <(git -C "$REPO_ROOT" ls-files)
   grep -q '任務所屬的 workspace' "$REPO_ROOT/README.md"
   grep -q '任務所屬的 workspace' "$DK_ROOT/README.md"
   grep -q '任務所屬的 workspace' "$REPO_ROOT/CHANGELOG.md"
