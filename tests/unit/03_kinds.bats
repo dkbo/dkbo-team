@@ -91,6 +91,24 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
   assert_quota claude 'rate limit'
 }
 
+# --- codex 的「Approaching rate limits / Switch model」選單停住等人按 Enter -------------
+# 樣本是 gamemore 實跑 herdr agent read 的原文。窄 pane 會把最後一行截斷，所以整句
+# `Press enter to confirm` 認不得 24、64 兩份；式子只收 `Press enter to` 這段前綴。
+block_hits() { printf '%s' "$2" | grep -qiE "$(dk_kind_re "$1" block)"; }
+@test "codex 的審批式子認得 Switch model 選單，含窄 pane 截斷的尾巴" {
+  block_hits codex $'› 1. Switch to gpt-5.6-luna\n  2. Keep current model\n\n  Press enter to confirm or esc to go back'
+  block_hits codex $'  3. Keep cu… Hide\n              models.\n\n  Press enter to confir'   # 樣本 24
+  block_hits codex $'  2. Keep current\n     model\n\n  Press enter to con'                   # 樣本 64
+  ! block_hits codex 'OpenAI Codex (v0.31.0)  model: gpt-5.5  approval: never'
+}
+@test "Switch model 選單的窄 pane 截斷版在 dk-watch 判成 BLOCKED 而不是 LIMIT" {
+  # 窄 pane 把 `rate limit` 拆成兩行，額度式子不會先搶走；寬 pane 的標題
+  # `Approaching rate limits` 仍會被額度式子優先命中（見 CHANGELOG 0.11.2）。
+  txt=$'  2. Keep current\n     model\n  3. Keep … Hide\n            future\n            rate\n            limit\n\n  Press enter to con'
+  ! quota_hits codex "$txt"
+  block_hits codex "$txt"
+}
+
 # --- DK_ADD_DIRS：多 repo 時每個 worktree 各一個 --add-dir（共用契約）-------------
 @test "kind_args 沒設 DK_ADD_DIRS 時就是主樹一項（與 0.9.2 相同）" {
   for k in claude codex agy; do

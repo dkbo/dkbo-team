@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2 — 2026-09-23
+
+- fix(codex): codex 的「Approaching rate limits / Switch model」選單會停住等人按 Enter，但 `kinds/codex.sh` 的 `KIND_BLOCK_RE` 沒有這個選單的字樣，`dk-watch` 認不出這種卡住（gamemore 實跑樣本 24、64 都漏掉）。式子補上 `Press enter to`——收前綴不收整句：窄 pane 會截掉最後一行的尾巴，實測原文是 `Press enter to confir` 與 `Press enter to con`，整句 `Press enter to confirm` 兩份都認不得。已知仍未處理：寬 pane 上這個選單的標題 `Approaching rate limits` 會先命中額度式子的裸 `rate limit`（`dk-watch` 額度優先），被判成撞額度並熔斷 codex，但這個畫面是「快到了」不是「已耗盡」；實測樣本 2.2 上方另有真的額度用完訊息，所以結果剛好是對的，留待確認 codex 真的耗盡時印什麼再收窄。
+- 測試：552 bats（+2，`03_kinds.bats`，用實測原文）；shellcheck 零警告。
+- 升級：純修補，沒有新鍵、新依賴、新 skill。
+
 ## 0.11.1 — 2026-09-23
 
 - fix(resume): `dk-resume` 的「## BACKLOG」段原本整份 `cat tasks/BACKLOG.md`，而 BACKLOG 是只會長的跨任務記憶——0.11.0 結案後補了四條，恢復包在最後一級降級（process 10 行、state 3 行、裁定 5 行）之後仍超過 150 行，`10_resume.bats` 在 CI 紅掉（v0.11.0 的 tag CI 是紅的；領導在結案前跑的 548 綠是在那四條進來之前）。改成只印表頭與最後 8 條，超出的留一行「另有 N 條較早的，見 tasks/BACKLOG.md」；預算從此不再被 BACKLOG 的長度左右。補兩條測試。

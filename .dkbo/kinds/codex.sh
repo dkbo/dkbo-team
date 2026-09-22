@@ -8,7 +8,10 @@ KIND_PROMPT_QUEUES=unknown
 
 # codex 走 -a never，照理不該停在審批，但真停了也要認得。額度那行是 panova2 撞到的原文：
 # "You've hit your usage limit. Upgrade to Plus to continue using Codex" —— 它同樣回 idle。
-KIND_BLOCK_RE='Allow command|Run this command\?|Do you want'
+# 「Approaching rate limits / Switch model」選單也會停住等人按 Enter（gamemore 實測）。收的是
+# `Press enter to` 這段前綴而不是整句：窄 pane 會把尾巴截掉，實測原文是 `Press enter to confir`
+# 與 `Press enter to con`，整句 `Press enter to confirm` 兩個都認不得。
+KIND_BLOCK_RE='Allow command|Run this command\?|Do you want|Press enter to'
 KIND_QUOTA_RE="You've hit your usage limit|usage limit|rate limit|Upgrade to Plus"
 kind_args() { echo "-m $1 -c model_reasoning_effort=$2 -a never -s workspace-write$(dk_add_dirs)"; }
 # codex 沒有設 session 顯示名的旗標（`codex --help` 只有 --name 之外的東西），回空字串。
