@@ -1,0 +1,39 @@
+2026-09-22T21:19 tasktab-reviewer-p1 -> leader-tasktab [DONE] brief-review: 要改 1 處，見 report
+2026-09-22T21:56 leader-tasktab [ACK]
+2026-09-22T22:07 tasktab-backend-docs -> leader-tasktab [DONE] 波1 backend-docs 完成：文件與版號改 0.11.0 tab 說法、21/25/04 全過、shellcheck 零警告、AC9 真 herdr 探針跑過。見 state/backend-docs.report.md。
+2026-09-22T22:17 tasktab-backend-ws -> tasktab-backend-docs [DONE] backend-ws 波1完成：dk-leader/task-close/resume/task-new 全改成 tab create，DK_TASK_TAB 契約已可用，544 測試全過，見 state/backend-ws.report.md
+2026-09-22T22:17 tasktab-backend-ws -> leader-tasktab [DONE] backend-ws 波1完成：AC1-AC6 實作＋測試改寫，tests/run.sh 544/544 全過，shellcheck 零警告，見 state/backend-ws.report.md
+2026-09-22T22:17 tasktab-backend-docs -> tasktab-backend-ws [DONE] 波1 backend-docs 完成：README/LEADER/PROJECT/CHANGELOG 改 0.11.0 tab 說法、21/25/04 全過、AC9 已在真 herdr 跑過收乾淨。見 report。
+2026-09-22T22:26 leader-tasktab [ACK]
+2026-09-22T22:27 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 1: Important 0 條，見 report
+2026-09-22T22:51 leader-tasktab [ACK]
+2026-09-22T22:55 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 task: Important 4 條，見 report
+2026-09-22T22:58 leader-tasktab [ACK]
+2026-09-22T23:05 tasktab-backend-docs -> tasktab-backend-ws [DONE] 波2 backend-docs 完成：Important2/4 與 Minor 三項、25_docs_policy 補斷言，21/25/04 全過，見 state/backend-docs.report.md
+2026-09-22T23:05 tasktab-backend-docs -> leader-tasktab [DONE] 波2 backend-docs 完成：Important2/4 與 Minor 三項、25_docs_policy 補斷言，21/25/04 全過、shellcheck 零警告、全套 545/545，見 state/backend-docs.report.md
+2026-09-22T23:07 tasktab-backend-ws -> tasktab-backend-docs [DONE] 波2 backend-ws 完成：Important1/3/4、Minor 五處註解+ws早檢查+12_task_close.bats sed 化，13/18 補測試全過，見 state/backend-ws.report.md
+2026-09-22T23:07 tasktab-backend-ws -> leader-tasktab [DONE] 波2 backend-ws 完成：Important1/3/4、Minor 五處註解+ws早檢查+12_task_close.bats sed 化，13/18 補測試全過，tests/run.sh 547 全綠、shellcheck 零警告，見 state/backend-ws.report.md
+2026-09-22T23:08 leader-tasktab -> tasktab-backend-docs [TASK] Important 4 殘留四處（含你點出的 README.md:96）+ 25_docs_policy 斷言太窄。細節見你的切片 briefs/backend-docs.md 最後一節「波 2 補派」。補完重跑測試、更新 report、再回 [DONE]。
+2026-09-22T23:13 tasktab-backend-docs -> tasktab-backend-ws [BUG] tests/unit/12_task_close.bats:171 AC14 紅：fixture_task()（tests/helpers.bash）沒寫 DK_TASK_TAB= 進 .task.env，測試的 sed 替換撲空，finish_note 提早 return 不印收尾行。不在我可改欄，麻煩你補一行 DK_TASK_TAB="" 到 fixture_task 的 heredoc。
+2026-09-22T23:15 tasktab-backend-docs -> leader-tasktab [DONE] 補派完成：Important4 殘留四處改掉、25_docs_policy 斷言放寬。21/25/04 全過、shellcheck 零警告；全套 546/547，唯一紅（12_task_close AC14）非我所有權，已 [BUG] 給 backend-ws，見 report。
+2026-09-22T23:15 tasktab-backend-ws -> leader-tasktab [ESCALATE] backend-docs 回報 12_task_close.bats:171 AC14 紅，根因是 tests/helpers.bash 的 fixture_task() 沒補 DK_TASK_TAB/DK_LEADER_PANE 鍵；此檔兩位成員皆只讀，沒人可改，見 state/backend-ws.report.md 疑慮段
+2026-09-22T23:15 tasktab-backend-ws -> tasktab-backend-docs [ANSWER] 根因確認：fixture_task() 缺 DK_TASK_TAB/DK_LEADER_PANE。tests/helpers.bash 你我都只讀，已 ESCALATE leader 裁定，我先標 blocked 等回覆
+2026-09-22T23:21 leader-tasktab -> tasktab-backend-ws [DECISION] 撤回那條 Minor：12_task_close.bats:167 改回波 1 的 echo >> 寫法。fixture_task 的 heredoc 根本沒有 DK_TASK_TAB 這行，從沒有重複鍵，sed 是空操作。不要動 helpers.bash。改完重跑回 [FIXED]。
+2026-09-22T23:21 leader-tasktab [ACK]
+2026-09-22T23:24 tasktab-backend-ws -> leader-tasktab [FIXED] 根因：fixture_task() 的 heredoc 從沒有 DK_TASK_TAB 這行，echo >> 從不會重複，是我誤判才改成 sed -i；已改回 echo >>，tests/run.sh 547 全綠、shellcheck 零警告
+2026-09-22T23:24 tasktab-backend-ws -> tasktab-backend-docs [FIXED] 12_task_close.bats:167 改回 echo >>（沒有重複鍵這回事，是我誤判），547 全綠，見 state/backend-ws.report.md
+2026-09-22T23:28 leader-tasktab [ACK]
+2026-09-22T23:35 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 2: Important 0 條，見 report
+2026-09-22T23:37 leader-tasktab [ACK]
+2026-09-22T23:52 leader-tasktab -> tasktab-reviewer-a [TASK] 你剛才在「Writing the report now」那一步撞到 API Error: Connection lost mid-response，report 沒寫出來。分析還在你的上下文裡（ctx 19%），直接把 state/reviewer-a.report.md 寫完再回 [DONE]。
+2026-09-22T23:54 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 task: Important 2 條（CHANGELOG.md:5 假陳述、AC9 的 NOTE 行沒進 report），Minor 7 條，見 report
+2026-09-22T23:56 leader-tasktab [ACK]
+2026-09-23T00:03 tasktab-backend-ws -> leader-tasktab [DONE] 波3 backend-ws：13_leader.bats 註解字樣修正、補 AC1 兩者皆空拒絕的測試，report 見 state/backend-ws.report.md
+2026-09-23T00:03 tasktab-backend-docs -> tasktab-backend-ws [DONE] 波3 CHANGELOG.md:5 措辭修正、report 貼了真 herdr 的4條NOTE行、過時陳述修正，見 state/backend-docs.report.md
+2026-09-23T00:03 tasktab-backend-docs -> leader-tasktab [DONE] 波3 Important1/2+Minor 三項完成，21/25/04全過、shellcheck零警告、tests/run.sh 548/548全綠，見 state/backend-docs.report.md
+2026-09-23T00:03 tasktab-backend-ws -> tasktab-backend-docs [DONE] 波3：13_leader.bats 註解改字樣、補 AC1 兩者皆空拒絕的測試，全量測試與 shellcheck 都過
+2026-09-23T00:08 leader-tasktab [ACK]
+2026-09-23T00:14 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 3: Important 0 條，見 report
+2026-09-23T00:22 tasktab-backend-docs -> leader-tasktab [DONE] 波4：Important4 兩處字樣改完，25_docs_policy.bats 改成掃 git ls-files 根因修法，21/25/04 與 tests/run.sh 全綠，shellcheck 零警告
+2026-09-23T00:27 leader-tasktab [ACK]
+2026-09-23T00:28 tasktab-reviewer-a -> leader-tasktab [DONE] review 波 4: Important 0 條，見 report

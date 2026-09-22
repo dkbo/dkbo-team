@@ -1,0 +1,76 @@
+# 任務改開 tab — wave 4 since 4cfefb3 — 2026-09-23T00:27
+# files changed: 2 (working tree included)
+
+## commits
+
+## stat
+ tests/integration/README.md    | 4 ++--
+ tests/unit/25_docs_policy.bats | 8 ++++++--
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+## diff (-U10)
+diff --git a/tests/integration/README.md b/tests/integration/README.md
+index 1d5b50b..ed29286 100644
+--- a/tests/integration/README.md
++++ b/tests/integration/README.md
+@@ -192,25 +192,25 @@ OK   workspace get has .result.workspace.active_tab_id=w3:t1
+ 
+ (plus the pre-existing `--ratio`/`--amount`/`pane read` `NOTE` lines further down, unaffected
+ by this change).
+ 
+ Unit suite (`tests/run.sh`) unaffected — no stub or `.dkbo/` script changes were needed for
+ this addition, only the integration script and this doc.
+ 
+ ### 2026-09-22, 0.11.0 AC17: workspace create --label 換成 tab create（改開 tab）
+ 
+ 0.11.0 把 `dk-leader --run` 開任務根的動作從 `herdr workspace create --label` 改成
+-`herdr tab create --workspace <ws>`（在人所在的 workspace 裡開新 tab），AC17 的兩個探針
++`herdr tab create --workspace <ws>`（在任務所屬的 workspace 裡開新 tab；`.task.env` 的 `DK_WORKSPACE`，計畫時記下，空時退回 `HERDR_WORKSPACE_ID`），AC17 的兩個探針
+ （`workspace create --label`／`workspace get`）跟著換成三個：`tab create --workspace <id>
+ --cwd --label dk/probe --no-focus --env K=V` 驗 `.result.tab.tab_id` 與
+ `.result.root_pane.pane_id`、`tab get <id>` 成功、`tab close <id>` 成功；不再呼叫
+-`workspace get`（`DK_WORKSPACE` 從此固定是人所在的 workspace，不需要靠 `active_tab_id`
++`workspace get`（`DK_WORKSPACE` 從此固定是任務所屬的 workspace（`.task.env` 的 `DK_WORKSPACE`，計畫時記下，空時退回 `HERDR_WORKSPACE_ID`），不需要靠 `active_tab_id`
+ 去 rename）。
+ 
+ 在一個重新 bootstrap 的 `dktest` session（見上方「Running from inside a herdr pane」）對
+ 真 herdr 0.9.0 跑了一次 `tests/integration/herdr-real.sh`，全部 `OK`、exit 0：
+ 
+ ```
+ OK   workspace create root_pane=w2:p1
+ OK   tab create --label shape tab=w2:t2 root=w2:p2
+ OK   tab get succeeds tab=w2:t2
+ OK   tab close (probe) tab=w2:t2
+diff --git a/tests/unit/25_docs_policy.bats b/tests/unit/25_docs_policy.bats
+index fbeab6a..48d73f5 100644
+--- a/tests/unit/25_docs_policy.bats
++++ b/tests/unit/25_docs_policy.bats
+@@ -30,21 +30,25 @@ teardown() { teardown_project; }
+ @test "AC7: 交棒改開 tab，三份 README 與 .dkbo/README.md 不再說任務專屬 workspace" {
+   for f in README.md README.en.md .dkbo/README.md; do
+     grep -q 'tab' "$REPO_ROOT/$f" || { echo "$f 沒提到 tab"; false; }
+     refute_grep '任務專屬的 herdr workspace' "$REPO_ROOT/$f"
+     refute_grep 'a task-specific herdr workspace' "$REPO_ROOT/$f"
+   done
+   grep -q 'DK_TASK_TAB' "$DK_ROOT/README.md"
+ }
+ 
+ @test "Important4: DK_WORKSPACE 講成任務所屬，不再講成人所在的那一刻" {
+-  for f in README.md README.en.md .dkbo/README.md CHANGELOG.md .dkbo/LEADER.md .dkbo/PROJECT.md; do
++  while IFS= read -r f; do
++    case "$f" in
++      .dkbo/tasks/*) continue ;;
++      tests/unit/25_docs_policy.bats) continue ;;
++    esac
+     refute_grep -E '人所在的 workspace|你所在的 workspace|時所在的那個 workspace' "$REPO_ROOT/$f"
+     refute_grep -E "workspace you're (already )?in" "$REPO_ROOT/$f"
+-  done
++  done < <(git -C "$REPO_ROOT" ls-files)
+   grep -q '任務所屬的 workspace' "$REPO_ROOT/README.md"
+   grep -q '任務所屬的 workspace' "$DK_ROOT/README.md"
+   grep -q '任務所屬的 workspace' "$REPO_ROOT/CHANGELOG.md"
+   grep -q '任務所屬的 workspace' "$DK_ROOT/LEADER.md"
+   grep -q '任務所屬的 workspace' "$DK_ROOT/PROJECT.md"
+   grep -q "task's workspace" "$REPO_ROOT/README.en.md"
+ }
+
