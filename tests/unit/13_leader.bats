@@ -48,7 +48,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   # worktree 與分支（原本在 05_task_new，0.10.0 起是 --run 的事）
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
   [ "$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)" = dk/login ]
-  # 任務根 tab：開在人所在的 workspace（DK_WORKSPACE），label 是分支名
+  # 任務根 tab：開在任務所屬的 workspace（DK_WORKSPACE），label 是分支名
   grep -q "^tab create --workspace wB --cwd $PROJECT --label dk/login --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1\$" "$HERDR_STUB_LOG"
   refute_grep '^workspace create' "$HERDR_STUB_LOG"
   refute_grep '^workspace get' "$HERDR_STUB_LOG"
@@ -87,6 +87,23 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
   grep -q -- "--workspace wB " "$HERDR_STUB_LOG"
   refute_grep -- "--workspace wZ " "$HERDR_STUB_LOG"
+}
+
+@test "--run: DK_WORKSPACE 與 HERDR_WORKSPACE_ID 都是空的就拒絕並說明要在 herdr 內跑（AC1）" {
+  HERDR_WORKSPACE_ID="" dk-task-new login "使用者登入" >/dev/null
+  dk-process "brief-review skipped: 單元測試"
+  dk-task-new login --gate1 >/dev/null
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  grep -q '^DK_WORKSPACE=""$' "$d/.task.env"
+  HERDR_WORKSPACE_ID="" run dk-leader login --run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"都是空的"* ]]
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
+  git -C "$PROJECT" worktree list --porcelain > "$PROJECT/.worktree-list"
+  refute_grep -x "worktree $WORKTREE_PATH" "$PROJECT/.worktree-list"
+  git -C "$PROJECT" branch --list > "$PROJECT/.branch-list"
+  refute_grep 'dk/login' "$PROJECT/.branch-list"
+  [ ! -f "$d/.repos" ]
 }
 
 @test "--run 起 codex 領導時不帶 --name（AC19 反面）" {
