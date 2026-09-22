@@ -61,7 +61,15 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
        row[t]=row[t] " " $1 "(" (($1 in st)?st[$1]:"?") w ")"; if(!(t in seen)){seen[t]=1; order[++k]=t}}
       END{for(i=1;i<=k;i++) printf "tab %s:%s\n", order[i], row[order[i]]}' "$dir/.panes"
   else printf '%s\n' "$list" | grep "^$DK_SHORT-" || echo "（無）"; fi
-  echo "## BACKLOG"; cat "$DK_ROOT/tasks/BACKLOG.md"
+  # BACKLOG 是跨任務記憶，只會長不會短；整份 cat 會把 150 行的預算吃掉（0.11.0 結案補四條就把
+  # 恢復包撐爆、CI 紅掉）。只印表頭與最後 8 條，其餘留一行指路。
+  bl="$DK_ROOT/tasks/BACKLOG.md"
+  echo "## BACKLOG（最後 8 條；全文 $bl）"
+  if [ -f "$bl" ]; then
+    total=$(grep -c '^| [0-9]' "$bl" || true)
+    head -n 2 "$bl"; grep '^| [0-9]' "$bl" | tail -n 8 || true
+    [ "${total:-0}" -le 8 ] || echo "（另有 $((total-8)) 條較早的，見 $bl）"
+  fi
 }
 out=$(render 20 5 0)
 [ "$(echo "$out" | wc -l)" -le 150 ] || out=$(render 20 3 0)

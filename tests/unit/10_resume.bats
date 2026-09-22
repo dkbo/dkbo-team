@@ -57,6 +57,18 @@ teardown() { teardown_project; }
   [ "${#lines[@]}" -le 150 ]
   [[ "$output" == *"dev-a: line 3"* ]]; [[ "$output" != *"dev-a: line 4"* ]]
 }
+@test "BACKLOG 段只印表頭與最後 8 條，超出的留一行指路（0.11.1：整份 cat 會撐爆 150 行）" {
+  { printf '| 日期 | 來源 | 一句描述 | 建議處理 |\n|---|---|---|---|\n'; for i in $(seq 1 30); do printf '| 2026-09-%02d | src | item %d | fix |\n' $(( (i%28)+1 )) "$i"; done; } > "$DK_ROOT/tasks/BACKLOG.md"
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"## BACKLOG（最後 8 條"* ]]; [[ "$output" == *"| 日期 | 來源 |"* ]]
+  [[ "$output" == *"| item 30 |"* ]]; [[ "$output" == *"| item 23 |"* ]]; [[ "$output" != *"| item 22 |"* ]]
+  [[ "$output" == *"（另有 22 條較早的"* ]]
+}
+@test "BACKLOG 不超過 8 條就全印、不印指路行" {
+  { printf '| 日期 | 來源 | 一句描述 | 建議處理 |\n|---|---|---|---|\n'; for i in 1 2 3; do printf '| 2026-09-0%d | src | item %d | fix |\n' "$i" "$i"; done; } > "$DK_ROOT/tasks/BACKLOG.md"
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"| item 1 |"* ]]; [[ "$output" == *"| item 3 |"* ]]; [[ "$output" != *"另有"* ]]
+}
 @test "no open wave and empty .panes fall back to plain text and the agent list" {
   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"; : > "$d/.panes"
   run dk-resume; [ "$status" -eq 0 ]; [[ "$output" == *"沒有開著的波"* ]]; [[ "$output" == *"login-frontend working"* ]]

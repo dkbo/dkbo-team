@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.1 — 2026-09-23
+
+- fix(resume): `dk-resume` 的「## BACKLOG」段原本整份 `cat tasks/BACKLOG.md`，而 BACKLOG 是只會長的跨任務記憶——0.11.0 結案後補了四條，恢復包在最後一級降級（process 10 行、state 3 行、裁定 5 行）之後仍超過 150 行，`10_resume.bats` 在 CI 紅掉（v0.11.0 的 tag CI 是紅的；領導在結案前跑的 548 綠是在那四條進來之前）。改成只印表頭與最後 8 條，超出的留一行「另有 N 條較早的，見 tasks/BACKLOG.md」；預算從此不再被 BACKLOG 的長度左右。補兩條測試。
+- 測試：550 bats（+2）；shellcheck 零警告。
+- 升級：純修補，沒有新鍵、新依賴、新 skill。
+
 ## 0.11.0 — 2026-09-22
 
 - feat(tab)!: `dk-leader <short> --run` 實體化任務時，不再開一個新的 herdr workspace，改在任務所屬的 workspace（`.task.env` 的 `DK_WORKSPACE`，計畫時記下；空時退回 `HERDR_WORKSPACE_ID`）用 `herdr tab create --workspace <ws> --cwd <主樹> --label dk/<short> --no-focus --env DK_ROOT=… --env HERDR_ENV=1` 開一個 label `dk/<short>` 的新 tab，在它的根 pane 起執行領導交棒；不再呼叫 `herdr workspace create`／`herdr workspace get`／`herdr tab rename`。任務根 tab 的 id 記進 `.task.env` 新鍵 `DK_TASK_TAB`（計畫階段為空）；`DK_WORKSPACE` 的語意從此固定是「任務所在的 workspace」，`--run` 只在它原本是空字串時用 `HERDR_WORKSPACE_ID` 補上並落盤，非空時一律不動。rollback、幂等檢查（`.repos` 在、`DK_TASK_TAB` 非空但 `herdr tab get` 失敗即拒絕）、`dk-task-close` 結尾提示（`herdr tab close <DK_TASK_TAB 的值>`）、`dk-resume` 的字樣全部從 workspace 改成 tab；`dk-spawn` 的溢出 tab 行為不變（它本來就是 `tab create --workspace "$DK_WORKSPACE"`）。**升級注意**：0.10.0 開出的任務 workspace 這一版不會自動關，看完 report 自己手動關掉。
