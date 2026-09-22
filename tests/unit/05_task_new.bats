@@ -12,7 +12,8 @@ teardown() { teardown_project; }
   grep -q '^# 使用者登入$' "$d/brief.md"; grep -q 'docs/plan.md' "$d/brief.md"; grep -q 'dk/login' "$d/brief.md"
   grep -q '交棒時建立' "$d/brief.md"
   grep -q '^DK_SHORT="login"$' "$d/.task.env"; grep -q '^DK_WORKTREE=""$' "$d/.task.env"
-  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"; grep -q '^DK_ROOT_PANE="wB:p1"$' "$d/.task.env"
+  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"; grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
+  grep -q '^DK_ROOT_PANE="wB:p1"$' "$d/.task.env"
   grep -q '^DK_LEADER_PANE="wB:p1"$' "$d/.task.env"
   grep -q '^DK_BASE=""$' "$d/.task.env"; grep -q '^DK_WAVE=""$' "$d/.task.env"; grep -q '^DK_TABS=""$' "$d/.task.env"
   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]

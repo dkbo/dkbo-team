@@ -21,8 +21,17 @@ teardown() { teardown_project; }
   grep -q '<名>:' "$DK_ROOT/PROTOCOL.md"
   grep -q '<名>:' "$DK_ROOT/roles/reviewer.md"
   for f in README.md README.en.md .dkbo/README.md; do
-    grep -qE '交棒|handoff|workspace' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒或 workspace"; false; }
+    grep -qE '交棒|handoff' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒"; false; }
   done
   grep -q 'feat(workspace)' "$REPO_ROOT/CHANGELOG.md"
   grep -q 'feat(repos)' "$REPO_ROOT/CHANGELOG.md"
+}
+
+@test "AC7: 交棒改開 tab，三份 README 與 .dkbo/README.md 不再說任務專屬 workspace" {
+  for f in README.md README.en.md .dkbo/README.md; do
+    grep -q 'tab' "$REPO_ROOT/$f" || { echo "$f 沒提到 tab"; false; }
+    refute_grep '任務專屬的 herdr workspace' "$REPO_ROOT/$f"
+    refute_grep 'a task-specific herdr workspace' "$REPO_ROOT/$f"
+  done
+  grep -q 'DK_TASK_TAB' "$DK_ROOT/README.md"
 }

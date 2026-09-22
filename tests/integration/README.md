@@ -195,3 +195,30 @@ by this change).
 
 Unit suite (`tests/run.sh`) unaffected — no stub or `.dkbo/` script changes were needed for
 this addition, only the integration script and this doc.
+
+### 2026-09-22, 0.11.0 AC17: workspace create --label 換成 tab create（改開 tab）
+
+0.11.0 把 `dk-leader --run` 開任務根的動作從 `herdr workspace create --label` 改成
+`herdr tab create --workspace <ws>`（在人所在的 workspace 裡開新 tab），AC17 的兩個探針
+（`workspace create --label`／`workspace get`）跟著換成三個：`tab create --workspace <id>
+--cwd --label dk/probe --no-focus --env K=V` 驗 `.result.tab.tab_id` 與
+`.result.root_pane.pane_id`、`tab get <id>` 成功、`tab close <id>` 成功；不再呼叫
+`workspace get`（`DK_WORKSPACE` 從此固定是人所在的 workspace，不需要靠 `active_tab_id`
+去 rename）。
+
+在一個重新 bootstrap 的 `dktest` session（見上方「Running from inside a herdr pane」）對
+真 herdr 0.9.0 跑了一次 `tests/integration/herdr-real.sh`，全部 `OK`、exit 0：
+
+```
+OK   workspace create root_pane=w2:p1
+OK   tab create --label shape tab=w2:t2 root=w2:p2
+OK   tab get succeeds tab=w2:t2
+OK   tab close (probe) tab=w2:t2
+```
+
+（第一行 `workspace create` 是腳本開頭建立臨時 workspace 給 tab create 掛，不是 AC17 探針
+本身；plus 既有的 `--ratio`/`--amount`/`pane read` `NOTE` 行，跟這次改動無關。）跑完照 README
+的步驟 `herdr session stop/delete dktest` 收乾淨，`herdr session list` 確認只剩 `default`。
+
+Unit suite（`tests/run.sh`）不受影響 —— 這次只改了整合腳本與這篇文件，沒有動 `.dkbo/` 或
+stub。

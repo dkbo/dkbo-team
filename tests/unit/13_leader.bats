@@ -41,36 +41,39 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   d="$DK_ROOT/tasks/$(date +%F)-login"
 }
 
-@test "--run 實體化 worktree 與 workspace、改寫 .task.env、交棒給根 pane" {
+@test "--run 實體化 worktree 與任務根 tab、改寫 .task.env、交棒給根 pane" {
   mk
   base=$(git -C "$PROJECT" rev-parse HEAD)
   run dk-leader login --run; [ "$status" -eq 0 ]
   # worktree 與分支（原本在 05_task_new，0.10.0 起是 --run 的事）
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
   [ "$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)" = dk/login ]
-  # workspace 與 tab：label 與 tab 名都是分支名
-  grep -q "^workspace create --cwd $PROJECT --label dk/login --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1\$" "$HERDR_STUB_LOG"
-  grep -q '^tab rename wC:t1 dk/login$' "$HERDR_STUB_LOG"
-  # .task.env 的五個欄位
-  grep -q '^DK_WORKSPACE="wC"$' "$d/.task.env"
-  grep -q '^DK_ROOT_PANE="wC:p1"$' "$d/.task.env"
-  grep -q '^DK_LEADER_PANE="wC:p1"$' "$d/.task.env"
+  # 任務根 tab：開在人所在的 workspace（DK_WORKSPACE），label 是分支名
+  grep -q "^tab create --workspace wB --cwd $PROJECT --label dk/login --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1\$" "$HERDR_STUB_LOG"
+  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^workspace get' "$HERDR_STUB_LOG"
+  refute_grep '^tab rename' "$HERDR_STUB_LOG"
+  # .task.env：DK_TASK_TAB／DK_ROOT_PANE／DK_LEADER_PANE／DK_WORKTREE／DK_BASE 五欄，DK_WORKSPACE 維持原值
+  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+  grep -q '^DK_TASK_TAB="wB:t2"$' "$d/.task.env"
+  grep -q '^DK_ROOT_PANE="wB:p10"$' "$d/.task.env"
+  grep -q '^DK_LEADER_PANE="wB:p10"$' "$d/.task.env"
   grep -q "^DK_WORKTREE=\"$WORKTREE_PATH\"$" "$d/.task.env"
   grep -q "^DK_BASE=\"$base\"$" "$d/.task.env"
   # 交棒
   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
-  grep -q "^agent start leader-login --kind claude --pane wC:p1 -- --model opus --effort high --permission-mode auto --add-dir $PROJECT --name dk/login\$" "$HERDR_STUB_LOG"
+  grep -q "^agent start leader-login --kind claude --pane wB:p10 -- --model opus --effort high --permission-mode auto --add-dir $PROJECT --name dk/login\$" "$HERDR_STUB_LOG"
   grep -q '^agent prompt leader-login .*--wait --until working' "$HERDR_STUB_LOG"
-  [ "$(cat "$DK_ROOT/.sessions/wC:p1")" = "$(basename "$d")" ]
+  [ "$(cat "$DK_ROOT/.sessions/wB:p10")" = "$(basename "$d")" ]
   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
-  grep -q 'materialize repos main workspace wC' "$d/process.md"
-  grep -q 'handoff run-leader pane wC:p1' "$d/process.md"
+  grep -q 'materialize repos main tab wB:t2' "$d/process.md"
+  grep -q 'handoff run-leader pane wB:p10' "$d/process.md"
 }
 
 @test "--run 起 codex 領導時不帶 --name（AC19 反面）" {
   mk
   run dk-leader login --run --kind codex; [ "$status" -eq 0 ]
-  grep -q '^agent start leader-login --kind codex --pane wC:p1 -- ' "$HERDR_STUB_LOG"
+  grep -q '^agent start leader-login --kind codex --pane wB:p10 -- ' "$HERDR_STUB_LOG"
   refute_grep -- '--name dk/login' "$HERDR_STUB_LOG"
 }
 
@@ -97,7 +100,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   grep -q "^DK_WORKTREE=\"$PROJECT\"$" "$d/.task.env"
   grep -Eq '^DK_BASE="[0-9a-f]{40}"$' "$d/.task.env"
   [ ! -e "$WORKTREE_PATH" ]
-  grep -q '^workspace create ' "$HERDR_STUB_LOG"
+  grep -q '^tab create ' "$HERDR_STUB_LOG"
 }
 
 @test "--run 在分支已存在時拒絕，.task.env 原封不動" {
@@ -105,27 +108,30 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   git -C "$PROJECT" branch dk/login
   run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"git worktree add 失敗"* ]]
   grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
 }
 
-@test "--run: workspace create 失敗就清掉 worktree、分支並還原 .task.env" {
+@test "--run: tab create 失敗就清掉 worktree、分支並還原 .task.env" {
   mk
-  HERDR_STUB_FAIL="workspace create" run dk-leader login --run; [ "$status" -ne 0 ]
+  HERDR_STUB_FAIL="tab create" run dk-leader login --run; [ "$status" -ne 0 ]
   [ ! -e "$WORKTREE_PATH" ]
   refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
   grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_BASE=""$' "$d/.task.env"
+  grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
   grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"; grep -q '^DK_ROOT_PANE="wB:p1"$' "$d/.task.env"
   grep -q '^DK_LEADER_PANE="wB:p1"$' "$d/.task.env"
   refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 
-@test "--run: 交棒前失敗時 rollback 連 workspace 一起關掉" {
+@test "--run: 交棒前失敗時 rollback 連 tab 一起關掉" {
   mk
   HERDR_STUB_FAIL="agent rename" run dk-leader login --run; [ "$status" -ne 0 ]
-  grep -q '^workspace close wC$' "$HERDR_STUB_LOG"
+  grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"
   [ ! -e "$WORKTREE_PATH" ]
   refute_grep -qx 'dk/login' <(git -C "$PROJECT" branch --format='%(refname:short)')
   grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+  grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
   refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 
@@ -136,7 +142,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   dk-process "brief-review skipped: 單元測試"; dk-task-new login --gate1 >/dev/null
   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
   run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"波"* ]]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
   [ ! -e "$WORKTREE_PATH" ]
 }
 
@@ -149,19 +155,28 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   dk-leader login --run >/dev/null
   : > "$HERDR_STUB_LOG"
   run dk-leader login --run; [ "$status" -eq 0 ]; [[ "$output" == *"已交棒"* ]]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
   refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 
 @test "--run 已實體化但根 pane 沒有領導：跳過實體化，只重做交棒" {
   mk
   dk-leader login --run >/dev/null
-  rm -f "$HERDR_STUB_RESPONSES/agent_get.wC:p1.json"   # 執行領導掛了
+  rm -f "$HERDR_STUB_RESPONSES/agent_get.wB:p10.json"   # 執行領導掛了
   : > "$HERDR_STUB_LOG"
   run dk-leader login --run; [ "$status" -eq 0 ]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
-  grep -q '^agent start leader-login --kind claude --pane wC:p1 -- ' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
+  grep -q '^agent start leader-login --kind claude --pane wB:p10 -- ' "$HERDR_STUB_LOG"
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+}
+
+@test "--run: 已實體化但任務 tab 已不在時拒絕並提示人工收拾" {
+  mk
+  dk-leader login --run >/dev/null
+  : > "$HERDR_STUB_LOG"
+  HERDR_STUB_FAIL="tab get" run dk-leader login --run
+  [ "$status" -eq 1 ]; [[ "$output" == *"已不在；先人工收拾"* ]]
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 
 # --- 多 repo（DK_REPOS 非空）：AC3 AC4 AC20 ------------------------------------
@@ -180,7 +195,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   [ "$(head -1 "$d/.repos" | awk '{print $1}')" = main ]   # 主 repo 永遠第一列
   grep -q "^DK_WORKTREE=\"$PROJECT/.worktrees/login/main\"\$" "$d/.task.env"
   grep -q "^DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"\$" "$d/.task.env"
-  grep -q 'materialize repos main api shared workspace wC' "$d/process.md"
+  grep -q 'materialize repos main api shared tab wB:t2' "$d/process.md"
 }
 
 @test "--run 單 repo 也寫 .repos：一列，名字 main" {
@@ -196,7 +211,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   dk-process "brief-review skipped: 單元測試"; dk-task-new login --gate1 >/dev/null
   d="$DK_ROOT/tasks/$(date +%F)-login"
   run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"DK_NO_WORKTREE"* ]]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
   [ ! -e "$d/.repos" ]; [ ! -e "$PROJECT/.worktrees/login" ]
 }
 
@@ -205,12 +220,12 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   repo_dirty_tracked "$REPO_API"
   run dk-leader login --run; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
   [ ! -e "$PROJECT/.worktrees/login" ]; [ ! -e "$d/.repos" ]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
 }
 
-@test "--run 多 repo：workspace create 失敗就清掉全部 worktree、分支與 .repos" {
+@test "--run 多 repo：tab create 失敗就清掉全部 worktree、分支與 .repos" {
   setup_multirepo; mk
-  HERDR_STUB_FAIL="workspace create" run dk-leader login --run; [ "$status" -ne 0 ]
+  HERDR_STUB_FAIL="tab create" run dk-leader login --run; [ "$status" -ne 0 ]
   [ ! -e "$PROJECT/.worktrees/login/main" ]
   [ ! -e "$PROJECT/.worktrees/login/api" ]
   [ ! -e "$PROJECT/.worktrees/login/shared" ]
@@ -219,6 +234,19 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
   [ ! -e "$d/.repos" ]
   grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+  grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
+}
+
+@test "--run 多 repo：交棒前失敗時 rollback 連 tab 一起關掉" {
+  setup_multirepo; mk
+  HERDR_STUB_FAIL="agent rename" run dk-leader login --run; [ "$status" -ne 0 ]
+  grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"
+  [ ! -e "$PROJECT/.worktrees/login/main" ]
+  [ ! -e "$PROJECT/.worktrees/login/api" ]
+  [ ! -e "$PROJECT/.worktrees/login/shared" ]
+  [ ! -e "$d/.repos" ]
+  grep -q '^DK_WORKTREE=""$' "$d/.task.env"; grep -q '^DK_TASK_TAB=""$' "$d/.task.env"
+  refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
 
 @test "--run 某個 repo 的 dk/<short> 分支已存在時點名它並清掉先切好的" {
@@ -228,7 +256,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   [ ! -e "$PROJECT/.worktrees/login/main" ]; [ ! -e "$PROJECT/.worktrees/login/api" ]
   refute_grep -qx 'dk/login' <(git -C "$REPO_API" branch --format='%(refname:short)')
   [ ! -e "$d/.repos" ]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
 }
 
 @test "AC20: 每個 worktree 切好後在該 worktree 內、乾淨環境跑 DK_SETUP_CMD_<名>" {
@@ -281,10 +309,10 @@ S
 @test "--run 的已實體化判別器是 .repos，不是 DK_WORKTREE" {
   mk
   dk-leader login --run >/dev/null
-  rm -f "$HERDR_STUB_RESPONSES/agent_get.wC:p1.json"   # 執行領導掛了，要重交棒
+  rm -f "$HERDR_STUB_RESPONSES/agent_get.wB:p10.json"   # 執行領導掛了，要重交棒
   sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#' "$d/.task.env"
   : > "$HERDR_STUB_LOG"
   run dk-leader login --run; [ "$status" -eq 0 ]
-  refute_grep '^workspace create' "$HERDR_STUB_LOG"
+  refute_grep '^tab create' "$HERDR_STUB_LOG"
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
 }

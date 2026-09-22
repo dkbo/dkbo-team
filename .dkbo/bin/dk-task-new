@@ -65,7 +65,7 @@ trap rollback EXIT
 mkdir -p "$dir/state"; : > "$dir/.panes"   # dk-watch exits when this file disappears (dk-task-close removes it)
 no_wt=""; [ "$worktree" = 1 ] || no_wt=1   # --run 讀它：不切 worktree，DK_WORKTREE 指主樹（多 repo 模式下拒絕）
 vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=" "SOURCE=$from" "DATE=$(dk_now)" \
-      "WORKSPACE=$ws" "ROOT_PANE=$root_pane" "LEADER_PANE=$root_pane" "BASE=" "NO_WORKTREE=$no_wt")
+      "WORKSPACE=$ws" "TASK_TAB=" "ROOT_PANE=$root_pane" "LEADER_PANE=$root_pane" "BASE=" "NO_WORKTREE=$no_wt")
 # brief 的標頭是給人看的，寫成一句話而不是空白 —— 空白會讀成「忘了填」
 dk_render "$DK_ROOT/templates/brief.md"   "WORKTREE=（/dkbo-run 交棒時建立）" "${vars[@]}" > "$dir/brief.md"
 dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"
