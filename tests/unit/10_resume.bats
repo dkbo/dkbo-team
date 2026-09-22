@@ -112,9 +112,16 @@ R
   printf '%s\n' "$output" | grep -qx "api → $PROJECT/.worktrees/login/api"
 }
 
-@test "resume 在還沒交棒（沒有 .repos）時印尚未交棒並指向 --run" {
+@test "resume 在還沒交棒（沒有 .repos）時印尚未交棒（開 tab 的字樣）並指向 --run" {
   rm -f "$d/.repos"
   run dk-resume; [ "$status" -eq 0 ]
-  [[ "$output" == *"尚未交棒"* ]]; [[ "$output" == *"dk-leader login --run"* ]]
+  [[ "$output" == *"尚未交棒"* ]]; [[ "$output" == *"開 tab"* ]]; [[ "$output" == *"dk-leader login --run"* ]]
+  refute_grep -F '開 workspace' <(printf '%s\n' "$output")
   [ "${#lines[@]}" -le 150 ]
+}
+
+@test "AC6: 已實體化時多印一行 tab: <DK_TASK_TAB>" {
+  sed -i 's/^DK_ROOT_PANE=.*/DK_ROOT_PANE="wB:p1"\nDK_TASK_TAB="wB:t2"/' "$d/.task.env"
+  run dk-resume; [ "$status" -eq 0 ]
+  printf '%s\n' "$output" | grep -qx 'tab: wB:t2'
 }

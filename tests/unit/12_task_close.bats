@@ -163,11 +163,18 @@ seed_branch_commits() {
   git -C "$PROJECT" show --stat "$m" | grep -q report.md
 }
 
-@test "AC14: 結案不呼叫 herdr workspace close，最後一行叫人自己關" {
-  echo '# r' > "$d/report.md"
+@test "AC14: 結案不呼叫 herdr tab close 也不呼叫 workspace close，最後一行叫人自己關任務 tab" {
+  echo '# r' > "$d/report.md"; echo 'DK_TASK_TAB="wB:t9"' >> "$d/.task.env"
   run dk-task-close; [ "$status" -eq 0 ]
   refute_grep '^workspace close' "$HERDR_STUB_LOG"
-  [[ "${lines[$((${#lines[@]}-1))]}" == *"herdr workspace close wB"* ]]
+  refute_grep '^tab close wB:t9$' "$HERDR_STUB_LOG"
+  [[ "${lines[$((${#lines[@]}-1))]}" == *"herdr tab close wB:t9"* ]]
+}
+
+@test "AC14 反面：DK_TASK_TAB 是空的（計畫階段就放棄）時不印收尾提示" {
+  echo '# r' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  refute_grep 'herdr tab close' <(printf '%s\n' "$output")
 }
 
 @test "AC13: 主樹有會被覆蓋的本地變更 → exit 5，一個 repo 都沒合" {

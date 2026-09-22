@@ -28,13 +28,13 @@ index_set() {
   dk_index_set "$DK_DISPLAY" "$1" "$2" \
     || echo "dk-task-close: INDEX 沒有名稱為「$DK_DISPLAY」的列；狀態沒更新，請自己改 $DK_ROOT/tasks/INDEX.md" >&2
 }
-# 決策⑫：不自動關 workspace —— 跑這支腳本的執行領導就住在它的根 pane 上，關掉等於腳本殺掉
+# 決策⑫：不自動關任務 tab —— 跑這支腳本的執行領導就住在它的根 pane 上，關掉等於腳本殺掉
 # 自己、結案訊息沒人看得到。最後一行印出要人自己下的指令（AC14）。計畫階段就放棄的任務
-# 沒有任務 workspace（DK_WORKSPACE 還是人的），那就不印。
+# 沒有任務 tab（DK_TASK_TAB 是空的），那就不印。
 finish_note() {
   [ -f "$dir/.repos" ] || return 0
-  [ -n "${DK_WORKSPACE:-}" ] || return 0
-  echo "任務 workspace 沒有自動關（你就住在它的根 pane 上）。看完 report 再自己關：herdr workspace close $DK_WORKSPACE"
+  [ -n "${DK_TASK_TAB:-}" ] || return 0
+  echo "任務 tab 沒有自動關（你就住在它的根 pane 上）。看完 report 再自己關：herdr tab close $DK_TASK_TAB"
 }
 abandon=0; reason=""
 [ "${1:-}" = --abandon ] && { abandon=1; reason="${2:-（未填原因）}"; }
@@ -78,7 +78,7 @@ del_branches() { # -d（合併過，安全）或 -D（放棄）
 }
 if [ "$abandon" = 1 ]; then
   printf '# %s 結案\n結果：abandoned   分支：%s\n## 原因\n%s\n' "$DK_DISPLAY" "$DK_BRANCH" "$reason" > "$dir/report.md"
-  # 計畫階段就放棄時這裡沒有 worktree、沒有分支、沒有 workspace 要收（AC2）：cleanup 的
+  # 計畫階段就放棄時這裡沒有 worktree、沒有分支、沒有 tab 要收（AC2）：cleanup 的
   # 逐 repo 迴圈是空的，del_branches 的退路對不存在的分支是 no-op。剩下的就是標 INDEX、
   # commit 記憶、清 .sessions 與 pane 名字。
   cleanup; del_branches -D

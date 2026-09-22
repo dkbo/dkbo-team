@@ -52,7 +52,7 @@ date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
 
-# 0.10.0：這裡只建任務資料夾。worktree、分支、herdr workspace 與依賴鉤子全都延到
+# 0.10.0：這裡只建任務資料夾。worktree、分支、herdr tab 與依賴鉤子全都延到
 # `/dkbo-run` 的 `dk-leader <short> --run`（plan.md 決策①③）—— 計畫完可能不做，不先付成本；
 # base sha 也以交棒當下的 HEAD 為準，計畫拖幾天才開工時那才是對的起點。
 branch="dk/$short"
@@ -65,7 +65,7 @@ trap rollback EXIT
 mkdir -p "$dir/state"; : > "$dir/.panes"   # dk-watch exits when this file disappears (dk-task-close removes it)
 no_wt=""; [ "$worktree" = 1 ] || no_wt=1   # --run 讀它：不切 worktree，DK_WORKTREE 指主樹（多 repo 模式下拒絕）
 vars=("DISPLAY=$display" "SHORT=$short" "BRANCH=$branch" "WORKTREE=" "SOURCE=$from" "DATE=$(dk_now)" \
-      "WORKSPACE=$ws" "ROOT_PANE=$root_pane" "LEADER_PANE=$root_pane" "BASE=" "NO_WORKTREE=$no_wt")
+      "WORKSPACE=$ws" "TASK_TAB=" "ROOT_PANE=$root_pane" "LEADER_PANE=$root_pane" "BASE=" "NO_WORKTREE=$no_wt")
 # brief 的標頭是給人看的，寫成一句話而不是空白 —— 空白會讀成「忘了填」
 dk_render "$DK_ROOT/templates/brief.md"   "WORKTREE=（/dkbo-run 交棒時建立）" "${vars[@]}" > "$dir/brief.md"
 dk_render "$DK_ROOT/templates/process.md" "${vars[@]}" > "$dir/process.md"

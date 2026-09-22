@@ -21,8 +21,34 @@ teardown() { teardown_project; }
   grep -q '<名>:' "$DK_ROOT/PROTOCOL.md"
   grep -q '<名>:' "$DK_ROOT/roles/reviewer.md"
   for f in README.md README.en.md .dkbo/README.md; do
-    grep -qE '交棒|handoff|workspace' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒或 workspace"; false; }
+    grep -qE '交棒|handoff' "$REPO_ROOT/$f" || { echo "$f 沒提到交棒"; false; }
   done
   grep -q 'feat(workspace)' "$REPO_ROOT/CHANGELOG.md"
   grep -q 'feat(repos)' "$REPO_ROOT/CHANGELOG.md"
+}
+
+@test "AC7: 交棒改開 tab，三份 README 與 .dkbo/README.md 不再說任務專屬 workspace" {
+  for f in README.md README.en.md .dkbo/README.md; do
+    grep -q 'tab' "$REPO_ROOT/$f" || { echo "$f 沒提到 tab"; false; }
+    refute_grep '任務專屬的 herdr workspace' "$REPO_ROOT/$f"
+    refute_grep 'a task-specific herdr workspace' "$REPO_ROOT/$f"
+  done
+  grep -q 'DK_TASK_TAB' "$DK_ROOT/README.md"
+}
+
+@test "Important4: DK_WORKSPACE 講成任務所屬，不再講成人所在的那一刻" {
+  while IFS= read -r f; do
+    case "$f" in
+      .dkbo/tasks/*) continue ;;
+      tests/unit/25_docs_policy.bats) continue ;;
+    esac
+    refute_grep -E '人所在的 workspace|你所在的 workspace|時所在的那個 workspace' "$REPO_ROOT/$f"
+    refute_grep -E "workspace you're (already )?in" "$REPO_ROOT/$f"
+  done < <(git -C "$REPO_ROOT" ls-files)
+  grep -q '任務所屬的 workspace' "$REPO_ROOT/README.md"
+  grep -q '任務所屬的 workspace' "$DK_ROOT/README.md"
+  grep -q '任務所屬的 workspace' "$REPO_ROOT/CHANGELOG.md"
+  grep -q '任務所屬的 workspace' "$DK_ROOT/LEADER.md"
+  grep -q '任務所屬的 workspace' "$DK_ROOT/PROJECT.md"
+  grep -q "task's workspace" "$REPO_ROOT/README.en.md"
 }

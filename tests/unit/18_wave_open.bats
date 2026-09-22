@@ -57,6 +57,8 @@ multirepo_task() {
   sed -i 's/^DK_WORKTREE=.*/DK_WORKTREE=""/' "$d/.task.env"
   run dk-wave-open 1
   [ "$status" -eq 1 ]; [[ "$output" == *"dk-leader login --run"* ]]
+  [[ "$output" == *"開 tab"* ]]
+  refute_grep -F '開 workspace' <(printf '%s\n' "$output")
   refute_grep '^DK_WAVE="1"$' "$d/.task.env"
   refute_grep ' wave-open 1 ' "$d/process.md"
 }

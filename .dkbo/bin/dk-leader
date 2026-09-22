@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dk-leader <short> "<display>" [--kind claude] [--model M] [--effort E]  — open a second leader pane.
 # dk-leader <short> --run       [--kind claude] [--model M] [--effort E]  — 實體化任務（worktree＋herdr
-#   workspace）並交棒給該 workspace 根 pane 的執行領導。/dkbo-run 的第 0 步；見 skills/run/SKILL.md。
+#   任務根 tab）並交棒給該 tab 根 pane 的執行領導。/dkbo-run 的第 0 步；見 skills/run/SKILL.md。
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 . "$DK_ROOT/lib/kinds.sh"; . "$DK_ROOT/lib/repos.sh"
@@ -23,15 +23,16 @@ ltier=$(echo "$KIND_DEFAULT_TIERS" | tr ' ' '\n' | awk -F= '$1=="L"{print $2}') 
 [ -n "$model" ]  || model="${ltier%%/*}"
 [ -n "$effort" ] || effort="${ltier##*/}"
 args=$(dk_kind_args "$kind" "$model/$effort")
-# CLI 那側的 session 顯示名＝workspace 名，人在 session picker 與終端標題上看到的就是 dk/<short>。
+# CLI 那側的 session 顯示名，人在 session picker 與終端標題上看到的就是 dk/<short>（與 herdr 的
+# workspace／tab 無關，是 CLI 自己的命名，見下）。
 # claude 有 --name，codex 與 agy 沒有對應旗標，回空字串（契約：kinds/<kind>.sh 的 kind_session_args）。
 sess=$(kind_session_args "dk/$short")
 
 # --run 的 rollback、依賴鉤子與它們的狀態。定義在 if 外面：函式體在呼叫時才展開，而寫在
 # if 裡面會被 shellcheck 判成 unreachable（SC2317 —— 它看不出它會被叫到）。
-dir=""; new_ws=""; env_written=0; wt_path=""; repos_written=0
+dir=""; new_tab=""; env_written=0; wt_path=""; repos_written=0
 created_rows=""   # 已經真的切出來的 worktree，一列 "<repo 根> <worktree>"；rollback 逐列收
-old_ws=""; old_root=""; old_leader=""; old_wt=""; old_base=""
+old_tab=""; old_root=""; old_leader=""; old_wt=""; old_base=""
 rollback() { # agent start 之前任一步失敗：只還原這一次真的動過的東西
   local rroot rwt
   if [ -n "$created_rows" ]; then
@@ -41,12 +42,12 @@ rollback() { # agent start 之前任一步失敗：只還原這一次真的動�
       git -C "$rroot" branch -D "dk/$short" >/dev/null 2>&1 || true
     done <<< "$created_rows"
   fi
-  [ -z "$new_ws" ] || herdr workspace close "$new_ws" >/dev/null 2>&1 || true
+  [ -z "$new_tab" ] || herdr tab close "$new_tab" >/dev/null 2>&1 || true
   # .repos 的存在與否就是「實體化了沒」的判別器（契約），所以失敗路徑上一定要把它收掉，
   # 否則下一次 --run 會以為已經實體化、跳過切 worktree，然後在一個空的佈局上交棒。
   if [ "$repos_written" = 1 ]; then rm -f "$dir/.repos"; fi
   if [ "$env_written" = 1 ]; then
-    dk_env_set DK_WORKSPACE "$old_ws"; dk_env_set DK_ROOT_PANE "$old_root"; dk_env_set DK_LEADER_PANE "$old_leader"
+    dk_env_set DK_TASK_TAB "$old_tab"; dk_env_set DK_ROOT_PANE "$old_root"; dk_env_set DK_LEADER_PANE "$old_leader"
     dk_env_set DK_WORKTREE "$old_wt"; dk_env_set DK_BASE "$old_base"
   fi
 }
@@ -68,7 +69,7 @@ run_setup() { # NAME WT — AC20：每個 worktree 切好之後跑一次依賴�
   dk_process "setup $n failed"
 }
 # 明確呼叫，不掛 trap EXIT。這一版原本是掛 trap 的，而 rollback 只做了一半 —— worktree 刪了、
-# workspace 關了，.task.env 卻留著實體化後的值：dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，
+# tab 關了，.task.env 卻留著實體化後的值：dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，
 # 而 dk_task_dir 當時結尾是裸 return，bash 規定 trap handler 裡的裸 return 回的是「觸發 trap 的那個
 # 狀態」（失敗路徑上就是 1）。common.sh 那一行已改成 return 0（回歸測試 01_common.bats），但這裡
 # 維持明確呼叫：rollback 到底有沒有跑完，不該吊在另一支 lib 的一行上，而它失效時是完全無聲的。
@@ -88,20 +89,28 @@ if [ "$run" = 1 ]; then
   # 單一路徑，多 repo 下它只是 N 個之一，而 .repos 是「N 個 worktree 都切好了」的那一份清單。
   materialized=0
   if [ -f "$dir/.repos" ]; then
-    if [ -n "${DK_WORKSPACE:-}" ] && ! herdr workspace get "$DK_WORKSPACE" >/dev/null 2>&1; then
-      dk_die "任務 $short 已實體化（$dir/.repos 已在）但 workspace $DK_WORKSPACE 已不在；先人工收拾再跑"
+    if [ -n "${DK_TASK_TAB:-}" ] && ! herdr tab get "$DK_TASK_TAB" >/dev/null 2>&1; then
+      dk_die "任務 $short 已實體化（$dir/.repos 已在）但 tab $DK_TASK_TAB 已不在；先人工收拾再跑"
     fi
     materialized=1
     if [ "$(pane_agent_name "${DK_ROOT_PANE:-}")" = "leader-$short" ]; then
-      echo "dk-leader: 任務 $short 已交棒（workspace $DK_WORKSPACE 根 pane $DK_ROOT_PANE 上的 leader-$short）"
+      echo "dk-leader: 任務 $short 已交棒（tab $DK_TASK_TAB 根 pane $DK_ROOT_PANE 上的 leader-$short）"
       exit 0
     fi
   fi
 
-  old_ws="${DK_WORKSPACE:-}"; old_root="${DK_ROOT_PANE:-}"; old_leader="${DK_LEADER_PANE:-}"
+  old_tab="${DK_TASK_TAB:-}"; old_root="${DK_ROOT_PANE:-}"; old_leader="${DK_LEADER_PANE:-}"
   old_wt="${DK_WORKTREE:-}"; old_base="${DK_BASE:-}"; wt_path="$old_wt"
 
   if [ "$materialized" = 0 ]; then
+    # ws 空值檢查提早到切 worktree／跑 DK_SETUP_CMD 之前：純前置條件，不看工作樹狀態，
+    # 早失敗省一次白付的依賴安裝。DK_WORKSPACE 原本是空字串時才用 HERDR_WORKSPACE_ID 補上
+    # 並落盤（契約：.task.env 的 DK_TASK_TAB），好讓 dk-spawn 的溢出 tab 讀得到；
+    # DK_WORKSPACE 原本非空則一律不動。
+    ws="${DK_WORKSPACE:-${HERDR_WORKSPACE_ID:-}}"
+    [ -n "$ws" ] || dk_die "DK_WORKSPACE 與 HERDR_WORKSPACE_ID 都是空的；--run 要在 herdr 環境內跑（要有所屬的 workspace）"
+    if [ -z "${DK_WORKSPACE:-}" ]; then dk_env_set DK_WORKSPACE "$ws"; DK_WORKSPACE="$ws"; fi
+
     # 交棒當下每個 repo 都要是乾淨的 git 根（乾淨只看已追蹤檔）。dk-task-new 已經做過名字、
     # 主 repo、git 根三項；「乾淨」是這裡才驗的那一項 —— worktree 從 HEAD 切，此刻才算數。
     dk_repos_check
@@ -132,24 +141,23 @@ if [ "$run" = 1 ]; then
       rname=$(dk_repos_names "$dir" | head -1)
       wt_path=$(dk_repo_field "$dir" "$rname" wt); base_sha=$(dk_repo_field "$dir" "$rname" base)
     fi
-    # workspace 只是一個「cwd 指向主樹、label 是分支名」的容器：領導必須站在主樹（.dkbo/ 在主樹，
-    # 跑的也是主樹的腳本），員工 pane 照舊各自 --cwd。所以不用 herdr worktree create（plan.md 決策①）。
-    out=$(herdr workspace create --cwd "$DK_PROJECT_ROOT" --label "dk/$short" --no-focus \
+    # 任務根 tab 只是一個「cwd 指向主樹、label 是分支名」的容器：領導必須站在主樹（.dkbo/ 在
+    # 主樹，跑的也是主樹的腳本），員工 pane 照舊各自 --cwd。所以不用 herdr worktree create
+    # （plan.md 決策①）。開在任務所屬的 workspace（DK_WORKSPACE，計畫時記下；退路
+    # HERDR_WORKSPACE_ID）底下，不再開一個任務專屬 workspace（plan.md tasktab 決策）。
+    out=$(herdr tab create --workspace "$ws" --cwd "$DK_PROJECT_ROOT" --label "dk/$short" --no-focus \
             --env "DK_ROOT=$DK_ROOT" --env "HERDR_ENV=1" 2>/dev/null || true)
-    new_ws=$(printf '%s' "$out" | dk_json '.result.workspace.workspace_id // empty' 2>/dev/null || true)
+    new_tab=$(printf '%s' "$out" | dk_json '.result.tab.tab_id // empty' 2>/dev/null || true)
     root_pane=$(printf '%s' "$out" | dk_json '.result.root_pane.pane_id // empty' 2>/dev/null || true)
-    [ -n "$new_ws" ] && [ -n "$root_pane" ] \
-      || rb_die "herdr workspace create 沒有回 workspace_id／root_pane（herdr 版本不符？）：$out"
-    tab=$(herdr workspace get "$new_ws" 2>/dev/null | dk_json '.result.workspace.active_tab_id // empty' 2>/dev/null || true)
-    if [ -z "$tab" ]; then dk_process "herdr-degraded: workspace get $new_ws（沒有 active_tab_id，tab 名字沒改）"
-    elif ! herdr tab rename "$tab" "dk/$short" >/dev/null 2>&1; then dk_process "herdr-degraded: tab rename $tab"; fi
+    [ -n "$new_tab" ] && [ -n "$root_pane" ] \
+      || rb_die "herdr tab create 沒有回 tab_id／root_pane（herdr 版本不符？）：$out"
 
     env_written=1
-    dk_env_set DK_WORKSPACE "$new_ws"; dk_env_set DK_ROOT_PANE "$root_pane"; dk_env_set DK_LEADER_PANE "$root_pane"
+    dk_env_set DK_TASK_TAB "$new_tab"; dk_env_set DK_ROOT_PANE "$root_pane"; dk_env_set DK_LEADER_PANE "$root_pane"
     dk_env_set DK_WORKTREE "$wt_path"; dk_env_set DK_BASE "$base_sha"
-    DK_WORKSPACE="$new_ws"; DK_ROOT_PANE="$root_pane"; DK_LEADER_PANE="$root_pane"
+    DK_TASK_TAB="$new_tab"; DK_ROOT_PANE="$root_pane"; DK_LEADER_PANE="$root_pane"
     DK_WORKTREE="$wt_path"; DK_BASE="$base_sha"
-    dk_process "materialize repos $(dk_repos_names "$dir" | tr '\n' ' ' | sed 's/ $//') workspace $new_ws"
+    dk_process "materialize repos $(dk_repos_names "$dir" | tr '\n' ' ' | sed 's/ $//') tab $new_tab"
   fi
 
   # 交棒。herdr 的註冊名唯一，所以先把呼叫者 pane 的 leader-<short> 清掉，執行領導才起得來。

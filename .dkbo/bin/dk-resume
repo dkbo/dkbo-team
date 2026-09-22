@@ -29,8 +29,9 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   if [ -f "$dir/.repos" ]; then
     if dk_repos_multi; then dk_repos_rows "$dir" | awk '{printf "%s → %s\n", $1, $3}'
     else dk_repos_rows "$dir" | awk 'NR==1{print $3}'; fi
+    echo "tab: ${DK_TASK_TAB:-}"
   else
-    echo "尚未交棒（/dkbo-run 會跑 dk-leader $DK_SHORT --run：切 worktree、開 workspace、把領導搬進去）"
+    echo "尚未交棒（/dkbo-run 會跑 dk-leader $DK_SHORT --run：切 worktree、開 tab、把領導搬進去）"
   fi
   echo "## 本波"
   if [ -n "$task_min" ]; then e=$((now_min - task_min)); echo "任務已進行 $((e/60))h $((e%60))m（自 task-new）"; fi
