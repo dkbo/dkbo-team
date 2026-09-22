@@ -6,7 +6,7 @@ dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; dk_sett
 n="${1:-}"; [[ "$n" =~ ^[0-9]+$ ]] || dk_die "usage: dk-wave-open <N>"
 # 計畫階段的任務還沒有 worktree（dk-task-new 只建資料夾）。擋在這裡而不是讓 git -C "" 自己
 # 炸掉：領導看到的必須是下一步該跑什麼，不是一行 git 的 fatal。
-[ -n "${DK_WORKTREE:-}" ] || dk_die "任務尚未實體化（.task.env 的 DK_WORKTREE 還是空的）：先 dk-leader $DK_SHORT --run 切 worktree、開 workspace 並交棒"
+[ -n "${DK_WORKTREE:-}" ] || dk_die "任務尚未實體化（.task.env 的 DK_WORKTREE 還是空的）：先 dk-leader $DK_SHORT --run 切 worktree、開 tab 並交棒"
 live=$(awk 'NF>=6 && $5==0 {next} NF>0 {n++} END{print n+0}' "$dir/.panes")   # worktree:false advisors (tab 0) are not wave members
 if [ "$live" -ne 0 ]; then
   names=$(awk 'NF>=6 && $5==0 {next} NF>0 {print $1}' "$dir/.panes")

@@ -70,6 +70,25 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   grep -q 'handoff run-leader pane wB:p10' "$d/process.md"
 }
 
+@test "--run: DK_WORKSPACE 原本是空的就用 HERDR_WORKSPACE_ID 補上並落盤（Important 1 正面）" {
+  HERDR_WORKSPACE_ID="" dk-task-new login "使用者登入" >/dev/null
+  dk-process "brief-review skipped: 單元測試"
+  dk-task-new login --gate1 >/dev/null
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  grep -q '^DK_WORKSPACE=""$' "$d/.task.env"
+  HERDR_WORKSPACE_ID="wX" run dk-leader login --run; [ "$status" -eq 0 ]
+  grep -q '^DK_WORKSPACE="wX"$' "$d/.task.env"
+  grep -q -- "--workspace wX " "$HERDR_STUB_LOG"
+}
+
+@test "--run: DK_WORKSPACE 原本非空就不被 HERDR_WORKSPACE_ID 改寫（Important 1 反面）" {
+  mk   # HERDR_WORKSPACE_ID=wB 建立時已落盤 DK_WORKSPACE="wB"
+  HERDR_WORKSPACE_ID="wZ" run dk-leader login --run; [ "$status" -eq 0 ]
+  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+  grep -q -- "--workspace wB " "$HERDR_STUB_LOG"
+  refute_grep -- "--workspace wZ " "$HERDR_STUB_LOG"
+}
+
 @test "--run 起 codex 領導時不帶 --name（AC19 反面）" {
   mk
   run dk-leader login --run --kind codex; [ "$status" -eq 0 ]

@@ -7,7 +7,7 @@ description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指�
 先讀 `.dkbo/LEADER.md`，再照本篇。
 
 ## 開任務
-1. `dk-task-new <short> "<顯示名>" [--from <檔>]`。它**只建任務資料夾**：不切 worktree、不開 herdr workspace（`.task.env` 的 `DK_WORKTREE`／`DK_BASE` 是空的，brief 標頭寫「交棒時建立」），那些延到 `/dkbo-run` 的 `dk-leader <short> --run` 才做 —— 計畫完可能不做，不先付成本。計畫階段你就是領導，reviewer 填在你的 workspace 右側。
+1. `dk-task-new <short> "<顯示名>" [--from <檔>]`。它**只建任務資料夾**：不切 worktree、不開 tab（`.task.env` 的 `DK_WORKTREE`／`DK_BASE`／`DK_TASK_TAB` 是空的，brief 標頭寫「交棒時建立」），那些延到 `/dkbo-run` 的 `dk-leader <short> --run` 才做 —— 計畫完可能不做，不先付成本。計畫階段你就是領導，reviewer 填在你的 workspace 右側。
 2. 寫 `request.md`：把人講的原話**逐字**抄進去，不摘要、不改寫。有外部文件就把相關段落整段貼進來（連結會死）。`--from` 指到真的檔案時它已經幫你複製好了。
 3. 寫 `brief.md`：目標 ≤3 行、驗收標準、檔案所有權（成員範圍不得重疊）、共用契約擁有者、波次表。波次表一列一位成員（標難度 S/M/L），審查欄只填在該波第一列，三種寫法：`預設`（用 settings.env 的 kind）、`skip: <理由>`（純文件波）、`kinds: <k1> [k2] [k3]`（指定 1–3 個 kind 當第二、三意見）。成員欄填 `<角色>[-<別名>]`（即 state 檔名，不含任務短名），可改欄以逗號分隔 glob，`dir/**` 代表整棵子樹。有 plan 檔時不重寫內容，只對應驗收、劃所有權、把 task 分組成波。
 4. `dk-brief-check`（機械閘，零 token）。FAIL 就修 brief 重跑；WARN（一波 dev 超過 tab 1 格數）建議拆波。

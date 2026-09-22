@@ -220,5 +220,7 @@ OK   tab close (probe) tab=w2:t2
 本身；plus 既有的 `--ratio`/`--amount`/`pane read` `NOTE` 行，跟這次改動無關。）跑完照 README
 的步驟 `herdr session stop/delete dktest` 收乾淨，`herdr session list` 確認只剩 `default`。
 
-Unit suite（`tests/run.sh`）不受影響 —— 這次只改了整合腳本與這篇文件，沒有動 `.dkbo/` 或
-stub。
+Unit suite（`tests/run.sh`）不受影響 —— 這一節記錄的 AC17 探針改動只動了整合腳本與這篇文件；
+0.11.0 的其他 AC 另外動了 `.dkbo/bin/dk-leader`／`dk-resume`／`dk-task-close`／`dk-task-new`／
+`.dkbo/skills/run/SKILL.md` 五支腳本，並新增 `tab_close.json`／`tab_get.json` 兩個 stub，不在
+這一節範圍內。

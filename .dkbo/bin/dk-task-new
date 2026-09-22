@@ -52,7 +52,7 @@ date=$(dk_today); name="$date-$short"; dir="$DK_ROOT/tasks/$name"
 [ ! -e "$dir" ] || dk_die "task exists: $dir"
 ls -d "$DK_ROOT/tasks/"[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-"$short" >/dev/null 2>&1 && dk_die "short name '$short' already used"
 
-# 0.10.0：這裡只建任務資料夾。worktree、分支、herdr workspace 與依賴鉤子全都延到
+# 0.10.0：這裡只建任務資料夾。worktree、分支、herdr tab 與依賴鉤子全都延到
 # `/dkbo-run` 的 `dk-leader <short> --run`（plan.md 決策①③）—— 計畫完可能不做，不先付成本；
 # base sha 也以交棒當下的 HEAD 為準，計畫拖幾天才開工時那才是對的起點。
 branch="dk/$short"

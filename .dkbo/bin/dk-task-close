@@ -78,7 +78,7 @@ del_branches() { # -d（合併過，安全）或 -D（放棄）
 }
 if [ "$abandon" = 1 ]; then
   printf '# %s 結案\n結果：abandoned   分支：%s\n## 原因\n%s\n' "$DK_DISPLAY" "$DK_BRANCH" "$reason" > "$dir/report.md"
-  # 計畫階段就放棄時這裡沒有 worktree、沒有分支、沒有 workspace 要收（AC2）：cleanup 的
+  # 計畫階段就放棄時這裡沒有 worktree、沒有分支、沒有 tab 要收（AC2）：cleanup 的
   # 逐 repo 迴圈是空的，del_branches 的退路對不存在的分支是 no-op。剩下的就是標 INDEX、
   # commit 記憶、清 .sessions 與 pane 名字。
   cleanup; del_branches -D

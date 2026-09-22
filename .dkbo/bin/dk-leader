@@ -23,7 +23,8 @@ ltier=$(echo "$KIND_DEFAULT_TIERS" | tr ' ' '\n' | awk -F= '$1=="L"{print $2}') 
 [ -n "$model" ]  || model="${ltier%%/*}"
 [ -n "$effort" ] || effort="${ltier##*/}"
 args=$(dk_kind_args "$kind" "$model/$effort")
-# CLI 那側的 session 顯示名＝workspace 名，人在 session picker 與終端標題上看到的就是 dk/<short>。
+# CLI 那側的 session 顯示名，人在 session picker 與終端標題上看到的就是 dk/<short>（與 herdr 的
+# workspace／tab 無關，是 CLI 自己的命名，見下）。
 # claude 有 --name，codex 與 agy 沒有對應旗標，回空字串（契約：kinds/<kind>.sh 的 kind_session_args）。
 sess=$(kind_session_args "dk/$short")
 
@@ -68,7 +69,7 @@ run_setup() { # NAME WT — AC20：每個 worktree 切好之後跑一次依賴�
   dk_process "setup $n failed"
 }
 # 明確呼叫，不掛 trap EXIT。這一版原本是掛 trap 的，而 rollback 只做了一半 —— worktree 刪了、
-# workspace 關了，.task.env 卻留著實體化後的值：dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，
+# tab 關了，.task.env 卻留著實體化後的值：dk_env_set 的第一行是 `d=$(dk_task_dir) || return 1`，
 # 而 dk_task_dir 當時結尾是裸 return，bash 規定 trap handler 裡的裸 return 回的是「觸發 trap 的那個
 # 狀態」（失敗路徑上就是 1）。common.sh 那一行已改成 return 0（回歸測試 01_common.bats），但這裡
 # 維持明確呼叫：rollback 到底有沒有跑完，不該吊在另一支 lib 的一行上，而它失效時是完全無聲的。
@@ -102,6 +103,14 @@ if [ "$run" = 1 ]; then
   old_wt="${DK_WORKTREE:-}"; old_base="${DK_BASE:-}"; wt_path="$old_wt"
 
   if [ "$materialized" = 0 ]; then
+    # ws 空值檢查提早到切 worktree／跑 DK_SETUP_CMD 之前：純前置條件，不看工作樹狀態，
+    # 早失敗省一次白付的依賴安裝。DK_WORKSPACE 原本是空字串時才用 HERDR_WORKSPACE_ID 補上
+    # 並落盤（契約：.task.env 的 DK_TASK_TAB），好讓 dk-spawn 的溢出 tab 讀得到；
+    # DK_WORKSPACE 原本非空則一律不動。
+    ws="${DK_WORKSPACE:-${HERDR_WORKSPACE_ID:-}}"
+    [ -n "$ws" ] || dk_die "DK_WORKSPACE 與 HERDR_WORKSPACE_ID 都是空的；--run 要在 herdr 環境內跑（要有所屬的 workspace）"
+    if [ -z "${DK_WORKSPACE:-}" ]; then dk_env_set DK_WORKSPACE "$ws"; DK_WORKSPACE="$ws"; fi
+
     # 交棒當下每個 repo 都要是乾淨的 git 根（乾淨只看已追蹤檔）。dk-task-new 已經做過名字、
     # 主 repo、git 根三項；「乾淨」是這裡才驗的那一項 —— worktree 從 HEAD 切，此刻才算數。
     dk_repos_check
@@ -134,10 +143,8 @@ if [ "$run" = 1 ]; then
     fi
     # 任務根 tab 只是一個「cwd 指向主樹、label 是分支名」的容器：領導必須站在主樹（.dkbo/ 在
     # 主樹，跑的也是主樹的腳本），員工 pane 照舊各自 --cwd。所以不用 herdr worktree create
-    # （plan.md 決策①）。開在 DK_WORKSPACE（人所在的 workspace，退路 HERDR_WORKSPACE_ID）
-    # 底下，不再開一個任務專屬 workspace（plan.md tasktab 決策）。
-    ws="${DK_WORKSPACE:-${HERDR_WORKSPACE_ID:-}}"
-    [ -n "$ws" ] || rb_die "DK_WORKSPACE 與 HERDR_WORKSPACE_ID 都是空的；--run 要在 herdr 環境內跑（要有所屬的 workspace）"
+    # （plan.md 決策①）。開在任務所屬的 workspace（DK_WORKSPACE，計畫時記下；退路
+    # HERDR_WORKSPACE_ID）底下，不再開一個任務專屬 workspace（plan.md tasktab 決策）。
     out=$(herdr tab create --workspace "$ws" --cwd "$DK_PROJECT_ROOT" --label "dk/$short" --no-focus \
             --env "DK_ROOT=$DK_ROOT" --env "HERDR_ENV=1" 2>/dev/null || true)
     new_tab=$(printf '%s' "$out" | dk_json '.result.tab.tab_id // empty' 2>/dev/null || true)
