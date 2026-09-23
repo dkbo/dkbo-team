@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.0 — 2026-09-23
+
+- feat(review)!: `DK_REVIEW_TIER` 出廠值由 `M` 改成 `L`（`settings.env`、`templates/seed/settings.seed.env`、`dk_settings` 缺鍵時的預設三處一致）。依據是 18 個已合併任務的 process.md：teamflow 的波審查用 M，6 個任務的整枝評議（L）**全數**再挑出 Important；panova 的波審查用 L，12 個任務只有 2 個。最直接的是同一份 diff 的對照——tasktab 與 ops 第一次整枝評議時分支上只有波 1，`task.diff` 就是波 1 的 diff：tasktab 的 M 判「Important 0、Minor 0」，20 分鐘後 L 挑出 4 條；ops 的 M 判 1 條，L 再多 2 條。波審查漏掉的問題拖到整枝評議，就要多開一整個修復波（ops、tasktab 的修復循環各約 2 小時，佔任務總時長五成以上）。0.4.0 預設 M 的理由是「密度先於天花板」，但第二個 kind 實跑幾乎全程熔斷，密度實際為 0。兩個專案的程式類型不同（bash 對 Vue），檔位不是唯一變因。`/dkbo-init` 的問法改成預設 L、人要省額度才降 M。
+- docs(run): `skills/run/SKILL.md` 結案段補兩條，讓同一份 diff 不被審兩次——單波任務的 L 檔波審查即整枝評議，不再跑 `dk-review --task`（記 `review task skipped: 單波…`）；整枝評議挑出 Important 開的修復波，審查用 `--tier L`，這一輪就算下一輪整枝評議，Important 0 即進關卡③，只有修復動到先前各波沒碰過的檔或跨成員共用契約時才重跑整枝評議。
+- 測試：636 bats（+2）；`20_review.bats` 出廠檔位改驗 `opus/high`、降 M 改驗 `opus/medium`；`23_leader_kind.bats` 缺鍵預設改驗 L；`25_docs_policy.bats` +2（兩條結案規則、三處出廠值一致）；shellcheck 零警告。
+- 升級：**既有專案的 `settings.env` 不會跟著改**（升級的 rsync 排除它）。要採用就手改 `DK_REVIEW_TIER="L"`；已經是 L 的不用動。沒有新鍵、新依賴、新 skill。
+
 ## 0.13.0 — 2026-09-23
 
 - feat(kinds)!: claude kind 三檔全換 Opus 5.5，只用 effort 分檔——`KIND_DEFAULT_TIERS` 由 `S=sonnet/low M=sonnet/medium L=opus/high` 改成 `S=opus/low M=opus/medium L=opus/high`；六份角色檔照同一條規則改：sonnet 一律換成同 effort 的 opus（qa 的 L 由 `sonnet/high` 改 `opus/high`，it 由 `sonnet/low`／`sonnet/low`／`sonnet/medium` 改 `opus/low`／`opus/low`／`opus/medium`）。依據（2026-09-23，Opus 5.5 發布隔天）：Artificial Analysis Intelligence Index 的 opus/low 42、opus/medium 51、opus/high 54，sonnet/low 24、sonnet/medium 28、sonnet/max 38，fable 5.1 最高 53、價格是 opus 的 2.5 倍；每題成本 opus/low $0.55 與 sonnet/low $0.51 相當（opus 單價兩倍但用的 token 少）。Vals 的 Terminal-Bench 2.1 opus 87.6% 對 sonnet 74.5%，與 AA 方向一致。S 檔另有 Anthropic〈What a task costs on Opus 5.5〉的建議：機械式改動留在 Opus 5.5 low，Sonnet/Haiku 只給查找、不給寫碼——dkbo 的 S 定義正是純機械改動。尚未驗證的是 opus/low 對 sonnet 的實跑比較（第三方只有 AA 分 effort 測過，Vals Index（max）上兩者只差 1 分），第一次實跑 S 檔時留意品質與額度。reviewer 的 M/L 仍解析到不同旗標（`opus/medium` 對 `opus/high`），0.4.0 記下的「M 與 L 不得同義」照舊成立。領導走 L 檔，仍是 `opus/high`，不受影響。sonnet 留在 `KIND_MODEL_EFFORTS`，`--model sonnet` 手動指定仍可用。

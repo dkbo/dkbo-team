@@ -40,10 +40,10 @@ teardown() { teardown_project; }
   grep -q '^DK_WAVE_TIMEOUT_MIN=' "$DK_ROOT/settings.env"
   [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 10 ]   # 0.10.0 多了 DK_REPOS 與 DK_SETUP_CMD
 }
-@test "dk_settings provides and exports DK_REVIEW_TIER, defaulting to M" {
+@test "dk_settings provides and exports DK_REVIEW_TIER, defaulting to L" {
   rm -f "$DK_ROOT/settings.env"
   run bash -c '. "$DK_ROOT/lib/common.sh"; dk_settings 2>/dev/null; env | grep "^DK_REVIEW_TIER="'
-  [ "$status" -eq 0 ]; [ "$output" = "DK_REVIEW_TIER=M" ]
+  [ "$status" -eq 0 ]; [ "$output" = "DK_REVIEW_TIER=L" ]
 }
 @test "settings.env ships DK_REVIEW_TIER as the eighth key" {
   grep -q '^DK_REVIEW_TIER=' "$DK_ROOT/settings.env"

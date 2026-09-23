@@ -73,3 +73,13 @@ teardown() { teardown_project; }
 @test "整枝評議判不修時 ruling 要標明前提是實測還是推測" {
   grep -q -- '前提是\*\*實測\*\*還是\*\*推測\*\*' "$DK_ROOT/skills/run/SKILL.md"
 }
+@test "單波任務與整枝評議後的修復波，同一份 diff 不審兩次" {
+  grep -q -- '只有一波的任務' "$DK_ROOT/skills/run/SKILL.md"
+  grep -q -- 'review task skipped: 單波' "$DK_ROOT/skills/run/SKILL.md"
+  grep -q -- '這一輪就算下一輪整枝評議' "$DK_ROOT/skills/run/SKILL.md"
+}
+@test "reviewer 出廠檔位是 L（settings、seed、dk_settings 預設一致）" {
+  grep -q '^DK_REVIEW_TIER="L"' "$REPO_ROOT/.dkbo/settings.env"
+  grep -q '^DK_REVIEW_TIER="L"' "$REPO_ROOT/.dkbo/templates/seed/settings.seed.env"
+  grep -q 'DK_REVIEW_TIER="L"$' "$REPO_ROOT/.dkbo/lib/common.sh"
+}
