@@ -65,6 +65,11 @@ teardown() { teardown_project; }
 @test "AC17: 波中改 brief 只請原 dev 重做時要回 [FIXED]，不再回 [DONE]" {
   grep -q -- '回 `\[FIXED\]`' "$DK_ROOT/skills/run/SKILL.md"
 }
+@test "檔位：S 只給純機械工作，審查後的修復波至少 M" {
+  grep -q -- 'S 只給純機械的工作' "$DK_ROOT/skills/plan/SKILL.md"
+  grep -q -- '審查後的修復波成員至少 M' "$DK_ROOT/skills/run/SKILL.md"
+  grep -q -- 'S 純機械照做' "$DK_ROOT/skills/add-role/SKILL.md"
+}
 @test "整枝評議判不修時 ruling 要標明前提是實測還是推測" {
   grep -q -- '前提是\*\*實測\*\*還是\*\*推測\*\*' "$DK_ROOT/skills/run/SKILL.md"
 }
