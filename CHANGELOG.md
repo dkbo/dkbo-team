@@ -4,7 +4,9 @@
 
 - feat(review)!: `DK_REVIEW_TIER` 出廠值由 `M` 改成 `L`（`settings.env`、`templates/seed/settings.seed.env`、`dk_settings` 缺鍵時的預設三處一致）。依據是 18 個已合併任務的 process.md：teamflow 的波審查用 M，6 個任務的整枝評議（L）**全數**再挑出 Important；panova 的波審查用 L，12 個任務只有 2 個。最直接的是同一份 diff 的對照——tasktab 與 ops 第一次整枝評議時分支上只有波 1，`task.diff` 就是波 1 的 diff：tasktab 的 M 判「Important 0、Minor 0」，20 分鐘後 L 挑出 4 條；ops 的 M 判 1 條，L 再多 2 條。波審查漏掉的問題拖到整枝評議，就要多開一整個修復波（ops、tasktab 的修復循環各約 2 小時，佔任務總時長五成以上）。0.4.0 預設 M 的理由是「密度先於天花板」，但第二個 kind 實跑幾乎全程熔斷，密度實際為 0。兩個專案的程式類型不同（bash 對 Vue），檔位不是唯一變因。`/dkbo-init` 的問法改成預設 L、人要省額度才降 M。
 - docs(run): `skills/run/SKILL.md` 結案段補兩條，讓同一份 diff 不被審兩次——單波任務的 L 檔波審查即整枝評議，不再跑 `dk-review --task`（記 `review task skipped: 單波…`）；整枝評議挑出 Important 開的修復波，審查用 `--tier L`，這一輪就算下一輪整枝評議，Important 0 即進關卡③，只有修復動到先前各波沒碰過的檔或跨成員共用契約時才重跑整枝評議。
-- 測試：636 bats（+2）；`20_review.bats` 出廠檔位改驗 `opus/high`、降 M 改驗 `opus/medium`；`23_leader_kind.bats` 缺鍵預設改驗 L；`25_docs_policy.bats` +2（兩條結案規則、三處出廠值一致）；shellcheck 零警告。
+- docs(plan): 計畫審查達 `DK_REVIEW_MIN` 且意見已採納就送關卡①，不等晚到的 reviewer——它與人讀 brief 並行，人拍板前回來就併入並告訴人改了什麼，沒回來就關掉、補一行 `skipped (關卡①時未回)` 的 verdict 再 `--gate1`（`--gate1` 的兩道閘看最後一行 verdict 與 pane 是否關淨，不用改程式）。tasktab 為一位最後逾時的 agy 多等了 18 分鐘；逾時不寫專案層熔斷，所以下個任務還會再派、再等。
+- docs(protocol): 員工做的過程只跑相關測試檔，完整測試只在送 `[DONE]`／`[FIXED]` 前跑一次——wave-close 本來就再跑一次當閘；員工 report 記的全套次數一波最多 4 次，teamflow 一次 2 分 10 秒，且同波共用 worktree 會互相拖慢。
+- 測試：638 bats（+4）；`20_review.bats` 出廠檔位改驗 `opus/high`、降 M 改驗 `opus/medium`；`23_leader_kind.bats` 缺鍵預設改驗 L；`25_docs_policy.bats` +4（兩條結案規則、三處出廠值一致、關卡①不等晚到的 reviewer、完整測試只跑一次）；shellcheck 零警告。
 - 升級：**既有專案的 `settings.env` 不會跟著改**（升級的 rsync 排除它）。要採用就手改 `DK_REVIEW_TIER="L"`；已經是 L 的不用動。沒有新鍵、新依賴、新 skill。
 
 ## 0.13.0 — 2026-09-23

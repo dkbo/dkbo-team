@@ -83,3 +83,10 @@ teardown() { teardown_project; }
   grep -q '^DK_REVIEW_TIER="L"' "$REPO_ROOT/.dkbo/templates/seed/settings.seed.env"
   grep -q 'DK_REVIEW_TIER="L"$' "$REPO_ROOT/.dkbo/lib/common.sh"
 }
+@test "計畫審查達法定人數就送關卡①，不等晚到的 reviewer" {
+  grep -q -- '不等晚到的 reviewer' "$DK_ROOT/skills/plan/SKILL.md"
+  grep -q -- 'skipped (關卡①時未回)' "$DK_ROOT/skills/plan/SKILL.md"
+}
+@test "員工的完整測試只在送 DONE／FIXED 前跑一次" {
+  grep -q -- '完整測試只在送 `\[DONE\]`／`\[FIXED\]` 前跑一次' "$DK_ROOT/PROTOCOL.md"
+}
