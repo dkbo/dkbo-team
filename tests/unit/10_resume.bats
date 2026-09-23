@@ -38,6 +38,13 @@ teardown() { teardown_project; }
   printf '%s\n' "$output" | grep -qx '## process（最後 20 行）'
   [[ "$output" == *"tab 1: login-frontend(working 等了 1 min) login-qa(blocked 等了 2 min)"* ]]; [[ "$output" == *"tab 2: login-reviewer-a(? 等了 30 min)"* ]]
 }
+
+@test "AC6/Minor: 本波段多印專案層未恢復的 kind 與恢復時間" {
+  ( . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/kinds.sh"
+    dk_kinds_down_set agy "$(( $(date +%s) + 3600 ))" exact other-task some-agent "撞額度樣本" )
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"專案層熔斷: agy 到"* ]]; [[ "$output" == *"（來源任務 other-task）"* ]]
+}
 @test "resume <task> rebinds the pane" {
   rm "$DK_ROOT/.sessions/wB:p1"
   run dk-resume; [ "$status" -eq 1 ]

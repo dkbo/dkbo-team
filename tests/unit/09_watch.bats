@@ -365,6 +365,16 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
   [ "$(grep -c '全員完成' "$HERDR_STUB_LOG")" -eq 1 ]
 }
 
+@test "AC17 I1: 已交付的 dev --handoff 之後 dk-watch --once 不再推聚合" {
+  dev_wave; all_dev_done
+  dk-watch --once; grep -q '全員完成' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"
+  dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex >/dev/null
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  dk-watch --once
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+}
+
 @test "聚合送不到時下一 tick 重試" {
   dev_wave; all_dev_done
   HERDR_STUB_FAIL="agent wait" dk-watch --once
@@ -541,4 +551,17 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
   dk-watch --once
   grep -q '^hit: Individual quota reached, Resets in 102h11m1s$' "$d/.blocked/login-frontend.limit"
   grep -q '\[LIMIT\] from dk-watch: login-frontend 撞額度 — Individual quota reached, Resets in 102h11m1s' "$HERDR_STUB_LOG"
+}
+
+@test "AC5: 三個上限——hit: 最多 5 行、每行截 160 字、[LIMIT] 訊息 ≤200 字" {
+  long=$(printf 'usage limit padding %.0s' $(seq 1 20))   # 遠超過 160 字
+  txt=""
+  for i in 1 2 3 4 5 6 7; do txt="$txt$long line$i\n"; done
+  screen "$txt"
+  set_status login-frontend idle
+  dk-watch --once
+  [ "$(grep -c '^hit: ' "$d/.blocked/login-frontend.limit")" -eq 5 ]
+  while IFS= read -r hl; do [ "${#hl}" -le 165 ]; done < <(grep '^hit: ' "$d/.blocked/login-frontend.limit")
+  msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
+  [ "${#msg}" -le 200 ]
 }

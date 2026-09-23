@@ -113,7 +113,12 @@ fi
 echo "$agent $pane $(date +%s) $group $tab_no $slot" >> "$dir/.panes"
 # 整枝評議 I2：波開著時把一位 group=dev 成員寫進 .panes 的同一步刪掉 wave-N.devdone，
 # 新 dev 交 [DONE] 時 dk-watch 才會再推聚合；devdone 的語意屬 dk-watch，這裡只負責刪。
-if [ -n "${DK_WAVE:-}" ] && [ "$group" = dev ]; then rm -f "$dir/.blocked/wave-$DK_WAVE.devdone"; fi
+# reviewer-a Important 1（波 3）：已交付的 dev latch（wave-N.<sname>.done）還在時不刪 ——
+# 那是 --handoff／--resume 重派已交付的人，devdone 被刪會在下一個 tick 讓 dk-watch 判成
+# 假的「全員完成」；latch 已被 dk-wave-close --agent 清掉的重派（或全新成員）沒有 latch，照刪。
+if [ -n "${DK_WAVE:-}" ] && [ "$group" = dev ] && [ ! -f "$dir/.blocked/wave-$DK_WAVE.$sname.done" ]; then
+  rm -f "$dir/.blocked/wave-$DK_WAVE.devdone"
+fi
 
 # 這一刻 state 的內容快照，給 dk-watch 的 dev 聚合分辨「這一波的交付」與「上一波留在檔裡的
 # status: done」。state 檔跨波共用而聚合標記逐波，少了它，開波到員工動筆之間的空窗會被判成

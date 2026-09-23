@@ -39,11 +39,12 @@ dk_state_touched_shape_error() { # STATE_FILE → 共用契約「state 的 touch
 }
 dk_state_format_error() { # STATE_FILE TASK_DIR → 錯誤描述，合法回空字串
   local sf="$1" td="$2" err rp
-  grep -q '^status:' "$sf" || { echo "缺 status 鍵"; return; }
-  grep -q '^touched:' "$sf" || { echo "缺 touched 鍵"; return; }
-  grep -q '^report:' "$sf" || { echo "缺 report 鍵"; return; }
+  grep -q '^status:' "$sf" || { echo "缺 status 鍵，正確寫法：status: working"; return; }
+  grep -q '^touched:' "$sf" || { echo "缺 touched 鍵，正確寫法：touched: 或 touched: []"; return; }
+  grep -q '^report:' "$sf" || { echo "缺 report 鍵，正確寫法：report: state/<你的 state 名>.report.md"; return; }
   err=$(dk_state_touched_shape_error "$sf"); [ -z "$err" ] || { echo "$err"; return; }
   rp=$(sed -n 's/^report: *//p' "$sf" | head -1)
+  while [ "${rp% }" != "$rp" ]; do rp="${rp% }"; done
   [ -n "$rp" ] || { echo "report: 沒填路徑"; return; }
   [ -s "$td/$rp" ] || { echo "report: $rp 不存在或是空的"; return; }
 }

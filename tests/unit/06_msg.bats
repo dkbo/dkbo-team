@@ -354,6 +354,34 @@ state_ok() { # DIR — 一份合法的 dev state
   DK_AGENT=login-backend run dk-msg leader "[DONE] 都合法"
   [ "$status" -eq 0 ]
 }
+@test "AC17: 裸 touched:（沒有任何子項）合法" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\ntouched:\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  printf 'x' > "$d/state/backend.report.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] 裸 touched 合法"
+  [ "$status" -eq 0 ]
+  grep -q 'DONE' "$d/messages.log"
+}
+@test "AC17: report: 路徑後有行尾空白，去掉再判仍放行" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'x' > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md   \n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] report 行尾空白"
+  [ "$status" -eq 0 ]
+  grep -q 'DONE' "$d/messages.log"
+}
+@test "AC17: 缺 touched／report 鍵的錯誤各附正確寫法" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"缺 touched 鍵"*"touched:"* ]]
+  printf 'status: done\ntouched: []\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"缺 report 鍵"*"report: state/"* ]]
+}
 @test "AC10: 只驗 dev，不驗 qa 與 reviewer" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
   printf 'status: done\n' > "$d/state/qa.md"

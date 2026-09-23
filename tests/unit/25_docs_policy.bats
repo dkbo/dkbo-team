@@ -61,3 +61,7 @@ teardown() { teardown_project; }
     grep -q 'dk-kind' "$REPO_ROOT/$f" || { echo "$f 沒提到 dk-kind"; false; }
   done
 }
+
+@test "AC17: 波中改 brief 只請原 dev 重做時要回 [FIXED]，不再回 [DONE]" {
+  grep -q -- '回 `\[FIXED\]`' "$DK_ROOT/skills/run/SKILL.md"
+}

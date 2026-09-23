@@ -247,3 +247,21 @@ down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
   run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
   [ -f "$d/.blocked/wave-1.devdone" ]
 }
+@test "AC17 I1: 已交付的 dev --handoff 重派不刪 wave-N.devdone（有 latch）" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  mkdir -p "$d/.blocked"
+  : > "$d/.blocked/wave-1.backend.done"   # 已交付的 latch
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+}
+@test "AC17 I1: 沒有 latch 的 dev 重派仍照刪 wave-N.devdone（新成員／已被 --agent 關過）" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}

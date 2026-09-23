@@ -15,7 +15,7 @@ teardown() { teardown_project; }
   run dk_kind_parse_agy_reset 'thinking...'; [ "$status" -ne 0 ]
 }
 
-@test "codex: 實測原文 11th" {
+@test "codex: 構造樣本 11th（非實測原文，任務記憶只留過 flowgap 的轉述）" {
   [ "$(dk_kind_parse_codex_reset 'Try again at Nov 11th, 2026 3:15 PM')" = "2026-11-11T15:15" ]
 }
 @test "codex: 非 th 序數 22nd 與 1st" {
