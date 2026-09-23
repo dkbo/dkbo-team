@@ -62,3 +62,35 @@ teardown() { teardown_project; }
   [ ! -L .claude/skills/dkbo-init ]; [ -f .claude/skills/dkbo-init/keep ]; [ ! -e .claude/skills/dkbo-init/init ]
   [ "$(readlink .agents/skills/dkbo-init)" = "../../.dkbo/skills/init" ]
 }
+@test "全新安裝：README 的一鍵指令先拿掉源碼倉的開發紀錄，install.sh 補空白起始檔" {
+  strip=$(grep -o '(cd "$tmp/.dkbo" && rm -rf [^)]*)' "$REPO_ROOT/README.md" | head -1)
+  [ -n "$strip" ]
+  tmp=$(mktemp -d); cp -r "$REPO_ROOT/.dkbo" "$tmp/.dkbo"
+  eval "$strip"
+  rm -rf .dkbo; cp -r "$tmp/.dkbo" ./.dkbo; rm -rf "$tmp"
+  run bash .dkbo/install.sh; [ "$status" -eq 0 ]
+  [[ "$output" == *"seeded .dkbo/decisions.md"* ]]
+  [ -z "$(find .dkbo/tasks -mindepth 1 -maxdepth 1 -name '20*')" ]
+  for f in tasks/INDEX.md:INDEX.md tasks/BACKLOG.md:BACKLOG.md decisions.md:decisions.md PROJECT.md:PROJECT.md settings.env:settings.env; do
+    cmp ".dkbo/${f%%:*}" ".dkbo/templates/seed/${f#*:}" || { echo "not seeded: ${f%%:*}"; false; }
+  done
+  grep -q '^DK_TEST_CMD=""' .dkbo/settings.env
+  [ -f .dkbo/tasks/_chores/.gitkeep ]; [ -f .dkbo/.sessions/.gitkeep ]
+}
+@test "install.sh 不覆蓋既有的專案記憶與設定" {
+  echo '- 2026-01-01 我的決策' >> .dkbo/decisions.md
+  for f in decisions.md settings.env PROJECT.md tasks/INDEX.md tasks/BACKLOG.md; do cp ".dkbo/$f" "$BATS_TEST_TMPDIR/$(basename "$f").bak"; done
+  run .dkbo/install.sh; [ "$status" -eq 0 ]; [[ "$output" != *seeded* ]]
+  for f in decisions.md settings.env PROJECT.md tasks/INDEX.md tasks/BACKLOG.md; do cmp ".dkbo/$f" "$BATS_TEST_TMPDIR/$(basename "$f").bak"; done
+}
+@test "三份 README 的全新安裝都先拿掉專案檔，且涵蓋升級 rsync 排除的每一項（roles 除外）" {
+  for f in README.md README.en.md .dkbo/README.md; do
+    cp_n=$(grep -c 'cp -r "$tmp/.dkbo" ./.dkbo' "$REPO_ROOT/$f"); rm_n=$(grep -c '(cd "$tmp/.dkbo" && rm -rf ' "$REPO_ROOT/$f")
+    [ "$cp_n" -ge 1 ] && [ "$cp_n" -eq "$rm_n" ] || { echo "$f: cp -r $cp_n 次、先拿掉 $rm_n 次"; false; }
+  done
+  strip=$(grep -o '(cd "$tmp/.dkbo" && rm -rf [^)]*)' "$REPO_ROOT/.dkbo/README.md" | head -1)
+  for x in $(grep -o -- "--exclude=[^ ]*" "$REPO_ROOT/.dkbo/README.md" | sed 's/^--exclude=//; s/^'\''//; s/'\''$//' | sort -u); do
+    [ "$x" = 'roles/*' ] && continue
+    [[ " ${strip%)} " == *" $x "* ]] || { echo "全新安裝沒拿掉 $x"; false; }
+  done
+}

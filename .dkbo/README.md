@@ -28,7 +28,7 @@ DK_SETUP_CMD="pnpm install --frozen-lockfile --prefer-offline"
 > git status --porcelain | grep -q . && { echo "工作樹不乾淨，請先 commit 或 stash"; exit 1; }
 > REPO=https://github.com/dkbo/dkbo-team.git   # fork 的話改這裡
 > VER=v0.12.0   # 要裝的版本；看 https://github.com/dkbo/dkbo-team/tags
-> tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" "$REPO" "$tmp" && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
+> tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" "$REPO" "$tmp" && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 > .dkbo/install.sh
 > git add -A && git commit -m "chore: add dkbo"
 > .dkbo/bin/dk-whoami   # 預期印出 leader
@@ -43,8 +43,8 @@ leader
 ```
 
 ## 手動安裝（同一件事拆開）
-1. 複製 `.dkbo/` 到專案根目錄。
-2. `.dkbo/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkbo-init`、`dkbo-add-role`、`dkbo-brain`、`dkbo-plan`、`dkbo-run` 五個 symlink；在 `AGENTS.md` 尾端追加一行指向 `.dkbo/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `.dkbo/.sessions/`。既有內容一律不動。
+1. 複製 `.dkbo/` 到專案根目錄，但先拿掉 `tasks/`、`decisions.md`、`PROJECT.md`、`settings.env`、`.sessions/`：那是源碼倉 dkbo 自己的開發紀錄與設定，不是你專案的（與「更新 dkbo」的 rsync 排除同一組）。
+2. `.dkbo/install.sh`：在 `.claude/skills/` 與 `.agents/skills/` 建 `dkbo-init`、`dkbo-add-role`、`dkbo-brain`、`dkbo-plan`、`dkbo-run` 五個 symlink；在 `AGENTS.md` 尾端追加一行指向 `.dkbo/ENTRY.md`；在 `CLAUDE.md` 尾端追加 `@AGENTS.md`（CLAUDE.md 若是 AGENTS.md 的 symlink 則略過）；`.gitignore` 加 `.dkbo/.sessions/`；`tasks/INDEX.md`、`tasks/BACKLOG.md`、`decisions.md`、`PROJECT.md`、`settings.env` 缺的才從 `templates/seed/` 補空白版。既有內容一律不動。
 3. `git add -A && git commit`。員工在 worktree 工作，只看得到已 commit 的檔案，這步不能省。
 4. 在 herdr 內的 Claude Code 執行 `/dkbo-init`：偵測已裝的 AI CLI、選主模型與第二三意見、改寫角色檔的 model/effort、預填 `.dkbo/PROJECT.md`、掃描既有 CLAUDE.md / AGENTS.md 與 dkbo 規則的衝突、檢查 MCP 需求。
 

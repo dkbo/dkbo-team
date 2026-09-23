@@ -53,6 +53,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
 VER=v0.12.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+  && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
 .dkbo/bin/dk-whoami   # expected: leader

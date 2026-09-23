@@ -8,7 +8,8 @@
 - feat(watch): `[LIMIT]` 留畫面證據——`handle_limit` 在 `.blocked/<agent>.limit` 追加最多 5 行 `hit: <命中的畫面行>`，送給領導的 `[LIMIT]` 訊息尾端附第一條命中行，process.md 的 `limit …` 行不附（避免領導讀 process 時畫面冒出額度字樣）。`hit:` 行的截斷改按字元數（不是位元組）：原本用 `cut -c` 在 GNU 環境是按位元組截，中文命中行會切出半個 UTF-8 字元，讓真 herdr 拒收這個非法參數、`[LIMIT]` 永遠送不到；改法保證 `.limit` 的 `hit:` 行、kinds-down 的第一條 hit 與送出的 `[LIMIT]` 訊息都是合法 UTF-8。
 - feat(flow): `dk-wave-open <N> --refresh` 讓波中改 brief 可重產第 N 波所有成員的切片、重設整波逾時起算點，不改 base、不重派、不刪 `.blocked/wave-N.devdone`（改由 `dk-spawn` 在波開著時加入 dev 成員的同一步刪，避免新成員 spawn 前的空窗重推假聚合）；`dk-msg` 在切片比 brief 舊、或領導有未 ack 的訊息時各印一行提示但照送；dev 送 `[DONE]` 前驗 state 的 `status`／`touched`／`report` 三個頂格鍵與 `touched` 文法，不過拒絕並指出哪裡錯；`dk-task-close` 結案後把時間表「任務」列的結束時間與 report.md 的 `結果：` 行改寫成最終值，不再帶「（進行中）」。
 - docs: `skills/run/SKILL.md` 的 `[LIMIT]` 故障段改寫成先驗 `hit:` 再判真假、補送 TASK/DECISION 前讀未 ack、視覺變更任務先給人看畫面、波中改 brief 走 `--refresh` 的流程；三份 README 補 `dk-kind`／`--refresh`；`.dkbo/README.md` 疑難排解補專案層熔斷；`PROTOCOL.md`／`templates/state.md` 寫明 `touched` 的清單文法。整枝評議把問題判成不修、記 BACKLOG 時，ruling 要標明前提是實測還是推測，推測不能當不修的理由（ops 任務把 UTF-8 截斷誤判成「只影響顯示」，多開了一波）。檔位選擇收緊：`skills/plan/SKILL.md` 寫明 S 只給純機械的工作，碰邏輯、閘或規則文件至少 M；`skills/run/SKILL.md` 寫明審查後的修復波成員至少 M；`skills/add-role/SKILL.md` 的 S 定義同步改成「純機械照做、不碰邏輯」。
-- 測試：629 bats（+77）；21/25/04 補斷言；shellcheck 零警告。
+- fix(install): 全新安裝不再把源碼倉的開發紀錄一起裝進去——三份 README 的一鍵安裝原本 `cp -r` 整個 `.dkbo/`，v0.10.0 起的 tag 都帶著 dkbo 自己的 `tasks/`（任務紀錄、BACKLOG、INDEX）、`decisions.md`（領導會當成你專案的跨任務決策來讀）、`PROJECT.md` 與 `settings.env`（`DK_TEST_CMD=tests/run.sh`）。改成複製前先在暫存 clone 拿掉這五項（與升級的 rsync 排除同一組）；`install.sh` 對缺的 `tasks/INDEX.md`、`tasks/BACKLOG.md`、`decisions.md`、`PROJECT.md`、`settings.env` 從新增的 `templates/seed/` 補空白版，已存在的不動。已用舊指令安裝的專案：`decisions.md` 與 `tasks/` 裡不是自己的條目要手動刪。
+- 測試：632 bats（+80）；21/25/04/14 補斷言；shellcheck 零警告。
 - 升級：`.dkbo/.sessions/kinds-down` 與其鎖檔 `kinds-down.lock` 是新增的執行期檔（已被 `.gitignore` 排除，不進版控）；新增 bin `dk-kind`；沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink，`.task.env` 沒有新鍵。
 
 ## 0.11.2 — 2026-09-23
