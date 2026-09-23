@@ -45,6 +45,15 @@ teardown() { teardown_project; }
   run dk-resume; [ "$status" -eq 0 ]
   [[ "$output" == *"專案層熔斷: agy 到"* ]]; [[ "$output" == *"（來源任務 other-task）"* ]]
 }
+@test "AC18/Minor: 兩波之間（DK_WAVE 空）也印專案層熔斷，guess 標記統一成 (guess)" {
+  sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+  ( . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/kinds.sh"
+    dk_kinds_down_set agy "$(( $(date +%s) + 3600 ))" guess other-task some-agent "撞額度樣本" )
+  run dk-resume; [ "$status" -eq 0 ]
+  [[ "$output" == *"沒有開著的波"* ]]
+  [[ "$output" == *"專案層熔斷: agy 到"*" (guess)"*"（來源任務 other-task）"* ]]
+  [[ "$output" != *"（猜）"* ]]
+}
 @test "resume <task> rebinds the pane" {
   rm "$DK_ROOT/.sessions/wB:p1"
   run dk-resume; [ "$status" -eq 1 ]

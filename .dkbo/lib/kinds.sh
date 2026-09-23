@@ -106,11 +106,31 @@ dk_kind_recover_epoch() { # KIND TEXT → "<epoch> exact|guess"；兩種都解�
       if secs=$(dk_kind_parse_agy_reset "$text"); then printf '%s exact\n' "$((now + secs))"; return 0; fi ;;
     codex)
       if target=$(dk_kind_parse_codex_reset "$text"); then
-        nowmin=$(dk_ts_minutes "$(dk_now)") && diff=$(( $(dk_ts_minutes "$target") - nowmin )) \
-          && { printf '%s exact\n' "$((now + diff * 60))"; return 0; }
+        nowmin=$(dk_ts_minutes "$(dk_now)") && diff=$(( $(dk_ts_minutes "$target") - nowmin ))
+        # 目標時間已經過去（時區不一致等）→ 那一列一寫進去就過期，等於沒熔斷；改標 guess
+        # 才會真的落地成「現在＋5h」（reviewer-a 本輪 Minor）
+        [ -n "${diff:-}" ] && [ "$diff" -gt 0 ] && { printf '%s exact\n' "$((now + diff * 60))"; return 0; }
       fi ;;
   esac
   printf '%s guess\n' "$((now + 5 * 3600))"
+}
+
+dk_utf8_trunc() { # TEXT N — 前 N 個 UTF-8 字元；只在字元邊界切，locale 中立（LC_ALL=C 下也不切半個
+  # 位元組序列）：AC18 的教訓是 `cut -c` 按位元組算，切出半個字元會讓 herdr 拒收整則 [LIMIT]。
+  # 走 od 逐位元組讀（純數字，不靠 grep/read 對文字的 locale 假設——那條路子在某些環境會把整行
+  # 一起吞掉或黏成一個字元，比 `cut -c` 更難察覺），再用 printf 的八進位跳脫把位元組組回字串。
+  local text="$1" n="${2:-160}" cnt=0 esc="" byte
+  while read -r byte; do
+    [ -n "$byte" ] || continue
+    if [ $((byte & 0xC0)) -ne 128 ]; then   # 不是延續位元組（10xxxxxx）＝新字元開始
+      cnt=$((cnt + 1))
+      [ "$cnt" -gt "$n" ] && break
+    fi
+    esc="$esc\\$(printf '%03o' "$byte")"
+  done < <(printf '%s' "$text" | od -An -v -tu1 | tr -s ' ' '\n' | sed '/^$/d')
+  # esc 本身就是要展開的八進位跳脫序列組，不是使用者輸入
+  # shellcheck disable=SC2059
+  printf "$esc"
 }
 
 dk_ts_from_minutes() { # 分鐘數（同 dk_ts_minutes 的算術）→ "YYYY-MM-DDTHH:MM"，civil_from_days 是它的反函式

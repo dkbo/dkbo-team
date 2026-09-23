@@ -52,6 +52,11 @@ teardown() { teardown_project; }
   read -r epoch tag <<< "$(dk_kind_recover_epoch unknown-kind 'whatever')"
   [ "$tag" = guess ]
 }
+@test "dk_kind_recover_epoch: codex 目標時間已過（時區不一致等）改走 guess，不誤標 exact" {
+  now=$(date +%s)
+  read -r epoch tag <<< "$(dk_kind_recover_epoch codex 'Try again at Jan 1st, 2020 12:00 AM.')"
+  [ "$tag" = guess ]; diff=$(( epoch - (now + 5*3600) )); [ "${diff#-}" -le 5 ]
+}
 @test "AC2: 拒絕 -d 的假 date 下，codex 樣本算出的 epoch 與正常環境相差 ≤ 60 秒" {
   normal=$(dk_kind_recover_epoch codex 'Try again at Nov 11th, 2026 3:15 PM.')
   read -r normal_epoch _ <<< "$normal"

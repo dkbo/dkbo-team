@@ -115,8 +115,11 @@ handle_limit() { # agent txt — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：�
     kind=$(agent_kind "$agent")
     # AC5：畫面上撞額度的原文是唯一證據——通知只說「撞額度」三個字，領導得回去讀畫面才知道真假。
     # 留最多 5 行命中的畫面原文在 .limit 檔（去頭尾空白、每行截 160 字），第一條也附進送給領導的訊息。
+    # 截斷用 dk_utf8_trunc（按字元）不用 `cut -c`（按位元組，會切出半個 UTF-8 字元讓 herdr 拒收）。
     hits=$(printf '%s\n' "$txt" | grep -iE "$(dk_kind_re "$kind" quota)" \
-             | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' | cut -c1-160 | head -5)
+             | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' | head -5)
+    hits=$(while IFS= read -r hl; do [ -n "$hl" ] && dk_utf8_trunc "$hl" 160; printf '\n'; done <<< "$hits")
+    hits="${hits%$'\n'}"
     herdr notification show "dkbo: $agent limit" --body "撞額度，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
     # 熔斷不等領導：任務狀態已經變了，領導收不收得到訊息都一樣成立（同 timeout 的理由）
     if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
@@ -137,7 +140,7 @@ handle_limit() { # agent txt — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：�
   first_hit=$(sed -n 's/^hit: //p' "$m" | head -1)
   msg="[LIMIT] from dk-watch: $agent 撞額度"
   [ -n "$first_hit" ] && msg="$msg — $first_hit"
-  msg="${msg:0:200}"
+  msg=$(dk_utf8_trunc "$msg" 200)
   if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "$msg"; then echo delivered >> "$m"; fi
 }
 

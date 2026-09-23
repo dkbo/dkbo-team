@@ -38,22 +38,26 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   if [ -n "$wave_min" ]; then echo "本波已進行 $((now_min - wave_min))m（自 wave-open）"; fi
   if [ -n "${DK_WAVE:-}" ]; then
     echo "wave: $DK_WAVE  base: $(dk_wave_base "$dir" "$DK_WAVE")  kinds down: ${DK_KIND_DOWN:-無}"
-    # AC6：專案層的熔斷跟本任務的 DK_KIND_DOWN 是兩張獨立的清單，接手的人要同時看到——否則
-    # 會誤以為換個 kind 就沒事，其實下一個任務一派同一個 kind 還是會被 dk_review_kinds／dk-spawn 擋下。
-    proj=$(dk_kinds_down_rows)
-    if [ -n "$proj" ]; then
-      while IFS=' ' read -r k e ex _rt tn _ag _hit; do
-        [ -n "$k" ] || continue
-        tag=""; [ "$ex" = guess ] && tag="（猜）"
-        printf '專案層熔斷: %s 到 %s%s（來源任務 %s）\n' "$k" "$(dk_epoch_to_local "$e")" "$tag" "$tn"
-      done <<< "$proj"
-    fi
+  else echo "沒有開著的波（dk-wave-open N 開下一波）"; fi
+  # AC6/Minor：專案層的熔斷跟本任務的 DK_KIND_DOWN 是兩張獨立的清單，接手的人要同時看到——否則
+  # 會誤以為換個 kind 就沒事，其實下一個任務一派同一個 kind 還是會被 dk_review_kinds／dk-spawn 擋下。
+  # 兩波之間（DK_WAVE 空）也要印：領導在兩波之間恢復時不該看不到熔斷（reviewer-a 本輪 Minor）。
+  # guess 標記統一成 dk-kind 的 `(guess)`，不再用「（猜）」——同一個標記兩種寫法只會讓人多想。
+  proj=$(dk_kinds_down_rows)
+  if [ -n "$proj" ]; then
+    while IFS=' ' read -r k e ex _rt tn _ag _hit; do
+      [ -n "$k" ] || continue
+      tag=""; [ "$ex" = guess ] && tag=" (guess)"
+      printf '專案層熔斷: %s 到 %s%s（來源任務 %s）\n' "$k" "$(dk_epoch_to_local "$e")" "$tag" "$tn"
+    done <<< "$proj"
+  fi
+  if [ -n "${DK_WAVE:-}" ]; then
     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
       NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"
         while ((getline l < sf) > 0) if (l ~ /^status: /) st=substr(l, 9); close(sf)
         printf "%s %s %d min%s\n", $1, st, (now-$3)/60, ((now-$3) > t*60 && st!="done") ? " TIMEOUT?" : "" }' "$dir/.panes"
-  else echo "沒有開著的波（dk-wave-open N 開下一波）"; fi
+  fi
   echo "$watch"
   echo "## 裁定（最後一次 wave-open 之後）"
   rul=$(awk '$2=="wave-open"{buf=""} $2=="ruling:"{buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/process.md")
