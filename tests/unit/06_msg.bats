@@ -24,7 +24,7 @@ teardown() { teardown_project; }
   ! grep -q '^agent prompt login-frontend' "$HERDR_STUB_LOG"
 }
 @test "undelivered when wait fails" {
-  HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa run dk-msg login-frontend "[BUG] x"
+  HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa DK_MSG_RETRY_SEC=0 run dk-msg login-frontend "[BUG] x"
   [ "$status" -eq 1 ]
   grep -q 'login-qa -> login-frontend \[UNDELIVERED\] \[BUG\] x' "$DK_ROOT/tasks/$(date +%F)-login/messages.log"
 }
