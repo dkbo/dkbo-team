@@ -182,6 +182,13 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
   grep -q ' kind codex up$' "$d/process.md"
 }
+@test "AC16 I1: DK_KIND_DOWN 只有目標 kind 時 up 仍要成功" {
+  d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
+  sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex"/' "$d/.task.env"
+  run dk-kind up codex; [ "$status" -eq 0 ]; [ "$output" = "kind codex up" ]
+  grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
+  grep -q ' kind codex up$' "$d/process.md"
+}
 @test "dk-kind up：兩張清單都沒有這個 kind 就印說明並 exit 0" {
   d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
   run dk-kind up codex; [ "$status" -eq 0 ]

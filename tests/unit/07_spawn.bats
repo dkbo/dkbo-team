@@ -231,3 +231,19 @@ down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
   grep -q '^pane split' "$HERDR_STUB_LOG"
   grep -q '^agent start login-frontend-cart --kind claude ' "$HERDR_STUB_LOG"
 }
+
+# --- AC16（整枝評議 I2 spawn 半邊）：dev 進 .panes 的同一步刪 wave-N.devdone -------
+@test "AC16 I2: 波開著時 spawn 一位 group=dev 成員 → wave-N.devdone 被刪" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
+@test "AC16 I2: 波開著時 spawn qa 或 reviewer（group=review）→ wave-N.devdone 不刪" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+}

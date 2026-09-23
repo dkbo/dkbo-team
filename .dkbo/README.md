@@ -102,11 +102,11 @@ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update 
 | `herdr 0.8.x is older than the 0.9.0 dkbo needs` | dkbo 對 herdr 的 JSON 形狀與 `--ratio`／`--amount` 語義是實測 0.9.0 得到的，舊版會讓版面歪掉、watcher 靜靜失效，所以直接拒跑。升級 herdr。 |
 | `herdr X is newer than the 0.9.x series dkbo verified` | 只是提醒，照跑。跑一次 `tests/integration/herdr-real.sh`（零 token）確認形狀沒變，沒問題就把 `.dkbo/lib/common.sh` 的 `DK_HERDR_VERIFIED` 往上調。 |
 | 想確認守望還在 | 跑 `dk-resume` 看 `watch:` 那行，或 `dk-watch --ensure`（幂等，死了就重啟）。雜務那一側是 `dk-watch --chores --ensure`，pid 記在 `.dkbo/.sessions/chores.watch.pid`。 |
-| 新任務一派 reviewer 就跳過某個 kind | 專案層熔斷還沒恢復。`dk-kind` 看清單與恢復時間，`dk-kind up <k>` 解除；不要叫員工自己跑，命中行會印在他畫面上。 |
+| 新任務一派 reviewer 就跳過某個 kind | `dk-watch` 判定撞額度、專案層熔斷還沒恢復。`dk-kind` 看清單與恢復時間，`dk-kind up <k>` 解除；不要叫員工自己跑，命中行會印在他畫面上。 |
 | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
 | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md` 與當前階段那篇（`skills/{brain,plan,run}/SKILL.md`）；必要時 `/clear` 後重新叫該 skill。 |
 | 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 `skills/run/SKILL.md` 補位。 |
-| 領導收到 `[LIMIT]` | 額度已耗盡，`.blocked/<員工>.limit` 追加了 `hit:` 命中行當證據，同一個 kind 也會寫進跨任務的專案層熔斷檔，讓下一個任務自動跳過它；先讀 `hit:` 行或 `herdr agent read` 確認不是誤判，誤判用 `dk-kind up <k>` 解除。 |
+| 領導收到 `[LIMIT]` | `dk-watch` 判定撞額度：先讀 `.blocked/<員工>.limit` 的 `hit:` 行（或 `herdr agent read`）確認不是誤判；真的撞到會同時寫進跨任務的專案層熔斷檔，讓下一個任務自動跳過該 kind，誤判用 `dk-kind up <k>` 解除。 |
 | `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗、`unowned change`（本波改了沒人擁有的檔）。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |
 | 跑了 `git clean -xdf` 之後雜務關不掉 | `.dkbo/.sessions/chores/<agent>` 是正在跑的雜務的身分證，因為是 gitignored 所以 `git clean -xdf` 會把它連同其他忽略檔一起清掉；雜務本身（pane、worktree、branch）沒事，但 `dk-chore-close` 從此找不到它。復原：`dk-chore-close <agent> --abandon`（清掉 pane、worktree、branch，不 merge）。 |
 | `dk-task-close` exit 3 | 多 repo 的預檢有 repo 衝突：訊息列出全部衝突的 repo，**一個 repo 都還沒合併**。去衝突的 repo 手動解，或開一個 it 修復波，解完重跑 `dk-task-close`。 |

@@ -14,7 +14,9 @@ dk_state_touched_shape_error() { # STATE_FILE → 共用契約「state 的 touch
       in_t=0
       case "$line" in
         touched:*)
-          rest="${line#touched:}"; rest="${rest# }"
+          rest="${line#touched:}"
+          # 去掉冒號後全部空白（不只一格），空字串與 [] 都合法。
+          while [ "${rest# }" != "$rest" ]; do rest="${rest# }"; done
           if [ -n "$rest" ] && [ "$rest" != "[]" ]; then
             echo "第 $n 行：touched: 後面只能是空白或 []，多筆改寫成下面每行 '  - path'"; return
           fi

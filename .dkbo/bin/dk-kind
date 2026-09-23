@@ -28,7 +28,7 @@ case "$cmd" in
     if d=$(dk_task_dir 2>/dev/null); then
       DK_TASK_DIR="$d"; export DK_TASK_DIR; dk_task_env
       if [[ " ${DK_KIND_DOWN:-} " == *" $k "* ]]; then
-        new=$(printf '%s\n' "$DK_KIND_DOWN" | tr ' ' '\n' | grep -vx "$k" | tr '\n' ' ' | sed 's/ *$//')
+        new=$(printf '%s\n' "$DK_KIND_DOWN" | tr ' ' '\n' | { grep -vx "$k" || true; } | tr '\n' ' ' | sed 's/ *$//')
         dk_env_set DK_KIND_DOWN "$new"
         removed=1
       fi

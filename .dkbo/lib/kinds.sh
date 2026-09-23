@@ -184,15 +184,16 @@ dk_kinds_down_set() { # KIND EPOCH exact|guess TASKNAME AGENT HIT — flock 序�
 }
 
 dk_kinds_down_remove() { # KIND → 0 表示真的拿掉了至少一列；沒有檔或沒命中回 1
-  local kind="$1" f lock rc
+  local kind="$1" f lock rc dropped
   f=$(dk_kinds_down_file); lock="$DK_ROOT/.sessions/kinds-down.lock"
   [ -f "$f" ] || return 1
   mkdir -p "$(dirname "$lock")"
   (
     flock -w 5 9 || echo "dk_kinds_down_remove: lock timeout on $lock; writing anyway" >&2
     local tmp; tmp="$f.tmp.$$"
+    dropped=$(awk -v k="$kind" '$1==k{c++} END{print c+0}' "$f")
     awk -v k="$kind" '$1!=k' "$f" > "$tmp"
-    if cmp -s "$tmp" "$f"; then rm -f "$tmp"; exit 1; fi
+    if [ "$dropped" -eq 0 ]; then rm -f "$tmp"; exit 1; fi
     mv "$tmp" "$f"; exit 0
   ) 9>"$lock"
   rc=$?

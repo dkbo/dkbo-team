@@ -128,14 +128,14 @@ multirepo_task() {
   grep -q ' wave-refresh 1 members backend(M) qa(S) frontend-cart(S)$' "$d/process.md"
 }
 
-@test "AC7: --refresh 刪掉這一波的整波逾時與 devdone 標記，讓它們重新起算" {
+@test "AC7: --refresh 刪掉這一波的整波逾時標記，devdone 已 delivered 時仍留著" {
   run dk-wave-open 1; [ "$status" -eq 0 ]
   mkdir -p "$d/.blocked"
   printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.timeout"
   printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
   run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/wave-1.timeout" ]
-  [ ! -f "$d/.blocked/wave-1.devdone" ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
 }
 
 @test "AC7: 既有「wave N was already opened」的拒絕只對不帶 --refresh 的呼叫成立" {

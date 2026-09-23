@@ -347,6 +347,13 @@ state_ok() { # DIR — 一份合法的 dev state
   [ "$status" -eq 0 ]
   grep -q 'DONE' "$d/messages.log"
 }
+@test "AC10: touched:  [] （冒號後多個空白）也合法" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\ntouched:  []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  printf 'x' > "$d/state/backend.report.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] 都合法"
+  [ "$status" -eq 0 ]
+}
 @test "AC10: 只驗 dev，不驗 qa 與 reviewer" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
   printf 'status: done\n' > "$d/state/qa.md"

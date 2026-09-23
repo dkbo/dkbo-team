@@ -57,8 +57,9 @@ if [ "$refresh" = 1 ]; then
   # 不改 DK_WAVE、不改 base、不動 .panes、不 spawn —— 只是切片重產與逾時重新起算。
   dk_env_set DK_WAVE_STARTED "$(date +%s)"
   # 整波逾時從這一刻重新起算：上一輪留下的逾時標記作廢。
-  # 波中新加的 dev 交 [DONE] 時 dk-watch 才會再推一次聚合：不刪的話 dev 的 [DONE] 只落盤，領導永遠收不到。
-  rm -f "$dir/.blocked/wave-$n.timeout" "$dir/.blocked/wave-$n.devdone"
+  # devdone 標記不在這裡刪：refresh 當下刪會在新成員 spawn 前的空窗重推假聚合（整枝評議 I2）。
+  # 改由 dk-spawn 在波開著時、把一位 group=dev 成員寫進 .panes 的同一步刪掉它。
+  rm -f "$dir/.blocked/wave-$n.timeout"
   dk_process "wave-refresh $n members $peers"
   echo "wave $n refreshed; slices in $dir/briefs/"
   exit 0
