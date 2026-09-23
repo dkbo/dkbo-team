@@ -114,3 +114,4 @@
 2026-09-23T11:40 commit fdb3bab wave 4
 2026-09-23T11:40 backlog: 補 5 條（DK_ROOT 編輯路徑、共用 worktree stash 取紅、codex 同日格式、TASK 重派不重設 latch、minor 行格式不警告）
 2026-09-23T11:44 gate3 approved
+2026-09-23T11:44 task-close merged ccb5668
