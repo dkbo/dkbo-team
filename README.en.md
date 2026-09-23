@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.14.0); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.15.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -35,9 +35,9 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 2. The leader writes `brief.md`: goal, acceptance criteria, file ownership, shared contracts, and a wave table with one row per member tagged S/M/L. It runs `dk-brief-check` and only then moves on to review. Next `dk-brief-review` dispatches 2 to 3 reviewers of different kinds to read the raw request and the brief; the leader rules on their feedback, revises the brief, and only then hands you all three — the raw request, the brief, and a summary of the ruling — to confirm. This is **gate 1**.
 3. You invoke `/dkbo-run`: only then does `dk-leader <short> --run` "materialize" the task — one worktree per repo in `DK_REPOS` (a multi-repo project; see [.dkbo/README.md](.dkbo/README.md), Traditional Chinese), a new tab labeled `dk/<short>` opened in the task's workspace (`.task.env`'s `DK_WORKSPACE`, recorded at plan time; falls back to `HERDR_WORKSPACE_ID` when empty), and a handoff to an execution leader in its root pane, freeing your session for the next task. Each wave: `dk-wave-open` writes a per-member slice of the brief, `dk-spawn` opens a pane and sends the first prompt. Workers may only edit files they own (in a multi-repo project, ownership and `touched` carry a `<name>:` prefix). When done they write their state and report and send `dk-msg leader "[DONE] …"`.
 4. After a dev is done the leader runs `dk-review-pack` to build the diff pack and `dk-review` to dispatch reviewers; reviewers and qa run in parallel. Important findings go back to the dev as a BUG. One fix attempt per bug, then it escalates.
-5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; otherwise it asks you. This is **gate 2**.
+5. Any A-or-B choice, any edit outside one's ownership, any tight context: the worker sends `[ESCALATE]`. If the brief settles it the leader replies `[DECISION]` and records a ruling; if it does not, the leader still rules on its own (recorded as `ruling: [自主] …`). **Once `/dkbo-run` starts it never stops to ask you**, so a task keeps running while you sleep; problems that stay unfixed are parked or worked around with the smallest change by a circuit breaker instead of stalling the task.
 6. Once qa is done and the review has a verdict, `dk-wave-close` applies four gates — the verdict line, every dev's `## 測試` section, `DK_TEST_CMD`, and an ownership check against the worktree's real diff — then closes the panes and commits the wave inside the worktree (`-m` sets the message).
-7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
+7. After the last wave the leader runs a whole-branch review, then writes `report.md` for you to sign off; its "自主裁定（待你複核）" section lists every decision made on your behalf mid-run, and qa's screenshots cover visual changes. This is **gate 3**. `dk-task-close` merges into the main branch, removes the worktree, and marks the task done in INDEX.
 
 **Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
 
@@ -52,7 +52,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.14.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.15.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"

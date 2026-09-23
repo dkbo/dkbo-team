@@ -43,6 +43,8 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  [[ "$sec" == *"feat(review)!"* ]] && [[ "$sec" == *"DK_REVIEW_TIER"* ]] || { echo "首節缺 reviewer 出廠檔位改 L"; false; }
-  [[ "$sec" == *"docs(run)"* ]] && [[ "$sec" == *"review task skipped"* ]] || { echo "首節缺同一份 diff 不審兩次"; false; }
+  [[ "$sec" == *"feat(run)!"* ]] && [[ "$sec" == *"ruling: [自主]"* ]] || { echo "首節缺 run 開跑後不停車"; false; }
+  [[ "$sec" == *"熔斷器"* ]] || { echo "首節缺熔斷器"; false; }
+  [[ "$sec" == *"fix(msg)"* ]] && [[ "$sec" == *"背景送"* ]] || { echo "首節缺 dev→qa [DONE] 背景送"; false; }
+  [[ "$sec" == *"feat(spawn)"* ]] && [[ "$sec" == *"--name"* ]] || { echo "首節缺員工 session 名"; false; }
 }

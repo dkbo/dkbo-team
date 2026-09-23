@@ -27,7 +27,8 @@ teardown() { teardown_project; }
   [ "$(wc -l < "$DK_ROOT/LEADER.md")" -le 30 ]
   [ "$(wc -l < "$DK_ROOT/skills/brain/SKILL.md")" -le 40 ]
   [ "$(wc -l < "$DK_ROOT/skills/plan/SKILL.md")" -le 25 ]
-  [ "$(wc -l < "$DK_ROOT/skills/run/SKILL.md")" -le 50 ]
+  # 0.15.0 多了「不停車」與「熔斷器」兩段（run 開跑後不問人），50 → 60
+  [ "$(wc -l < "$DK_ROOT/skills/run/SKILL.md")" -le 60 ]
 }
 @test "templates carry substitution tokens" {
   grep -q '{{DISPLAY}}' "$DK_ROOT/templates/brief.md"

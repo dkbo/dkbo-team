@@ -145,12 +145,26 @@ dev_panes() { printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2
   refute_grep 'DONE' "$d/messages.log"
 }
 
-@test "dev 送給同波夥伴的 [DONE] 照響（qa 等它才開工）" {
+@test "dev 送給 qa 的 [DONE] 改背景送：當場返回，之後仍會送達並記 log" {
+  # qa 忙著時前景等它閒下來，dev 的 pane 會卡 12–30 分（panova autofold、gamemore 實測）。
   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
   printf 'status: done\n' > "$d/state/backend.md"
   DK_AGENT=login-backend run dk-msg login-qa "[DONE] API 好了，可以驗"
   [ "$status" -eq 0 ]
+  [[ "$output" == *"背景"* ]]
+  for _ in $(seq 1 50); do grep -q 'login-backend -> login-qa \[DONE\]' "$d/messages.log" 2>/dev/null && break; sleep 0.1; done
   grep -q '^agent prompt login-qa \[DONE\] from login-backend: API 好了，可以驗$' "$HERDR_STUB_LOG"
+  [ "$(grep -c 'login-backend -> login-qa \[DONE\]' "$d/messages.log")" -eq 1 ]
+}
+
+@test "dev 送給 dev 夥伴的 [DONE] 照常前景送（附交接內容，對方要等它）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  printf 'login-backend wC:p2 0 dev 1 1\nlogin-frontend wC:p4 0 dev 1 2\n' > "$d/.panes"
+  printf 'status: done\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg login-frontend "[DONE] API 好了"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"背景"* ]]
+  grep -q '^agent prompt login-frontend \[DONE\] from login-backend: API 好了$' "$HERDR_STUB_LOG"
 }
 
 @test "review 組（qa、reviewer）的 [DONE] 照響" {

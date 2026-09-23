@@ -10,7 +10,7 @@ teardown() { teardown_project; }
   [[ "$split" == *"--env DK_TASK_DIR=$d"* ]]; [[ "$split" == *"--env DK_ROLE=frontend"* ]]
   [[ "$split" == *"--env DK_AGENT=login-frontend-cart"* ]]; [[ "$split" == *"--env DK_LEADER=leader-login"* ]]
   [[ "$split" == *"--env DK_ISOLATED=0"* ]]
-  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"' --name login-frontend-cart$' "$HERDR_STUB_LOG"
   p=$(grep '^agent prompt login-frontend-cart' "$HERDR_STUB_LOG")
   [[ "$p" == *"$DK_ROOT/roles/frontend.md"* ]]; [[ "$p" == *"$d/brief.md"* ]]; [[ "$p" == *"$d/state/frontend-cart.report.md"* ]]
   [[ "$p" == *"$d/state/frontend-cart.md"* ]]; [[ "$p" == *"禁止使用 subagent"* ]]; [[ "$p" == *"--wait --until working --timeout 15000" ]]
@@ -193,7 +193,7 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再�
 @test "AC8: 單 repo 模式的 --add-dir 只有主樹（0.9.2 不變）" {
   run dk-spawn backend; [ "$status" -eq 0 ]
   start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
-  [[ "$start" == *"--add-dir $PROJECT" ]]                 # 就這一個，而且在行尾
+  [[ "$start" == *"--add-dir $PROJECT --name login-backend" ]]   # 就這一個，後面只剩 session 名
   [ "$(grep -o -- '--add-dir' <<< "$start" | wc -l)" -eq 1 ]
 }
 
@@ -202,7 +202,7 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再�
   sed -i 's/^DK_WORKTREE=.*/DK_WORKTREE=""/' "$d/.task.env"; rm -f "$d/.repos"
   run dk-spawn reviewer p1 --isolated; [ "$status" -eq 0 ]
   grep -q -- "--cwd $PROJECT --no-focus" "$HERDR_STUB_LOG"
-  grep -q -- '--add-dir '"$PROJECT"'$' "$HERDR_STUB_LOG"
+  grep -q -- '--add-dir '"$PROJECT"' --name login-reviewer-p1$' "$HERDR_STUB_LOG"
 }
 
 @test "AC8: 所有權表沒有這位成員時 cwd 退回 DK_WORKTREE（主 repo）" {
@@ -264,4 +264,12 @@ down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
   run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
   [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
+
+@test "員工的 CLI session 名＝agent 名，pane 上看得出是哪位角色；codex 沒有對應旗標就不帶" {
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  grep -q '^agent start login-qa --kind claude .* --name login-qa$' "$HERDR_STUB_LOG"
+  run dk-spawn backend --kind codex; [ "$status" -eq 0 ]
+  start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
+  [[ "$start" != *"--name"* ]]
 }

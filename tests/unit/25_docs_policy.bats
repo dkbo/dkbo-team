@@ -54,7 +54,7 @@ teardown() { teardown_project; }
 }
 
 @test "AC13: skills/run/SKILL.md 帶新規範的五個字串，三份 README 都提到 dk-kind" {
-  for w in 'hit:' 'dk-kind up' '未 ack' 'wave-open <N> --refresh' '請人看'; do
+  for w in 'hit:' 'dk-kind up' '未 ack' 'wave-open <N> --refresh' '不等人看畫面'; do
     grep -q -- "$w" "$DK_ROOT/skills/run/SKILL.md" || { echo "SKILL.md 缺 $w"; false; }
   done
   for f in README.md README.en.md .dkbo/README.md; do
@@ -89,4 +89,27 @@ teardown() { teardown_project; }
 }
 @test "員工的完整測試只在送 DONE／FIXED 前跑一次" {
   grep -q -- '完整測試只在送 `\[DONE\]`／`\[FIXED\]` 前跑一次' "$DK_ROOT/PROTOCOL.md"
+}
+@test "run 開跑後不停車：自己裁定記 [自主]、熔斷器取代關卡②、審批卡住自己重派" {
+  f="$DK_ROOT/skills/run/SKILL.md"
+  grep -q -- '## 不停車' "$f"
+  grep -q -- 'ruling: \[自主\]' "$f"
+  grep -q -- '不用 AskUserQuestion' "$f"
+  grep -q -- '## 熔斷器' "$f"
+  grep -q -- '不開第二個修復波' "$f"
+  grep -q -- '員工 `\[BLOCKED\]`' "$f"
+  grep -q -- '不等人看畫面' "$f"
+  refute_grep '關卡②' "$f"
+  refute_grep '告知人去按審批' "$f"
+  refute_grep '不能依 brief 判者升關卡②' "$DK_ROOT/LEADER.md"
+  grep -q -- 'ruling: \[自主\]' "$DK_ROOT/LEADER.md"
+  grep -q -- '## 自主裁定（待你複核）' "$DK_ROOT/templates/report.md"
+  refute_grep '不能判的問你' "$REPO_ROOT/README.md"
+  refute_grep 'otherwise it asks you' "$REPO_ROOT/README.en.md"
+  refute_grep '員工升報時問你' "$DK_ROOT/README.md"
+  grep -q -- '附截圖' "$DK_ROOT/roles/qa.md"
+}
+@test "dev→qa 的 [DONE] 背景送：PROTOCOL 不再說照常即時送達" {
+  refute_grep '（dev→qa）照常即時送達' "$DK_ROOT/PROTOCOL.md"
+  grep -q -- 'dev 送給 qa 的 `\[DONE\]` 在背景送' "$DK_ROOT/PROTOCOL.md"
 }

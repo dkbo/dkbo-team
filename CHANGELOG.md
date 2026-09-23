@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.0 — 2026-09-23
+
+- feat(run)!: `/dkbo-run` 開跑後不停下來等人（取消關卡②）。`skills/run/SKILL.md` 新增「不停車」段：選擇題、規格缺口、reviewer 意見矛盾、修法取捨、要超過某個上限，一律由領導自己裁定——選若錯代價最小、最容易回退的那個，記 `ruling: [自主] <決定> — <原因> — <若錯代價>`，不用 AskUserQuestion。只剩四種會停：關卡③（合併）、不可逆或破壞性的操作、影響 worktree 以外的動作、brief 壞到每一條路都只能猜（最後一種寫進遺留段、停在關卡③）。依據：panova autofold 在執行中途問人的 4 題，人 4 題都選推薦項，每題等 1–13 分；人在睡覺時一題就停一整晚。規則參考 superpowers 6.4.1 `subagent-driven-development` 的「Rulings, not stalls」。人自己打字插話仍然照做。
+- feat(run): 新增「熔斷器」段取代三處升關卡②（同一 bug 換過腦袋仍沒好、wave-close 測試連兩次失敗、整枝評議的修復輪用完）：停止派人，逐條判——reviewer 判錯或有爭議就 park、真的但後面沒有工作依賴它就 park 並把驗收項標未達成、真的且後面依賴它就選最小改法寫進下一波。整枝評議挑出的 Important 一次全部寫進同一個修復波，修完還有就走熔斷器，不開第二個修復波。
+- feat(run): 員工 `[BLOCKED]`（卡在權限審批）不再「告知人去按」：reviewer 交給既有的 `[TIMEOUT]`；dev／qa 由領導看畫面、記 ruling、`dk-spawn --resume` 重派並叫它改用不需要審批的做法，卡第二次換 kind，再卡就 park。
+- feat(run): 視覺變更不再等人看畫面才跑整枝評議；qa 每波在 report 附截圖（必要時錄影）並逐條對應 AC，人在關卡③一起看。人剛好在場時，dev 全員完成那一刻告訴他 dev server 網址，追加需求用 `--refresh` 併進本波（headermerge、autofold 的波 2 都是結波後人才看畫面開出來的）。
+- feat(report): `templates/report.md` 新增「自主裁定（待你複核）」段，列出 `grep -F ' ruling: [自主]' process.md` 的每一條，照順序、一條不漏、附若錯代價；`LEADER.md` 的裁定段、三份 README 的流程說明同步。
+- fix(msg): dev 送給 qa（`.panes` 的 review 組）的 `[DONE]` 改在背景送——`dk-msg` 當場返回，背景那一份照舊等對方閒下來、重試、記 log。前景等忙碌中的 qa 會把 dev 的 pane 卡住：panova 實測 autofold 22／13 分、gamemore 30 分、headermerge 12 分，而 qa 本來就看 dev 的 state 開工。dev 送 dev 的 `[DONE]` 照常前景送。`roles/qa.md` 補「已在測就不必因晚到的 `[DONE]` 重跑」。
+- feat(spawn): 員工與雜務員工啟動時帶 CLI session 名（claude 的 `--name <任務>-<角色>`，同領導的 `dk/<short>`），pane 上看得出是哪位角色；codex、agy 沒有對應旗標，不帶。
+- 測試：642 bats（+4；`06_msg` 背景送與 dev→dev 前景送、`07_spawn` session 名、`25_docs_policy` 不停車與背景送兩條）；`04_docs` 的 run SKILL.md 行數上限 50 → 60（多了兩段）；shellcheck 零警告。
+- 升級：`roles/` 不會跟著升（rsync `--ignore-existing`），`qa.md` 的截圖要求與 frontend／backend 的說明要手動對照本版改；不改也能用——背景送在 `dk-msg` 那一側生效。沒有新鍵、新依賴、新 skill。
+
 ## 0.14.0 — 2026-09-23
 
 - feat(review)!: `DK_REVIEW_TIER` 出廠值由 `M` 改成 `L`（`settings.env`、`templates/seed/settings.seed.env`、`dk_settings` 缺鍵時的預設三處一致）。依據是 18 個已合併任務的 process.md：teamflow 的波審查用 M，6 個任務的整枝評議（L）**全數**再挑出 Important；panova 的波審查用 L，12 個任務只有 2 個。最直接的是同一份 diff 的對照——tasktab 與 ops 第一次整枝評議時分支上只有波 1，`task.diff` 就是波 1 的 diff：tasktab 的 M 判「Important 0、Minor 0」，20 分鐘後 L 挑出 4 條；ops 的 M 判 1 條，L 再多 2 條。波審查漏掉的問題拖到整枝評議，就要多開一整個修復波（ops、tasktab 的修復循環各約 2 小時，佔任務總時長五成以上）。0.4.0 預設 M 的理由是「密度先於天花板」，但第二個 kind 實跑幾乎全程熔斷，密度實際為 0。兩個專案的程式類型不同（bash 對 Vue），檔位不是唯一變因。`/dkbo-init` 的問法改成預設 L、人要省額度才降 M。
