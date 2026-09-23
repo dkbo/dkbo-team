@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dk-resume [<task-folder|short>] — print a ≤150-line recovery pack for the leader.
 set -euo pipefail
-. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"; . "$DK_ROOT/lib/repos.sh"; . "$DK_ROOT/lib/kinds.sh"
 if [ -n "${1:-}" ]; then
   t="$1"; [ -d "$DK_ROOT/tasks/$t" ] || t=$(compgen -G "$DK_ROOT/tasks/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-$1" | tail -1 || true); t="${t##*/}"
   [ -n "$t" ] && [ -d "$DK_ROOT/tasks/$t" ] || dk_die "no task '$1'"
@@ -38,6 +38,16 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
   if [ -n "$wave_min" ]; then echo "本波已進行 $((now_min - wave_min))m（自 wave-open）"; fi
   if [ -n "${DK_WAVE:-}" ]; then
     echo "wave: $DK_WAVE  base: $(dk_wave_base "$dir" "$DK_WAVE")  kinds down: ${DK_KIND_DOWN:-無}"
+    # AC6：專案層的熔斷跟本任務的 DK_KIND_DOWN 是兩張獨立的清單，接手的人要同時看到——否則
+    # 會誤以為換個 kind 就沒事，其實下一個任務一派同一個 kind 還是會被 dk_review_kinds／dk-spawn 擋下。
+    proj=$(dk_kinds_down_rows)
+    if [ -n "$proj" ]; then
+      while IFS=' ' read -r k e ex _rt tn _ag _hit; do
+        [ -n "$k" ] || continue
+        tag=""; [ "$ex" = guess ] && tag="（猜）"
+        printf '專案層熔斷: %s 到 %s%s（來源任務 %s）\n' "$k" "$(dk_epoch_to_local "$e")" "$tag" "$tn"
+      done <<< "$proj"
+    fi
     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
       NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"

@@ -210,3 +210,24 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再�
   run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
   grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
 }
+
+# --- AC3: 派人前查專案層熔斷 -------------------------------------------------
+down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
+  mkdir -p "$DK_ROOT/.sessions"
+  printf 'claude %s exact 2026-09-10T10:00 other-task some-agent 撞額度樣本\n' "$(( $(date +%s) + 3600 ))" \
+    > "$DK_ROOT/.sessions/kinds-down"
+}
+
+@test "AC3: --kind 明寫且該 kind 專案層未恢復 → 拒絕" {
+  down_claude
+  run dk-spawn frontend cart --kind claude; [ "$status" -eq 1 ]
+  [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+  refute_grep '^pane split' "$HERDR_STUB_LOG"
+}
+@test "AC3: 沒給 --kind、角色預設命中專案層熔斷 → 只警告，照派" {
+  down_claude
+  run dk-spawn frontend cart; [ "$status" -eq 0 ]
+  [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+  grep -q '^pane split' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-frontend-cart --kind claude ' "$HERDR_STUB_LOG"
+}

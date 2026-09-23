@@ -119,7 +119,8 @@ dev_panes() { printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2
 
 @test "dev 的 [DONE] 寫進 log 但不投遞給領導" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
-  printf 'status: done\n' > "$d/state/backend.md"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
   DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"
   [ "$status" -eq 0 ]
   refute_grep '^agent prompt' "$HERDR_STUB_LOG"
@@ -229,4 +230,126 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
   [ "$status" -eq 0 ]
   [ "$(wc -l < "$d/.panes")" -eq 2 ]
   [ ! -f "$d/.blocked/login-qa.redispatch" ]
+}
+
+# --- AC8：切片過期提示 ---
+
+@test "AC8: brief.md 比對方的切片新，領導送 [TASK] 時提醒但照送" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  mkdir -p "$d/briefs"; echo old > "$d/briefs/backend.md"; sleep 1.1; echo new > "$d/brief.md"
+  run dk-msg login-backend "[TASK] 補一塊"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"brief.md 比 briefs/backend.md 新"* ]]
+  [[ "$output" == *"dk-wave-open"* ]]; [[ "$output" == *"--refresh"* ]]
+  grep -q '^agent prompt login-backend' "$HERDR_STUB_LOG"   # 沒被擋，照送
+}
+@test "AC8: 切片比 brief.md 新就不提醒" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  mkdir -p "$d/briefs"; echo old > "$d/brief.md"; sleep 1.1; echo new > "$d/briefs/backend.md"
+  run dk-msg login-backend "[TASK] 補一塊"
+  [ "$status" -eq 0 ]
+  refute_grep '比 briefs/backend.md 新' <(printf '%s\n' "$output")
+}
+@test "AC8: 員工互傳不提示（只有領導送才算）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  mkdir -p "$d/briefs"; echo old > "$d/briefs/frontend.md"; sleep 1.1; echo new > "$d/brief.md"
+  DK_AGENT=login-qa run dk-msg login-frontend "[TASK] 幫個忙"
+  [ "$status" -eq 0 ]
+  refute_grep '比 briefs' <(printf '%s\n' "$output")
+}
+
+# --- AC9：未讀提示 ---
+
+@test "AC9: 領導最後一次 [ACK] 之後還有訊息沒讀，送 [TASK] 前先提醒" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"; [ "$status" -eq 0 ]
+  DK_AGENT=login-backend run dk-msg leader "[ESCALATE] 要改共用契約"; [ "$status" -eq 0 ]
+  run dk-msg login-frontend "[TASK] 補一塊"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"你有 2 則未 ack 的訊息"* ]]
+  [[ "$output" == *"login-backend"* ]]   # 最新一則來自誰
+}
+@test "AC9: dev 只落盤的 [DONE] 也算未讀" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"; [ "$status" -eq 0 ]
+  run dk-msg login-qa "[DECISION] 用現有 users 表"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"你有 1 則未 ack 的訊息"* ]]
+}
+@test "AC9: ack 過之後同一則不會再算未讀" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"; [ "$status" -eq 0 ]
+  dk-msg --ack
+  run dk-msg login-frontend "[TASK] 補一塊"
+  [ "$status" -eq 0 ]
+  refute_grep '未 ack' <(printf '%s\n' "$output")
+}
+@test "AC9: BUG 不受這條規則影響（只驗 TASK／DECISION）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"
+  DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"; [ "$status" -eq 0 ]
+  run dk-msg login-frontend "[BUG] 重現方式見 report"
+  [ "$status" -eq 0 ]
+  refute_grep '未 ack' <(printf '%s\n' "$output")
+}
+
+# --- AC10：dev 的 [DONE] 先驗 state 格式 ---
+
+state_ok() { # DIR — 一份合法的 dev state
+  echo x > "$1/state/backend.report.md"
+  printf 'status: done\ntouched:\n  - src/api/login.ts\nreport: state/backend.report.md\n' > "$1/state/backend.md"
+}
+@test "AC10: 缺 touched 鍵，state 格式錯拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == "dk-msg: state 格式錯："* ]]
+  refute_grep 'DONE' "$d/messages.log"
+}
+@test "AC10: touched 沒有兩個空白加 '- ' 開頭，拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched:\n- src/api/login.ts\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"state 格式錯"* ]]
+}
+@test "AC10: touched 路徑含萬用字元，拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched:\n  - src/api/*.ts\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"state 格式錯"* ]]
+}
+@test "AC10: report 路徑不存在，拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\ntouched: []\nreport: state/nope.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"state 格式錯"* ]]
+}
+@test "AC10: report 路徑存在但是空檔，拒收" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  : > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] x"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"state 格式錯"* ]]
+}
+@test "AC10: touched 零項（裸 touched: 與 touched: [] 皆合法）與 touched 有多筆都放行" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  state_ok "$d"
+  DK_AGENT=login-backend run dk-msg leader "[DONE] 都合法"
+  [ "$status" -eq 0 ]
+  grep -q 'DONE' "$d/messages.log"
+}
+@test "AC10: 只驗 dev，不驗 qa 與 reviewer" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\n' > "$d/state/qa.md"
+  DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"
+  [ "$status" -eq 0 ]
 }

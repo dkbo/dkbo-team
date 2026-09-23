@@ -533,3 +533,12 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
   # reviewer-a Minor 1：AC8 改動的 dk-watch:212 只有反向（不該標）被守著，正向拿掉整行也不會紅。
   grep -q '\[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)' "$HERDR_STUB_LOG"
 }
+
+# --- AC5: [LIMIT] 留證據，輪詢路徑 ---
+@test "AC5: 輪詢路徑撞額度時 .limit 檔留下 hit: 行，訊息尾端附第一條" {
+  screen "Individual quota reached, Resets in 102h11m1s"
+  set_status login-frontend idle
+  dk-watch --once
+  grep -q '^hit: Individual quota reached, Resets in 102h11m1s$' "$d/.blocked/login-frontend.limit"
+  grep -q '\[LIMIT\] from dk-watch: login-frontend 撞額度 — Individual quota reached, Resets in 102h11m1s' "$HERDR_STUB_LOG"
+}

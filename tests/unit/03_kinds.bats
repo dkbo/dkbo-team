@@ -95,18 +95,38 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
 # 樣本是 gamemore 實跑 herdr agent read 的原文。窄 pane 會把最後一行截斷，所以整句
 # `Press enter to confirm` 認不得 24、64 兩份；式子只收 `Press enter to` 這段前綴。
 block_hits() { printf '%s' "$2" | grep -qiE "$(dk_kind_re "$1" block)"; }
+# `! cmd` 在 bats 的 @test 函式裡不是可靠的否定斷言：POSIX 規定以 `!` 開頭的管線豁免
+# set -e，就算 cmd 真的成功（命中），`! cmd` 那一行也不會讓整個測試變紅——跟 helpers.bash
+# 的 refute_grep 是同一個坑，這裡用一個普通函式回非零讓 bats 抓得到。
+refute_block() { if block_hits "$@"; then echo "$1 的審批式子誤中: $2"; false; fi; }
 @test "codex 的審批式子認得 Switch model 選單，含窄 pane 截斷的尾巴" {
   block_hits codex $'› 1. Switch to gpt-5.6-luna\n  2. Keep current model\n\n  Press enter to confirm or esc to go back'
   block_hits codex $'  3. Keep cu… Hide\n              models.\n\n  Press enter to confir'   # 樣本 24
   block_hits codex $'  2. Keep current\n     model\n\n  Press enter to con'                   # 樣本 64
-  ! block_hits codex 'OpenAI Codex (v0.31.0)  model: gpt-5.5  approval: never'
+  refute_block codex 'OpenAI Codex (v0.31.0)  model: gpt-5.5  approval: never'
 }
 @test "Switch model 選單的窄 pane 截斷版在 dk-watch 判成 BLOCKED 而不是 LIMIT" {
-  # 窄 pane 把 `rate limit` 拆成兩行，額度式子不會先搶走；寬 pane 的標題
-  # `Approaching rate limits` 仍會被額度式子優先命中（見 CHANGELOG 0.11.2）。
+  # 窄 pane 把 `rate limit` 拆成兩行，額度式子不會先搶走。
   txt=$'  2. Keep current\n     model\n  3. Keep … Hide\n            future\n            rate\n            limit\n\n  Press enter to con'
-  ! quota_hits codex "$txt"
+  refute_quota codex "$txt"
   block_hits codex "$txt"
+}
+
+# --- AC4（0.12.0）：codex 的快到額度選單不再誤判成撞額度 -----------------------
+# KIND_QUOTA_RE 拿掉了第 3 個分支 `rate limit`——它同時命中選單標題 `Approaching rate
+# limits` 與選單第 3 項的說明文字 `Hide future rate limit reminders`，跟 claude.sh 的
+# KIND_QUOTA_RE 第 2 個分支是同一個字串。三份樣本取自 panova headermerge 規劃領導 session
+# 630f5371 的 spike/segs_preview.txt（樣本 2.2＝寬 pane 完整選單，樣本 24/64＝窄 pane 截斷
+# 選單，已用在上面兩個測試）；第三份「上方另有耗盡訊息」的選單目前沒有實測過的合併原始截圖，
+# 用已各自實測過的耗盡片語（03_kinds.bats 既有斷言）疊在同一份選單原文之上構造。
+@test "AC4: 寬 pane 完整選單（實測樣本 2.2）不中額度，中審批" {
+  txt=$'Approaching rate limits\n  Switch to gpt-5.6-luna for lower credit usage?\n\n\xe2\x80\xba 1. Switch to gpt-5.6-luna                 Fast and affordable agentic coding model.\n  2. Keep current model\n  3. Keep current model (never show again)  Hide future rate limit reminders about\n                                            switching models.\n\n  Press enter to confirm or esc to go back'
+  refute_quota codex "$txt"
+  block_hits codex "$txt"
+}
+@test "AC4: 上方另有耗盡訊息的選單仍中額度" {
+  txt=$'You\x27ve hit your usage limit. Upgrade to Plus to continue using Codex\nApproaching rate limits\n  Switch to gpt-5.6-luna for lower credit usage?\n\n\xe2\x80\xba 1. Switch to gpt-5.6-luna                 Fast and affordable agentic coding model.\n  2. Keep current model\n\n  Press enter to confirm or esc to go back'
+  assert_quota codex "$txt"
 }
 
 # --- DK_ADD_DIRS：多 repo 時每個 worktree 各一個 --add-dir（共用契約）-------------

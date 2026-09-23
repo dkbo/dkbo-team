@@ -51,7 +51,7 @@ blocked_by: （無則省略）
 report: state/<你的 state 名>.report.md
 notes: 給接手者的必要事實，≤5 行
 ```
-DONE 前 `touched` 必須完整。`dk-wave-close` 不是看你自報的清單，而是拿 worktree 的真實 git diff（含未 commit 與未追蹤）比對所有權：動了不屬於本波任何人的檔，整波關不掉；自己擁有但漏寫進 `touched` 的檔會被列成 `unreported change`。
+`touched:` 冒號後只能是空白或 `[]`；有項目時每一項各佔一行、以兩個空白加 `- ` 開頭（如上例），不得用 `{`、`}`、`*`、`?`。DONE 前 `touched` 必須完整。`dk-wave-close` 不是看你自報的清單，而是拿 worktree 的真實 git diff（含未 commit 與未追蹤）比對所有權：動了不屬於本波任何人的檔，整波關不掉；自己擁有但漏寫進 `touched` 的檔會被列成 `unreported change`。
 
 多 repo 專案（「## 倉庫」段的列帶 `<名> →`，如 `api → /path/to/worktree`）：所有權表的 glob 與 `touched` 一律帶 `<名>:` 前綴（如 `api:src/routes/**`），前綴取自「## 倉庫」段列出的 repo 名；同一條路徑在不同 repo 是兩個不同的檔，不跨 repo 比對。單 repo 專案的切片也有「## 倉庫」段，但只印一行 worktree 路徑、不帶名字與 `→`，不帶前綴，行為不變。你的 pane 已經 `--cwd` 在你第一個可改 repo 的 worktree；其他 repo 的 worktree 路徑見切片的「## 倉庫」段，可以直接在那裡工作。
 
