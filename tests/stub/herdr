@@ -6,6 +6,30 @@ printf '%s\n' "$*" >> "$log"
 cmd="${1:-}"; sub="${2:-}"
 # HERDR_STUB_VERSION lets a test pretend to be any herdr; unset means the version dkbo verified.
 if [ "$cmd" = --version ]; then echo "herdr ${HERDR_STUB_VERSION-0.9.0}"; exit 0; fi
+# AC18：真 herdr 拒收非 UTF-8 參數（rc=2）——`agent prompt` 的內文若切出半個字元就送不到，
+# stub 比照這個行為，測試才抓得到 dk-watch 的截斷是不是按位元組切的。
+dk_stub_utf8_valid() {
+  # 用 od 逐位元組讀（純數字，不靠 grep/read 對文字的 locale 假設——那條路子在某些
+  # locale 下會把整行吞掉或把多位元組字元黏成一個 token，比要驗的問題更難察覺）。
+  local s="$1" byte need=0
+  while read -r byte; do
+    [ -n "$byte" ] || continue
+    if [ "$need" -gt 0 ]; then
+      [ $((byte & 0xC0)) -eq 128 ] || return 1
+      need=$((need - 1)); continue
+    fi
+    if [ $((byte & 0x80)) -eq 0 ]; then continue
+    elif [ $((byte & 0xE0)) -eq 192 ]; then need=1
+    elif [ $((byte & 0xF0)) -eq 224 ]; then need=2
+    elif [ $((byte & 0xF8)) -eq 240 ]; then need=3
+    else return 1
+    fi
+  done < <(printf '%s' "$s" | od -An -v -tu1 | tr -s ' ' '\n' | sed '/^$/d')
+  [ "$need" -eq 0 ]
+}
+if [ "$cmd" = agent ] && [ "$sub" = prompt ] && [ -n "${4:-}" ] && ! dk_stub_utf8_valid "${4:-}"; then
+  echo '{"error":{"code":"invalid_argument","message":"argument 4 is not valid UTF-8"}}' >&2; exit 2
+fi
 key="${cmd}_${sub}"
 if [ "${HERDR_STUB_FAIL:-}" = "$cmd $sub" ]; then
   echo '{"error":{"code":"stubbed_failure"}}' >&2; exit 1

@@ -43,5 +43,5 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  [[ "$sec" == *"fix(codex)"* ]] || { echo "首節缺 fix(codex)"; false; }
+  [[ "$sec" == *"feat(kinds)"* ]] || { echo "首節缺 feat(kinds)"; false; }
 }

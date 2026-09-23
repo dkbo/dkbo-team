@@ -210,3 +210,58 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再�
   run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
   grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
 }
+
+# --- AC3: 派人前查專案層熔斷 -------------------------------------------------
+down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
+  mkdir -p "$DK_ROOT/.sessions"
+  printf 'claude %s exact 2026-09-10T10:00 other-task some-agent 撞額度樣本\n' "$(( $(date +%s) + 3600 ))" \
+    > "$DK_ROOT/.sessions/kinds-down"
+}
+
+@test "AC3: --kind 明寫且該 kind 專案層未恢復 → 拒絕" {
+  down_claude
+  run dk-spawn frontend cart --kind claude; [ "$status" -eq 1 ]
+  [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+  refute_grep '^pane split' "$HERDR_STUB_LOG"
+}
+@test "AC3: 沒給 --kind、角色預設命中專案層熔斷 → 只警告，照派" {
+  down_claude
+  run dk-spawn frontend cart; [ "$status" -eq 0 ]
+  [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+  grep -q '^pane split' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-frontend-cart --kind claude ' "$HERDR_STUB_LOG"
+}
+
+# --- AC16（整枝評議 I2 spawn 半邊）：dev 進 .panes 的同一步刪 wave-N.devdone -------
+@test "AC16 I2: 波開著時 spawn 一位 group=dev 成員 → wave-N.devdone 被刪" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}
+@test "AC16 I2: 波開著時 spawn qa 或 reviewer（group=review）→ wave-N.devdone 不刪" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn qa; [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+}
+@test "AC17 I1: 已交付的 dev --handoff 重派不刪 wave-N.devdone（有 latch）" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  dk-spawn backend >/dev/null
+  mkdir -p "$d/.blocked"
+  : > "$d/.blocked/wave-1.backend.done"   # 已交付的 latch
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+}
+@test "AC17 I1: 沒有 latch 的 dev 重派仍照刪 wave-N.devdone（新成員／已被 --agent 關過）" {
+  fixture_brief "$d"; dk-wave-open 1 >/dev/null
+  mkdir -p "$d/.blocked"
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex
+  [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+}

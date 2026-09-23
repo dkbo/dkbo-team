@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0 — 2026-09-23
+
+- feat(kinds)!: 跨任務的專案層熔斷檔 `.dkbo/.sessions/kinds-down`——`dk-watch` 判定撞額度時除了照舊寫本任務 `DK_KIND_DOWN`，另在這個檔追加或更新一列（同 kind 取較晚的恢復時間，不重複），寫檔走 flock；reviewer `[TIMEOUT]` 造成的熔斷不寫這個檔，因為逾時不代表額度用完。派人前 `dk_review_kinds` 把未恢復的 kind 視同已熔斷：`--kind` 明寫且命中就拒絕（`dk-spawn` exit 1），角色檔預設命中則照派但印警告，避免一次誤判把下一個任務每個角色都擋死。新增 `dk-kind [status]` 看清單、`dk-kind up <k>` 解除（同時清 kinds-down 與綁著任務的 `DK_KIND_DOWN`）；`dk-resume` 的 `kinds down:` 行附印專案層未恢復的 kind。
+- feat(kinds): 恢復時間解析全部走可攜純算術，不依賴 `date -d`；agy 認「Resets in <N>h<M>m[<S>s]」與沒有小時的「Resets in <M>m[<S>s]」標 `exact`，codex 認「try again at <月份縮寫> <日><序數>, <年> <時>:<分> <AM|PM>」換算後標 `exact`，兩者都解析不到才用「現在 + 5 小時」標 `guess`。
+- fix(codex): `kinds/codex.sh` 的 `KIND_QUOTA_RE` 移除第 3 個分支——它跟 `kinds/claude.sh` 額度式子的第 2 個分支同字串，同時命中「快到額度、切模型」選單的標題與說明文字，把暫時性限流誤判成撞額度並熔斷；第 1、2、4 個分支保留，claude 與 agy 的額度式子不動。此後 codex 只印那個片語不再熔斷——這是想要的，不是回歸；0.11.2「已知仍未處理」的這一項本版已處理。
+- feat(watch): `[LIMIT]` 留畫面證據——`handle_limit` 在 `.blocked/<agent>.limit` 追加最多 5 行 `hit: <命中的畫面行>`，送給領導的 `[LIMIT]` 訊息尾端附第一條命中行，process.md 的 `limit …` 行不附（避免領導讀 process 時畫面冒出額度字樣）。`hit:` 行的截斷改按字元數（不是位元組）：原本用 `cut -c` 在 GNU 環境是按位元組截，中文命中行會切出半個 UTF-8 字元，讓真 herdr 拒收這個非法參數、`[LIMIT]` 永遠送不到；改法保證 `.limit` 的 `hit:` 行、kinds-down 的第一條 hit 與送出的 `[LIMIT]` 訊息都是合法 UTF-8。
+- feat(flow): `dk-wave-open <N> --refresh` 讓波中改 brief 可重產第 N 波所有成員的切片、重設整波逾時起算點，不改 base、不重派、不刪 `.blocked/wave-N.devdone`（改由 `dk-spawn` 在波開著時加入 dev 成員的同一步刪，避免新成員 spawn 前的空窗重推假聚合）；`dk-msg` 在切片比 brief 舊、或領導有未 ack 的訊息時各印一行提示但照送；dev 送 `[DONE]` 前驗 state 的 `status`／`touched`／`report` 三個頂格鍵與 `touched` 文法，不過拒絕並指出哪裡錯；`dk-task-close` 結案後把時間表「任務」列的結束時間與 report.md 的 `結果：` 行改寫成最終值，不再帶「（進行中）」。
+- docs: `skills/run/SKILL.md` 的 `[LIMIT]` 故障段改寫成先驗 `hit:` 再判真假、補送 TASK/DECISION 前讀未 ack、視覺變更任務先給人看畫面、波中改 brief 走 `--refresh` 的流程；三份 README 補 `dk-kind`／`--refresh`；`.dkbo/README.md` 疑難排解補專案層熔斷；`PROTOCOL.md`／`templates/state.md` 寫明 `touched` 的清單文法。
+- 測試：627 bats（+75）；21/25/04 補斷言；shellcheck 零警告。
+- 升級：`.dkbo/.sessions/kinds-down` 與其鎖檔 `kinds-down.lock` 是新增的執行期檔（已被 `.gitignore` 排除，不進版控）；新增 bin `dk-kind`；沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink，`.task.env` 沒有新鍵。
+
 ## 0.11.2 — 2026-09-23
 
 - fix(codex): codex 的「Approaching rate limits / Switch model」選單會停住等人按 Enter，但 `kinds/codex.sh` 的 `KIND_BLOCK_RE` 沒有這個選單的字樣，`dk-watch` 認不出這種卡住（gamemore 實跑樣本 24、64 都漏掉）。式子補上 `Press enter to`——收前綴不收整句：窄 pane 會截掉最後一行的尾巴，實測原文是 `Press enter to confir` 與 `Press enter to con`，整句 `Press enter to confirm` 兩份都認不得。已知仍未處理：寬 pane 上這個選單的標題 `Approaching rate limits` 會先命中額度式子的裸 `rate limit`（`dk-watch` 額度優先），被判成撞額度並熔斷 codex，但這個畫面是「快到了」不是「已耗盡」；實測樣本 2.2 上方另有真的額度用完訊息，所以結果剛好是對的，留待確認 codex 真的耗盡時印什麼再收窄。

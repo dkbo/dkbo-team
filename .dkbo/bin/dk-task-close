@@ -20,6 +20,20 @@ fill_timeline() {
     awk -v tl="$tl" '/^## 時間$/{print; print tl; s=1; next} s && /^## /{s=0} s{next} {print}' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   else printf '## 時間\n%s\n' "$tl" >> "$f"; fi
 }
+# AC11：結案後 report 的「結果：」值是最終值。只換這一行冒號後到三個連續空白（或行尾）
+# 之前的那一段，其他欄位（分支、波數）不動；沒有這一行就不動。
+set_result_line() { # VALUE
+  local f="$dir/report.md" v="$1"
+  [ -f "$f" ] && grep -q '^結果：' "$f" || return 0
+  awk -v v="$v" '
+    !done && /^結果：/ {
+      rest = $0; sub(/^結果：/, "", rest)
+      idx = index(rest, "   ")
+      trailing = (idx > 0) ? substr(rest, idx) : ""
+      print "結果：" v trailing; done = 1; next
+    }
+    { print }' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+}
 commit_memory() {
   dk_commit_memory "dkbo memory: task $DK_SHORT — $DK_DISPLAY" "$dir" "$DK_ROOT/tasks/INDEX.md" "$DK_ROOT/decisions.md" \
     || echo "dk-task-close: 任務記憶沒 commit 成功，請自己 git add \"$dir\" 並 commit" >&2
@@ -112,6 +126,7 @@ if [ "$DK_WORKTREE" = "$DK_PROJECT_ROOT" ]; then   # --no-worktree task: work al
   sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD); cleanup
   index_set "done" "in-tree $sha"
   dk_process "task-close in-tree $sha"
+  fill_timeline; set_result_line "in-tree $sha"
   commit_memory
   echo "closed $sha"; finish_note; exit 0
 fi
@@ -171,5 +186,6 @@ sha=$(git -C "$DK_PROJECT_ROOT" rev-parse --short HEAD)
 cleanup; del_branches -d   # merged above, so -d is safe
 index_set "done" "merged $sha"
 dk_process "task-close merged $sha"
+fill_timeline; set_result_line "merged $sha"
 commit_memory
 echo "merged $sha"; finish_note

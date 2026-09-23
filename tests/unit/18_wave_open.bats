@@ -92,3 +92,55 @@ multirepo_task() {
   grep -qxF "$WORKTREE_PATH" "$d/briefs/backend.md"
   refute_grep 'main →' "$d/briefs/backend.md"
 }
+
+# ── AC7: dk-wave-open <N> --refresh ─────────────────────────────────────────
+
+@test "AC7: --refresh 拒絕在 wave 沒開著的時候用" {
+  run dk-wave-open 1 --refresh
+  [ "$status" -eq 1 ]; [[ "$output" == *"not open"* ]]
+  refute_grep 'wave-refresh' "$d/process.md"
+}
+
+@test "AC7: --refresh 重產本波所有成員的切片、重設 DK_WAVE_STARTED、記 wave-refresh，不改 base 不動 .panes" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  sha=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+  started_before=$(sed -n 's/^DK_WAVE_STARTED="\([0-9]*\)"$/\1/p' "$d/.task.env")
+  rm -f "$d/briefs/backend.md" "$d/briefs/qa.md"
+  echo 'login-frontend wC:p2 0 dev 1 1' > "$d/.panes"
+  panes_before=$(cat "$d/.panes")
+  run dk-wave-open 1 --refresh
+  [ "$status" -eq 0 ]; [[ "$output" == *"wave 1 refreshed"* ]]
+  [ -f "$d/briefs/backend.md" ]; [ -f "$d/briefs/qa.md" ]   # 切片重產
+  grep -q '^DK_WAVE="1"$' "$d/.task.env"                    # base/wave 不變
+  grep -q " wave-open 1 base $sha members" "$d/process.md"  # 原本那行 wave-open 沒被覆寫
+  grep -q " wave-refresh 1 members backend(M) qa(S)$" "$d/process.md"
+  started_after=$(sed -n 's/^DK_WAVE_STARTED="\([0-9]*\)"$/\1/p' "$d/.task.env")
+  [ "$started_after" -ge "$started_before" ]
+  [ "$(cat "$d/.panes")" = "$panes_before" ]                # 不動 .panes
+}
+
+@test "AC7: --refresh 把新加進波次表的成員一起產出切片" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  [ ! -f "$d/briefs/frontend-cart.md" ]
+  sed -i '/^| 1 | 實作 | qa | 驗 API | S | 全過 | |$/a | 1 | 實作 | frontend-cart | 補一塊 | S | 可用 | |' "$d/brief.md"
+  run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]
+  [ -f "$d/briefs/frontend-cart.md" ]
+  grep -q ' wave-refresh 1 members backend(M) qa(S) frontend-cart(S)$' "$d/process.md"
+}
+
+@test "AC7: --refresh 刪掉這一波的整波逾時標記，devdone 已 delivered 時仍留著" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  mkdir -p "$d/.blocked"
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.timeout"
+  printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+  run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]
+  [ ! -f "$d/.blocked/wave-1.timeout" ]
+  [ -f "$d/.blocked/wave-1.devdone" ]
+}
+
+@test "AC7: 既有「wave N was already opened」的拒絕只對不帶 --refresh 的呼叫成立" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]   # process.md 已經有一行 wave-open 1
+  run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]   # 帶 --refresh 不會被那一行擋下
+  sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+  run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]   # 不帶 --refresh 照樣被擋
+}

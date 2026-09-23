@@ -365,6 +365,16 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
   [ "$(grep -c '全員完成' "$HERDR_STUB_LOG")" -eq 1 ]
 }
 
+@test "AC17 I1: 已交付的 dev --handoff 之後 dk-watch --once 不再推聚合" {
+  dev_wave; all_dev_done
+  dk-watch --once; grep -q '全員完成' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"
+  dk-spawn backend --handoff "claude 修一次沒好，換 codex" --kind codex >/dev/null
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  dk-watch --once
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+}
+
 @test "聚合送不到時下一 tick 重試" {
   dev_wave; all_dev_done
   HERDR_STUB_FAIL="agent wait" dk-watch --once
@@ -532,4 +542,50 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
   grep -q '\[LIMIT\] from dk-watch: login-reviewer-b 撞額度' "$HERDR_STUB_LOG"
   # reviewer-a Minor 1：AC8 改動的 dk-watch:212 只有反向（不該標）被守著，正向拿掉整行也不會紅。
   grep -q '\[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)' "$HERDR_STUB_LOG"
+}
+
+# --- AC5: [LIMIT] 留證據，輪詢路徑 ---
+@test "AC5: 輪詢路徑撞額度時 .limit 檔留下 hit: 行，訊息尾端附第一條" {
+  screen "Individual quota reached, Resets in 102h11m1s"
+  set_status login-frontend idle
+  dk-watch --once
+  grep -q '^hit: Individual quota reached, Resets in 102h11m1s$' "$d/.blocked/login-frontend.limit"
+  grep -q '\[LIMIT\] from dk-watch: login-frontend 撞額度 — Individual quota reached, Resets in 102h11m1s' "$HERDR_STUB_LOG"
+}
+
+@test "AC18: 中文命中行（>160 bytes）截斷不切半個字元，hit: 與訊息皆合法 UTF-8" {
+  # 前綴刻意用兩個空白，讓位元組 160 那一刀落在某個中文字的中間（byte 對齊測過會切壞）
+  zh=$(printf '額度已用盡，撞到使用上限了，這一行含中文字元一定超過一百六十個位元組%.0s' 1 2 3)
+  screen "usage limit:  $zh"
+  set_status login-frontend idle
+  dk-watch --once
+  hl=$(grep '^hit: ' "$d/.blocked/login-frontend.limit" | head -1)
+  [ -n "$hl" ]   # 用 read 逐行取出 hits 時，含半個 UTF-8 字元的行會被 bash 的 read 整行吞掉
+  grep -q '^agent prompt leader-login \[LIMIT\] from dk-watch: login-frontend .* — ' "$HERDR_STUB_LOG"
+  refute_grep 'not valid UTF-8' "$HERDR_STUB_LOG"
+  msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
+  [ "${#msg}" -le 200 ]
+  [ "${#hl}" -le 165 ]
+}
+@test "AC18: dk-watch 在 LC_ALL=C 下啟動時，中文命中行照樣不切半個字元" {
+  zh=$(printf '額度已用盡，撞到使用上限了，這一行含中文字元一定超過一百六十個位元組%.0s' 1 2 3)
+  screen "usage limit:  $zh"
+  set_status login-frontend idle
+  LC_ALL=C dk-watch --once
+  refute_grep 'not valid UTF-8' "$HERDR_STUB_LOG"
+  hl=$(grep '^hit: ' "$d/.blocked/login-frontend.limit" | head -1)
+  [ -n "$hl" ]
+  grep -q '^agent prompt leader-login \[LIMIT\] from dk-watch: login-frontend .* — ' "$HERDR_STUB_LOG"
+}
+@test "AC5: 三個上限——hit: 最多 5 行、每行截 160 字、[LIMIT] 訊息 ≤200 字" {
+  long=$(printf 'usage limit padding %.0s' $(seq 1 20))   # 遠超過 160 字
+  txt=""
+  for i in 1 2 3 4 5 6 7; do txt="$txt$long line$i\n"; done
+  screen "$txt"
+  set_status login-frontend idle
+  dk-watch --once
+  [ "$(grep -c '^hit: ' "$d/.blocked/login-frontend.limit")" -eq 5 ]
+  while IFS= read -r hl; do [ "${#hl}" -le 165 ]; done < <(grep '^hit: ' "$d/.blocked/login-frontend.limit")
+  msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
+  [ "${#msg}" -le 200 ]
 }

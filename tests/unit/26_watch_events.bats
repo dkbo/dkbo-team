@@ -191,6 +191,18 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   [ -f "$d/.blocked/login-frontend.limit" ]
   grep -q '\[LIMIT\] from dk-watch: login-frontend' "$HERDR_STUB_LOG"
 }
+
+@test "AC5: 事件路徑撞額度時 .limit 檔留下 hit: 行，訊息尾端附第一條" {
+  printf 'login-frontend wC:p2\n' > "$d/.panes"
+  sed -i 's/"name":"login-frontend","agent_status":"working"/"name":"login-frontend","agent_status":"idle"/' \
+    "$HERDR_STUB_RESPONSES/agent_list.json"
+  printf '{"id":"cli:pane:wait-output","result":{"matched_line":"usage limit","pane_id":"wC:p2"}}\n' \
+    > "$HERDR_STUB_RESPONSES/pane_wait-output.json"
+  screen "You've hit your usage limit. Upgrade to Plus to continue using Codex"
+  dk-watch --events --once
+  grep -q '^hit: ' "$d/.blocked/login-frontend.limit"
+  grep -q '\[LIMIT\] from dk-watch: login-frontend 撞額度 — ' "$HERDR_STUB_LOG"
+}
 @test "--events --ensure 起一個訂閱器並且冪等" {
   unset DK_NO_WATCH
   run dk-watch --events --ensure; [ "$status" -eq 0 ]; [[ "$output" == *started* ]]

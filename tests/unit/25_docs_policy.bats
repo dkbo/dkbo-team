@@ -52,3 +52,16 @@ teardown() { teardown_project; }
   grep -q '任務所屬的 workspace' "$DK_ROOT/PROJECT.md"
   grep -q "task's workspace" "$REPO_ROOT/README.en.md"
 }
+
+@test "AC13: skills/run/SKILL.md 帶新規範的五個字串，三份 README 都提到 dk-kind" {
+  for w in 'hit:' 'dk-kind up' '未 ack' 'wave-open <N> --refresh' '請人看'; do
+    grep -q -- "$w" "$DK_ROOT/skills/run/SKILL.md" || { echo "SKILL.md 缺 $w"; false; }
+  done
+  for f in README.md README.en.md .dkbo/README.md; do
+    grep -q 'dk-kind' "$REPO_ROOT/$f" || { echo "$f 沒提到 dk-kind"; false; }
+  done
+}
+
+@test "AC17: 波中改 brief 只請原 dev 重做時要回 [FIXED]，不再回 [DONE]" {
+  grep -q -- '回 `\[FIXED\]`' "$DK_ROOT/skills/run/SKILL.md"
+}

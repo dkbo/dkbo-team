@@ -264,6 +264,41 @@ seed_branch_commits() {
   refute_grep -qx 'dk/login' <(git -C "$REPO_SHARED" branch --format='%(refname:short)')
 }
 
+@test "AC11: merged 之後時間表是最終值（不帶進行中），結果：行的值改成 merged <sha>" {
+  cat > "$d/process.md" <<'P'
+2026-09-19T20:39 task-new login
+2026-09-19T20:45 gate1 approved
+2026-09-19T20:45 wave-open 1 base abc1234 members backend
+2026-09-19T21:04 dev-done wave 1 (1: backend)
+2026-09-19T21:04 review 1 spawned login-reviewer-a(claude)
+2026-09-19T21:11 review 1 verdict a: ok
+2026-09-19T21:12 wave-close 1 tests ok (x) 2 agents closed
+P
+  printf '# r 結案\n結果：merged   分支：dk/login   波數：1\n## 完成\nx\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  refute_grep '（進行中）' "$d/report.md"
+  grep -qE '^結果：merged [0-9a-f]{7}   分支：dk/login   波數：1$' "$d/report.md"
+  # 是合併之後那一次 commit（撿走這一行改寫）而不是合併之前那一次
+  m=$(git -C "$PROJECT" log --format='%H %s' | grep 'dkbo memory: task login' | head -1 | cut -d' ' -f1)
+  git -C "$PROJECT" show "$m" | grep -qE '^\+結果：merged [0-9a-f]{7}'
+}
+@test "AC11: in-tree 結案也改寫結果：行" {
+  sed -i "s|^DK_WORKTREE=.*|DK_WORKTREE=\"$PROJECT\"|; s|^DK_WORKSPACE=.*|DK_WORKSPACE=\"\"|" "$d/.task.env"
+  printf '# r 結案\n結果：in-tree   分支：dk/login   波數：1\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  grep -qE '^結果：in-tree [0-9a-f]{7}   分支：dk/login   波數：1$' "$d/report.md"
+}
+@test "AC11: 沒有「結果：」開頭的行就不動，也不報錯" {
+  printf '# r 結案\n## 完成\nx\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  refute_grep '^結果：' "$d/report.md"
+}
+@test "AC11: 只換值那一段，其他欄位（分支、波數）原樣保留、不受三個空白位置影響" {
+  printf '# r 結案\n結果：merged 舊sha   分支：dk/login   波數：3\n' > "$d/report.md"
+  run dk-task-close; [ "$status" -eq 0 ]
+  grep -qE '^結果：merged [0-9a-f]{7}   分支：dk/login   波數：3$' "$d/report.md"
+}
+
 @test "AC13 反面: 沒有 .repos 又不是 --abandon → exit 1，不去合一個不存在的分支" {
   rm -f "$d/.repos"
   sed -i 's#^DK_WORKTREE=.*#DK_WORKTREE=""#; s#^DK_BASE=.*#DK_BASE=""#' "$d/.task.env"

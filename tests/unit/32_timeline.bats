@@ -76,6 +76,12 @@ use_fixture() { # $1=fixture 短名 $2=任務短名 — 把真 log 放進一個�
   grep -q 'dk-timeline' "$REPO_ROOT/.dkbo/skills/run/SKILL.md"
   for f in .dkbo/README.md README.md README.en.md; do grep -q 'dk-timeline' "$REPO_ROOT/$f"; done
 }
+@test "AC7: wave-refresh 不影響 dk-timeline 的波起訖（仍以 wave-open N 為準）" {
+  use_fixture highfix refreshed
+  echo "2026-09-19T21:00 wave-refresh 1 members backend qa" >> "$DK_ROOT/tasks/2026-09-19-refreshed/process.md"
+  run dk-timeline refreshed; [ "$status" -eq 0 ]
+  [[ "$output" == *"| 波 1 | 2026-09-19T20:45 | 2026-09-19T21:12 | 27m | 19m | 7m |"* ]]
+}
 @test "AC14 文件：解除熔斷那條寫明標記檔不要刪" {
   grep -q '同任務內解除熔斷' "$REPO_ROOT/.dkbo/skills/run/SKILL.md"
   grep -q '標記檔不要刪' "$REPO_ROOT/.dkbo/skills/run/SKILL.md"
