@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1 — 2026-09-23
+
+- fix(install): `templates/seed/` 的起始檔改名為 `*.seed.md`／`settings.seed.env`——0.12.0 用的是 `PROJECT.md`、`decisions.md`、`settings.env` 原名，而「更新 dkbo」那條 rsync 的 `--exclude=PROJECT.md` 等是比對檔名、不分目錄，升級時連 seed 裡的同名檔一起排除，升過級的專案日後缺檔再跑 `install.sh` 會因 seed 不存在而中斷。改名後兩條 rsync 照 README 原樣跑，seed 一個不少。
+- 測試：633 bats（+1，`14_install.bats` 照 README 的兩條 rsync 實跑升級並驗 seed 齊全）；shellcheck 零警告。
+- 升級：用 0.12.0 升過級的專案照「更新 dkbo」重跑一次即可補齊 seed；沒有新鍵、新依賴、新 skill。
+
 ## 0.12.0 — 2026-09-23
 
 - feat(kinds)!: 跨任務的專案層熔斷檔 `.dkbo/.sessions/kinds-down`——`dk-watch` 判定撞額度時除了照舊寫本任務 `DK_KIND_DOWN`，另在這個檔追加或更新一列（同 kind 取較晚的恢復時間，不重複），寫檔走 flock；reviewer `[TIMEOUT]` 造成的熔斷不寫這個檔，因為逾時不代表額度用完。派人前 `dk_review_kinds` 把未恢復的 kind 視同已熔斷：`--kind` 明寫且命中就拒絕（`dk-spawn` exit 1），角色檔預設命中則照派但印警告，避免一次誤判把下一個任務每個角色都擋死。新增 `dk-kind [status]` 看清單、`dk-kind up <k>` 解除（同時清 kinds-down 與綁著任務的 `DK_KIND_DOWN`）；`dk-resume` 的 `kinds down:` 行附印專案層未恢復的 kind。

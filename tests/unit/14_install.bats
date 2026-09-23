@@ -71,7 +71,7 @@ teardown() { teardown_project; }
   run bash .dkbo/install.sh; [ "$status" -eq 0 ]
   [[ "$output" == *"seeded .dkbo/decisions.md"* ]]
   [ -z "$(find .dkbo/tasks -mindepth 1 -maxdepth 1 -name '20*')" ]
-  for f in tasks/INDEX.md:INDEX.md tasks/BACKLOG.md:BACKLOG.md decisions.md:decisions.md PROJECT.md:PROJECT.md settings.env:settings.env; do
+  for f in tasks/INDEX.md:INDEX.seed.md tasks/BACKLOG.md:BACKLOG.seed.md decisions.md:decisions.seed.md PROJECT.md:PROJECT.seed.md settings.env:settings.seed.env; do
     cmp ".dkbo/${f%%:*}" ".dkbo/templates/seed/${f#*:}" || { echo "not seeded: ${f%%:*}"; false; }
   done
   grep -q '^DK_TEST_CMD=""' .dkbo/settings.env
@@ -93,4 +93,15 @@ teardown() { teardown_project; }
     [ "$x" = 'roles/*' ] && continue
     [[ " ${strip%)} " == *" $x "* ]] || { echo "全新安裝沒拿掉 $x"; false; }
   done
+}
+@test "升級：README 的兩條 rsync 照跑後 templates/seed/ 一個不少（seed 檔名不能撞到 --exclude）" {
+  command -v rsync >/dev/null || skip "no rsync"
+  tmp=$(mktemp -d); cp -r "$REPO_ROOT/.dkbo" "$tmp/.dkbo"
+  rm -rf .dkbo/templates/seed
+  while IFS= read -r line; do eval "${line%%#*}"; done < <(grep '^rsync -a ' "$REPO_ROOT/.dkbo/README.md")
+  rm -rf "$tmp"
+  for f in "$REPO_ROOT"/.dkbo/templates/seed/*; do
+    [ -f ".dkbo/templates/seed/$(basename "$f")" ] || { echo "升級後少了 seed/$(basename "$f")"; false; }
+  done
+  rm -f .dkbo/decisions.md; run .dkbo/install.sh; [ "$status" -eq 0 ]; [[ "$output" == *"seeded .dkbo/decisions.md"* ]]
 }

@@ -38,11 +38,11 @@ seed() { # DEST SEED — .dkbo/DEST 不存在才從 templates/seed/SEED 複製
   [ -e ".dkbo/$1" ] && return 0
   mkdir -p "$(dirname ".dkbo/$1")"; cp "$here/templates/seed/$2" ".dkbo/$1"; echo "install.sh: seeded .dkbo/$1"
 }
-seed tasks/INDEX.md INDEX.md
-seed tasks/BACKLOG.md BACKLOG.md
-seed decisions.md decisions.md
-seed PROJECT.md PROJECT.md
-seed settings.env settings.env
+seed tasks/INDEX.md INDEX.seed.md
+seed tasks/BACKLOG.md BACKLOG.seed.md
+seed decisions.md decisions.seed.md
+seed PROJECT.md PROJECT.seed.md
+seed settings.env settings.seed.env
 mkdir -p .dkbo/tasks/_chores .dkbo/.sessions
 touch .dkbo/tasks/_chores/.gitkeep .dkbo/.sessions/.gitkeep
 chmod +x .dkbo/bin/* .dkbo/install.sh
