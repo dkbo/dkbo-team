@@ -1,0 +1,369 @@
+# 營運回饋修補（panova headermerge） — wave 4 since 031afa6 — 2026-09-23T11:22
+# files changed: 8 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/bin/dk-resume          | 26 +++++++++++++++-----------
+ .dkbo/bin/dk-watch           |  7 +++++--
+ .dkbo/lib/kinds.sh           | 24 ++++++++++++++++++++++--
+ CHANGELOG.md                 |  4 ++--
+ tests/stub/herdr             | 24 ++++++++++++++++++++++++
+ tests/unit/09_watch.bats     | 24 ++++++++++++++++++++++++
+ tests/unit/10_resume.bats    |  9 +++++++++
+ tests/unit/34_kind_down.bats |  5 +++++
+ 8 files changed, 106 insertions(+), 17 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/bin/dk-resume b/.dkbo/bin/dk-resume
+index 87a14b0..af59c7c 100755
+--- a/.dkbo/bin/dk-resume
++++ b/.dkbo/bin/dk-resume
+@@ -31,36 +31,40 @@ render() { # $1=process lines $2=state lines $3=ruling lines (0 = all)
+     else dk_repos_rows "$dir" | awk 'NR==1{print $3}'; fi
+     echo "tab: ${DK_TASK_TAB:-}"
+   else
+     echo "尚未交棒（/dkbo-run 會跑 dk-leader $DK_SHORT --run：切 worktree、開 tab、把領導搬進去）"
+   fi
+   echo "## 本波"
+   if [ -n "$task_min" ]; then e=$((now_min - task_min)); echo "任務已進行 $((e/60))h $((e%60))m（自 task-new）"; fi
+   if [ -n "$wave_min" ]; then echo "本波已進行 $((now_min - wave_min))m（自 wave-open）"; fi
+   if [ -n "${DK_WAVE:-}" ]; then
+     echo "wave: $DK_WAVE  base: $(dk_wave_base "$dir" "$DK_WAVE")  kinds down: ${DK_KIND_DOWN:-無}"
+-    # AC6：專案層的熔斷跟本任務的 DK_KIND_DOWN 是兩張獨立的清單，接手的人要同時看到——否則
+-    # 會誤以為換個 kind 就沒事，其實下一個任務一派同一個 kind 還是會被 dk_review_kinds／dk-spawn 擋下。
+-    proj=$(dk_kinds_down_rows)
+-    if [ -n "$proj" ]; then
+-      while IFS=' ' read -r k e ex _rt tn _ag _hit; do
+-        [ -n "$k" ] || continue
+-        tag=""; [ "$ex" = guess ] && tag="（猜）"
+-        printf '專案層熔斷: %s 到 %s%s（來源任務 %s）\n' "$k" "$(dk_epoch_to_local "$e")" "$tag" "$tn"
+-      done <<< "$proj"
+-    fi
++  else echo "沒有開著的波（dk-wave-open N 開下一波）"; fi
++  # AC6/Minor：專案層的熔斷跟本任務的 DK_KIND_DOWN 是兩張獨立的清單，接手的人要同時看到——否則
++  # 會誤以為換個 kind 就沒事，其實下一個任務一派同一個 kind 還是會被 dk_review_kinds／dk-spawn 擋下。
++  # 兩波之間（DK_WAVE 空）也要印：領導在兩波之間恢復時不該看不到熔斷（reviewer-a 本輪 Minor）。
++  # guess 標記統一成 dk-kind 的 `(guess)`，不再用「（猜）」——同一個標記兩種寫法只會讓人多想。
++  proj=$(dk_kinds_down_rows)
++  if [ -n "$proj" ]; then
++    while IFS=' ' read -r k e ex _rt tn _ag _hit; do
++      [ -n "$k" ] || continue
++      tag=""; [ "$ex" = guess ] && tag=" (guess)"
++      printf '專案層熔斷: %s 到 %s%s（來源任務 %s）\n' "$k" "$(dk_epoch_to_local "$e")" "$tag" "$tn"
++    done <<< "$proj"
++  fi
++  if [ -n "${DK_WAVE:-}" ]; then
+     awk -v t="$DK_REVIEW_TIMEOUT_MIN" -v now="$(date +%s)" -v pfx="$DK_SHORT-" -v dir="$dir" '
+       NF>=6 && $4=="review" && (index($1, "-reviewer-") || $1 ~ /-reviewer$/) {
+         sf=dir "/state/" substr($1, length(pfx)+1) ".md"; st="no-state"
+         while ((getline l < sf) > 0) if (l ~ /^status: /) st=substr(l, 9); close(sf)
+         printf "%s %s %d min%s\n", $1, st, (now-$3)/60, ((now-$3) > t*60 && st!="done") ? " TIMEOUT?" : "" }' "$dir/.panes"
+-  else echo "沒有開著的波（dk-wave-open N 開下一波）"; fi
++  fi
+   echo "$watch"
+   echo "## 裁定（最後一次 wave-open 之後）"
+   rul=$(awk '$2=="wave-open"{buf=""} $2=="ruling:"{buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/process.md")
+   if [ -n "$rul" ]; then if [ "$3" -gt 0 ]; then printf '%s\n' "$rul" | tail -n "$3"; else printf '%s\n' "$rul"; fi; fi
+   echo "## process（最後 $1 行）"; tail -n "$1" "$dir/process.md"
+   echo "## 未處理訊息（最後一則 ACK 之後，寄給 leader）"
+   awk -v me="$(dk_leader_name)" '$2==me && $3=="[ACK]" {buf=""; next} index($0, "-> " me " ")>0 {buf=buf $0 "\n"} END{printf "%s", buf}' "$dir/messages.log"
+   echo "## state 摘要（每檔前 $2 行）"
+   for f in "$dir"/state/*.md; do [ -f "$f" ] || continue; case "$f" in *.report.md) continue;; esac; n=$(basename "$f" .md); head -n "$2" "$f" | sed "s/^/$n: /"; done
+   echo "## 在線員工（每 tab 一行）"
+diff --git a/.dkbo/bin/dk-watch b/.dkbo/bin/dk-watch
+index 3fdc6f1..4db5d8d 100755
+--- a/.dkbo/bin/dk-watch
++++ b/.dkbo/bin/dk-watch
+@@ -108,43 +108,46 @@ handle_block() { # agent immediate — immediate=1 時不等 DK_BLOCK_SEC：畫
+   if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[BLOCKED] from dk-watch: $agent 卡在審批"; then echo delivered >> "$m"; fi
+ }
+ 
+ handle_limit() { # agent txt — 撞額度。不必等 DK_REVIEW_TIMEOUT_MIN：那行字在撞到的當下就在畫面上了
+   local agent="$1" txt="${2:-}" kind m hits first_hit epoch tag msg
+   m="$dir/.blocked/$agent.limit"
+   if [ ! -f "$m" ]; then
+     kind=$(agent_kind "$agent")
+     # AC5：畫面上撞額度的原文是唯一證據——通知只說「撞額度」三個字，領導得回去讀畫面才知道真假。
+     # 留最多 5 行命中的畫面原文在 .limit 檔（去頭尾空白、每行截 160 字），第一條也附進送給領導的訊息。
++    # 截斷用 dk_utf8_trunc（按字元）不用 `cut -c`（按位元組，會切出半個 UTF-8 字元讓 herdr 拒收）。
+     hits=$(printf '%s\n' "$txt" | grep -iE "$(dk_kind_re "$kind" quota)" \
+-             | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' | cut -c1-160 | head -5)
++             | sed -e 's/^[[:space:]]*//; s/[[:space:]]*$//' | head -5)
++    hits=$(while IFS= read -r hl; do [ -n "$hl" ] && dk_utf8_trunc "$hl" 160; printf '\n'; done <<< "$hits")
++    hits="${hits%$'\n'}"
+     herdr notification show "dkbo: $agent limit" --body "撞額度，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
+     # 熔斷不等領導：任務狀態已經變了，領導收不收得到訊息都一樣成立（同 timeout 的理由）
+     if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
+       DK_KIND_DOWN="${DK_KIND_DOWN:+$DK_KIND_DOWN }$kind"; dk_env_set DK_KIND_DOWN "$DK_KIND_DOWN"
+     fi
+     # AC1：專案層熔斷是另加一層，不取代 DK_KIND_DOWN；reviewer 逾時的熔斷不走這裡（那段在 tick()）
+     if [ -n "$kind" ]; then
+       first_hit=$(printf '%s\n' "$hits" | head -1)
+       read -r epoch tag <<< "$(dk_kind_recover_epoch "$kind" "$txt")"
+       dk_kinds_down_set "$kind" "$epoch" "$tag" "$(basename "$dir")" "$agent" "$first_hit"
+     fi
+     dk_process "limit $agent → kind ${kind:-?} down"
+     { echo notified
+       if [ -n "$hits" ]; then while IFS= read -r hl; do [ -n "$hl" ] && echo "hit: $hl"; done <<< "$hits"; fi
+     } > "$m"
+   fi
+   grep -q '^delivered$' "$m" && return 0
+   first_hit=$(sed -n 's/^hit: //p' "$m" | head -1)
+   msg="[LIMIT] from dk-watch: $agent 撞額度"
+   [ -n "$first_hit" ] && msg="$msg — $first_hit"
+-  msg="${msg:0:200}"
++  msg=$(dk_utf8_trunc "$msg" 200)
+   if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "$msg"; then echo delivered >> "$m"; fi
+ }
+ 
+ # agent_status 前提（highfix BACKLOG）：正在工作時畫面上的字是它的工作內容，不是卡住的證據 ——
+ # 自己編輯、cat 出來的內容含 usage limit／Requesting permission 之類字樣都會被誤判。working 就
+ # 不看畫面；agent_status 拿不到（不在名單裡、herdr 失敗）時寧可誤報也不可漏掉真卡住，照舊判定。
+ # state 已 status: done 的 agent 同理跳過：這一輪它已交差，畫面殘留的字樣不該再判它
+ # （highfix 第二次誤判：reviewer 交報告後被自己引用的 usage limit 字樣熔斷）。
+ # 但 done 認定跟逾時路徑（tick() 的 reviewer timeout 區塊）同一條：被 [TASK]／[BUG] 重新
+ # 指派過（存在 .redispatch）而 state 內容跟指派當下一模一樣，代表它沒有交差，不能豁免（AC15）。
+diff --git a/.dkbo/lib/kinds.sh b/.dkbo/lib/kinds.sh
+index ec0745a..8d73fd5 100644
+--- a/.dkbo/lib/kinds.sh
++++ b/.dkbo/lib/kinds.sh
+@@ -99,27 +99,47 @@ dk_kind_parse_codex_reset() { # TEXT → "YYYY-MM-DDTHH:MM"；認「try again at
+ }
+ 
+ dk_kind_recover_epoch() { # KIND TEXT → "<epoch> exact|guess"；兩種都解析不到就現在＋5小時標 guess
+   local kind="$1" text="$2" secs target diff now nowmin
+   now=$(date +%s)
+   case "$kind" in
+     agy)
+       if secs=$(dk_kind_parse_agy_reset "$text"); then printf '%s exact\n' "$((now + secs))"; return 0; fi ;;
+     codex)
+       if target=$(dk_kind_parse_codex_reset "$text"); then
+-        nowmin=$(dk_ts_minutes "$(dk_now)") && diff=$(( $(dk_ts_minutes "$target") - nowmin )) \
+-          && { printf '%s exact\n' "$((now + diff * 60))"; return 0; }
++        nowmin=$(dk_ts_minutes "$(dk_now)") && diff=$(( $(dk_ts_minutes "$target") - nowmin ))
++        # 目標時間已經過去（時區不一致等）→ 那一列一寫進去就過期，等於沒熔斷；改標 guess
++        # 才會真的落地成「現在＋5h」（reviewer-a 本輪 Minor）
++        [ -n "${diff:-}" ] && [ "$diff" -gt 0 ] && { printf '%s exact\n' "$((now + diff * 60))"; return 0; }
+       fi ;;
+   esac
+   printf '%s guess\n' "$((now + 5 * 3600))"
+ }
+ 
++dk_utf8_trunc() { # TEXT N — 前 N 個 UTF-8 字元；只在字元邊界切，locale 中立（LC_ALL=C 下也不切半個
++  # 位元組序列）：AC18 的教訓是 `cut -c` 按位元組算，切出半個字元會讓 herdr 拒收整則 [LIMIT]。
++  # 走 od 逐位元組讀（純數字，不靠 grep/read 對文字的 locale 假設——那條路子在某些環境會把整行
++  # 一起吞掉或黏成一個字元，比 `cut -c` 更難察覺），再用 printf 的八進位跳脫把位元組組回字串。
++  local text="$1" n="${2:-160}" cnt=0 esc="" byte
++  while read -r byte; do
++    [ -n "$byte" ] || continue
++    if [ $((byte & 0xC0)) -ne 128 ]; then   # 不是延續位元組（10xxxxxx）＝新字元開始
++      cnt=$((cnt + 1))
++      [ "$cnt" -gt "$n" ] && break
++    fi
++    esc="$esc\\$(printf '%03o' "$byte")"
++  done < <(printf '%s' "$text" | od -An -v -tu1 | tr -s ' ' '\n' | sed '/^$/d')
++  # esc 本身就是要展開的八進位跳脫序列組，不是使用者輸入
++  # shellcheck disable=SC2059
++  printf "$esc"
++}
++
+ dk_ts_from_minutes() { # 分鐘數（同 dk_ts_minutes 的算術）→ "YYYY-MM-DDTHH:MM"，civil_from_days 是它的反函式
+   local total="$1" days rem hh mi z era doe yoe y doy mp d m
+   days=$(( total / 1440 )); rem=$(( total % 1440 ))
+   hh=$(( rem / 60 )); mi=$(( rem % 60 ))
+   z=$(( days + 719468 ))
+   era=$(( z / 146097 ))
+   doe=$(( z - era * 146097 ))
+   yoe=$(( (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365 ))
+   y=$(( yoe + era * 400 ))
+   doy=$(( doe - (365 * yoe + yoe / 4 - yoe / 100) ))
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index ce1d662..3c91eee 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,21 +1,21 @@
+ # Changelog
+ 
+ ## 0.12.0 — 2026-09-23
+ 
+ - feat(kinds)!: 跨任務的專案層熔斷檔 `.dkbo/.sessions/kinds-down`——`dk-watch` 判定撞額度時除了照舊寫本任務 `DK_KIND_DOWN`，另在這個檔追加或更新一列（同 kind 取較晚的恢復時間，不重複），寫檔走 flock；reviewer `[TIMEOUT]` 造成的熔斷不寫這個檔，因為逾時不代表額度用完。派人前 `dk_review_kinds` 把未恢復的 kind 視同已熔斷：`--kind` 明寫且命中就拒絕（`dk-spawn` exit 1），角色檔預設命中則照派但印警告，避免一次誤判把下一個任務每個角色都擋死。新增 `dk-kind [status]` 看清單、`dk-kind up <k>` 解除（同時清 kinds-down 與綁著任務的 `DK_KIND_DOWN`）；`dk-resume` 的 `kinds down:` 行附印專案層未恢復的 kind。
+ - feat(kinds): 恢復時間解析全部走可攜純算術，不依賴 `date -d`；agy 認「Resets in <N>h<M>m[<S>s]」與沒有小時的「Resets in <M>m[<S>s]」標 `exact`，codex 認「try again at <月份縮寫> <日><序數>, <年> <時>:<分> <AM|PM>」換算後標 `exact`，兩者都解析不到才用「現在 + 5 小時」標 `guess`。
+ - fix(codex): `kinds/codex.sh` 的 `KIND_QUOTA_RE` 移除第 3 個分支——它跟 `kinds/claude.sh` 額度式子的第 2 個分支同字串，同時命中「快到額度、切模型」選單的標題與說明文字，把暫時性限流誤判成撞額度並熔斷；第 1、2、4 個分支保留，claude 與 agy 的額度式子不動。此後 codex 只印那個片語不再熔斷——這是想要的，不是回歸；0.11.2「已知仍未處理」的這一項本版已處理。
+-- feat(watch): `[LIMIT]` 留畫面證據——`handle_limit` 在 `.blocked/<agent>.limit` 追加最多 5 行 `hit: <命中的畫面行>`，送給領導的 `[LIMIT]` 訊息尾端附第一條命中行，process.md 的 `limit …` 行不附（避免領導讀 process 時畫面冒出額度字樣）。
++- feat(watch): `[LIMIT]` 留畫面證據——`handle_limit` 在 `.blocked/<agent>.limit` 追加最多 5 行 `hit: <命中的畫面行>`，送給領導的 `[LIMIT]` 訊息尾端附第一條命中行，process.md 的 `limit …` 行不附（避免領導讀 process 時畫面冒出額度字樣）。`hit:` 行的截斷改按字元數（不是位元組）：原本用 `cut -c` 在 GNU 環境是按位元組截，中文命中行會切出半個 UTF-8 字元，讓真 herdr 拒收這個非法參數、`[LIMIT]` 永遠送不到；改法保證 `.limit` 的 `hit:` 行、kinds-down 的第一條 hit 與送出的 `[LIMIT]` 訊息都是合法 UTF-8。
+ - feat(flow): `dk-wave-open <N> --refresh` 讓波中改 brief 可重產第 N 波所有成員的切片、重設整波逾時起算點，不改 base、不重派、不刪 `.blocked/wave-N.devdone`（改由 `dk-spawn` 在波開著時加入 dev 成員的同一步刪，避免新成員 spawn 前的空窗重推假聚合）；`dk-msg` 在切片比 brief 舊、或領導有未 ack 的訊息時各印一行提示但照送；dev 送 `[DONE]` 前驗 state 的 `status`／`touched`／`report` 三個頂格鍵與 `touched` 文法，不過拒絕並指出哪裡錯；`dk-task-close` 結案後把時間表「任務」列的結束時間與 report.md 的 `結果：` 行改寫成最終值，不再帶「（進行中）」。
+ - docs: `skills/run/SKILL.md` 的 `[LIMIT]` 故障段改寫成先驗 `hit:` 再判真假、補送 TASK/DECISION 前讀未 ack、視覺變更任務先給人看畫面、波中改 brief 走 `--refresh` 的流程；三份 README 補 `dk-kind`／`--refresh`；`.dkbo/README.md` 疑難排解補專案層熔斷；`PROTOCOL.md`／`templates/state.md` 寫明 `touched` 的清單文法。
+-- 測試：623 bats（+71）；21/25/04 補斷言；shellcheck 零警告。
++- 測試：627 bats（+75）；21/25/04 補斷言；shellcheck 零警告。
+ - 升級：`.dkbo/.sessions/kinds-down` 與其鎖檔 `kinds-down.lock` 是新增的執行期檔（已被 `.gitignore` 排除，不進版控）；新增 bin `dk-kind`；沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink，`.task.env` 沒有新鍵。
+ 
+ ## 0.11.2 — 2026-09-23
+ 
+ - fix(codex): codex 的「Approaching rate limits / Switch model」選單會停住等人按 Enter，但 `kinds/codex.sh` 的 `KIND_BLOCK_RE` 沒有這個選單的字樣，`dk-watch` 認不出這種卡住（gamemore 實跑樣本 24、64 都漏掉）。式子補上 `Press enter to`——收前綴不收整句：窄 pane 會截掉最後一行的尾巴，實測原文是 `Press enter to confir` 與 `Press enter to con`，整句 `Press enter to confirm` 兩份都認不得。已知仍未處理：寬 pane 上這個選單的標題 `Approaching rate limits` 會先命中額度式子的裸 `rate limit`（`dk-watch` 額度優先），被判成撞額度並熔斷 codex，但這個畫面是「快到了」不是「已耗盡」；實測樣本 2.2 上方另有真的額度用完訊息，所以結果剛好是對的，留待確認 codex 真的耗盡時印什麼再收窄。
+ - 測試：552 bats（+2，`03_kinds.bats`，用實測原文）；shellcheck 零警告。
+ - 升級：純修補，沒有新鍵、新依賴、新 skill。
+ 
+ ## 0.11.1 — 2026-09-23
+ 
+diff --git a/tests/stub/herdr b/tests/stub/herdr
+index 3cc5909..9982c8d 100755
+--- a/tests/stub/herdr
++++ b/tests/stub/herdr
+@@ -1,18 +1,42 @@
+ #!/usr/bin/env bash
+ # Fake herdr. Logs every call; answers from canned JSON files.
+ set -uo pipefail
+ log="${HERDR_STUB_LOG:?}"
+ printf '%s\n' "$*" >> "$log"
+ cmd="${1:-}"; sub="${2:-}"
+ # HERDR_STUB_VERSION lets a test pretend to be any herdr; unset means the version dkbo verified.
+ if [ "$cmd" = --version ]; then echo "herdr ${HERDR_STUB_VERSION-0.9.0}"; exit 0; fi
++# AC18：真 herdr 拒收非 UTF-8 參數（rc=2）——`agent prompt` 的內文若切出半個字元就送不到，
++# stub 比照這個行為，測試才抓得到 dk-watch 的截斷是不是按位元組切的。
++dk_stub_utf8_valid() {
++  # 用 od 逐位元組讀（純數字，不靠 grep/read 對文字的 locale 假設——那條路子在某些
++  # locale 下會把整行吞掉或把多位元組字元黏成一個 token，比要驗的問題更難察覺）。
++  local s="$1" byte need=0
++  while read -r byte; do
++    [ -n "$byte" ] || continue
++    if [ "$need" -gt 0 ]; then
++      [ $((byte & 0xC0)) -eq 128 ] || return 1
++      need=$((need - 1)); continue
++    fi
++    if [ $((byte & 0x80)) -eq 0 ]; then continue
++    elif [ $((byte & 0xE0)) -eq 192 ]; then need=1
++    elif [ $((byte & 0xF0)) -eq 224 ]; then need=2
++    elif [ $((byte & 0xF8)) -eq 240 ]; then need=3
++    else return 1
++    fi
++  done < <(printf '%s' "$s" | od -An -v -tu1 | tr -s ' ' '\n' | sed '/^$/d')
++  [ "$need" -eq 0 ]
++}
++if [ "$cmd" = agent ] && [ "$sub" = prompt ] && [ -n "${4:-}" ] && ! dk_stub_utf8_valid "${4:-}"; then
++  echo '{"error":{"code":"invalid_argument","message":"argument 4 is not valid UTF-8"}}' >&2; exit 2
++fi
+ key="${cmd}_${sub}"
+ if [ "${HERDR_STUB_FAIL:-}" = "$cmd $sub" ]; then
+   echo '{"error":{"code":"stubbed_failure"}}' >&2; exit 1
+ fi
+ # HERDR_STUB_MISSING: space-separated agent targets herdr does not know. Real herdr answers
+ # agent_not_found with a non-zero rc, which is what made every dk-msg in the sportswitch task
+ # undeliverable; without this the stub answers every target and no test can see it.
+ for m in ${HERDR_STUB_MISSING:-}; do
+   if [ "$cmd" = agent ] && [ "$m" = "${3:-}" ]; then
+     echo "{\"error\":{\"code\":\"agent_not_found\",\"message\":\"agent target $3 not found\"}}" >&2; exit 1
+diff --git a/tests/unit/09_watch.bats b/tests/unit/09_watch.bats
+index 1adcb9a..45bd85b 100644
+--- a/tests/unit/09_watch.bats
++++ b/tests/unit/09_watch.bats
+@@ -546,20 +546,44 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
+ 
+ # --- AC5: [LIMIT] 留證據，輪詢路徑 ---
+ @test "AC5: 輪詢路徑撞額度時 .limit 檔留下 hit: 行，訊息尾端附第一條" {
+   screen "Individual quota reached, Resets in 102h11m1s"
+   set_status login-frontend idle
+   dk-watch --once
+   grep -q '^hit: Individual quota reached, Resets in 102h11m1s$' "$d/.blocked/login-frontend.limit"
+   grep -q '\[LIMIT\] from dk-watch: login-frontend 撞額度 — Individual quota reached, Resets in 102h11m1s' "$HERDR_STUB_LOG"
+ }
+ 
++@test "AC18: 中文命中行（>160 bytes）截斷不切半個字元，hit: 與訊息皆合法 UTF-8" {
++  # 前綴刻意用兩個空白，讓位元組 160 那一刀落在某個中文字的中間（byte 對齊測過會切壞）
++  zh=$(printf '額度已用盡，撞到使用上限了，這一行含中文字元一定超過一百六十個位元組%.0s' 1 2 3)
++  screen "usage limit:  $zh"
++  set_status login-frontend idle
++  dk-watch --once
++  hl=$(grep '^hit: ' "$d/.blocked/login-frontend.limit" | head -1)
++  [ -n "$hl" ]   # 用 read 逐行取出 hits 時，含半個 UTF-8 字元的行會被 bash 的 read 整行吞掉
++  grep -q '^agent prompt leader-login \[LIMIT\] from dk-watch: login-frontend .* — ' "$HERDR_STUB_LOG"
++  refute_grep 'not valid UTF-8' "$HERDR_STUB_LOG"
++  msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
++  [ "${#msg}" -le 200 ]
++  [ "${#hl}" -le 165 ]
++}
++@test "AC18: dk-watch 在 LC_ALL=C 下啟動時，中文命中行照樣不切半個字元" {
++  zh=$(printf '額度已用盡，撞到使用上限了，這一行含中文字元一定超過一百六十個位元組%.0s' 1 2 3)
++  screen "usage limit:  $zh"
++  set_status login-frontend idle
++  LC_ALL=C dk-watch --once
++  refute_grep 'not valid UTF-8' "$HERDR_STUB_LOG"
++  hl=$(grep '^hit: ' "$d/.blocked/login-frontend.limit" | head -1)
++  [ -n "$hl" ]
++  grep -q '^agent prompt leader-login \[LIMIT\] from dk-watch: login-frontend .* — ' "$HERDR_STUB_LOG"
++}
+ @test "AC5: 三個上限——hit: 最多 5 行、每行截 160 字、[LIMIT] 訊息 ≤200 字" {
+   long=$(printf 'usage limit padding %.0s' $(seq 1 20))   # 遠超過 160 字
+   txt=""
+   for i in 1 2 3 4 5 6 7; do txt="$txt$long line$i\n"; done
+   screen "$txt"
+   set_status login-frontend idle
+   dk-watch --once
+   [ "$(grep -c '^hit: ' "$d/.blocked/login-frontend.limit")" -eq 5 ]
+   while IFS= read -r hl; do [ "${#hl}" -le 165 ]; done < <(grep '^hit: ' "$d/.blocked/login-frontend.limit")
+   msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
+diff --git a/tests/unit/10_resume.bats b/tests/unit/10_resume.bats
+index 31d705d..885231f 100644
+--- a/tests/unit/10_resume.bats
++++ b/tests/unit/10_resume.bats
+@@ -38,20 +38,29 @@ teardown() { teardown_project; }
+   printf '%s\n' "$output" | grep -qx '## process（最後 20 行）'
+   [[ "$output" == *"tab 1: login-frontend(working 等了 1 min) login-qa(blocked 等了 2 min)"* ]]; [[ "$output" == *"tab 2: login-reviewer-a(? 等了 30 min)"* ]]
+ }
+ 
+ @test "AC6/Minor: 本波段多印專案層未恢復的 kind 與恢復時間" {
+   ( . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/kinds.sh"
+     dk_kinds_down_set agy "$(( $(date +%s) + 3600 ))" exact other-task some-agent "撞額度樣本" )
+   run dk-resume; [ "$status" -eq 0 ]
+   [[ "$output" == *"專案層熔斷: agy 到"* ]]; [[ "$output" == *"（來源任務 other-task）"* ]]
+ }
++@test "AC18/Minor: 兩波之間（DK_WAVE 空）也印專案層熔斷，guess 標記統一成 (guess)" {
++  sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
++  ( . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/kinds.sh"
++    dk_kinds_down_set agy "$(( $(date +%s) + 3600 ))" guess other-task some-agent "撞額度樣本" )
++  run dk-resume; [ "$status" -eq 0 ]
++  [[ "$output" == *"沒有開著的波"* ]]
++  [[ "$output" == *"專案層熔斷: agy 到"*" (guess)"*"（來源任務 other-task）"* ]]
++  [[ "$output" != *"（猜）"* ]]
++}
+ @test "resume <task> rebinds the pane" {
+   rm "$DK_ROOT/.sessions/wB:p1"
+   run dk-resume; [ "$status" -eq 1 ]
+   run dk-resume login; [ "$status" -eq 0 ]
+   [ "$(cat "$DK_ROOT/.sessions/wB:p1")" = "$(basename "$d")" ]
+ }
+ @test "employee ACK does not cut the leader's unprocessed messages" {
+   printf '2026-09-10T10:04 login-frontend [ACK]\n' >> "$d/messages.log"
+   run dk-resume; [ "$status" -eq 0 ]
+   [[ "$output" == *"[ESCALATE] 修一次未好"* ]]
+diff --git a/tests/unit/34_kind_down.bats b/tests/unit/34_kind_down.bats
+index 10ad415..f61b6ab 100644
+--- a/tests/unit/34_kind_down.bats
++++ b/tests/unit/34_kind_down.bats
+@@ -45,20 +45,25 @@ teardown() { teardown_project; }
+ }
+ @test "dk_kind_recover_epoch: 兩種都解析不到就現在+5小時，標 guess" {
+   now=$(date +%s)
+   read -r epoch tag <<< "$(dk_kind_recover_epoch agy 'thinking...')"
+   [ "$tag" = guess ]; diff=$(( epoch - (now + 5*3600) )); [ "${diff#-}" -le 5 ]
+   read -r epoch tag <<< "$(dk_kind_recover_epoch codex 'thinking...')"
+   [ "$tag" = guess ]
+   read -r epoch tag <<< "$(dk_kind_recover_epoch unknown-kind 'whatever')"
+   [ "$tag" = guess ]
+ }
++@test "dk_kind_recover_epoch: codex 目標時間已過（時區不一致等）改走 guess，不誤標 exact" {
++  now=$(date +%s)
++  read -r epoch tag <<< "$(dk_kind_recover_epoch codex 'Try again at Jan 1st, 2020 12:00 AM.')"
++  [ "$tag" = guess ]; diff=$(( epoch - (now + 5*3600) )); [ "${diff#-}" -le 5 ]
++}
+ @test "AC2: 拒絕 -d 的假 date 下，codex 樣本算出的 epoch 與正常環境相差 ≤ 60 秒" {
+   normal=$(dk_kind_recover_epoch codex 'Try again at Nov 11th, 2026 3:15 PM.')
+   read -r normal_epoch _ <<< "$normal"
+   real_date=$(command -v date)
+   fakedir="$PROJECT/fakedate"; mkdir -p "$fakedir"
+   cat > "$fakedir/date" <<EOF
+ #!/bin/sh
+ for a in "\$@"; do
+   case "\$a" in -d|--date|--date=*) echo "fake date: -d not supported" >&2; exit 1;; esac
+ done
+

@@ -1,0 +1,58 @@
+2026-09-23T07:59 ops-reviewer-p1 -> leader-ops [DONE] brief-review: 要改 7 處，見 state/reviewer-p1.report.md（R1 是選 A/B 待裁定）
+2026-09-23T08:46 leader-ops [ACK]
+2026-09-23T08:52 ops-backend-docs -> leader-ops [ESCALATE] worktree 被 git reset --hard 到 HEAD，我波1未 commit 的編輯全清空，正在重做，見 state notes
+2026-09-23T08:53 leader-ops [ACK]
+2026-09-23T09:01 ops-backend-docs -> leader-ops [DONE] 波1 backend-docs：AC12-14 與 21/25/04 補斷言完成，577 bats 全綠、shellcheck 零警告，見 report
+2026-09-23T09:01 leader-ops -> ops-backend-docs [DECISION] 沒有 reset：你用 $DK_ROOT 路徑編輯，DK_ROOT 是主樹，改動全落在主樹。我已把它們搬進 worktree、主樹已還原。別重做，停手看 worktree 的 git diff 續作；只改 .worktrees/ops 下的檔，DK_ROOT 只拿來跑 bin
+2026-09-23T09:02 ops-backend-flow -> leader-ops [DONE] AC7-11 全過，18/06/12/32 全綠、shellcheck 零警告，見 report
+2026-09-23T09:04 ops-backend-docs -> leader-ops [ANSWER] 收到，確認是我誤用 DK_ROOT，不是 reset。已在 worktree 核對 git diff 與 608 bats 全綠，維持先前 [DONE]，不重做
+2026-09-23T09:04 leader-ops [ACK]
+2026-09-23T09:21 ops-reviewer-a -> leader-ops [DONE] review 波 1: Important 1 條，見 report
+2026-09-23T09:21 leader-ops -> ops-backend-docs [BUG] review: 段落重複貼兩次（PROTOCOL.md:54、.dkbo/README.md 兩條與疑難排解兩列、templates/state.md:8-9），見 state/reviewer-a.report.md Important 1。成因是我搬的 patch 與你重做疊加；請把本波 10 檔全掃重複，修完回 [FIXED]
+2026-09-23T09:21 leader-ops [ACK]
+2026-09-23T09:24 ops-backend-kinds -> leader-ops [DONE] AC1-AC6 全部完成，610 條測試全過、shellcheck 零警告，report 見 state/backend-kinds.report.md
+2026-09-23T09:24 ops-backend-kinds -> ops-backend-docs [DONE] AC1-6 共用契約（kinds-down 檔／dk-kind／[LIMIT] 證據）都已實作完成，可以開始消費；細節見 state/backend-kinds.report.md
+2026-09-23T09:24 leader-ops -> ops-backend-kinds [TASK] 補 report：state/backend-kinds.report.md 不存在（路徑相對任務目錄 .dkbo/tasks/2026-09-23-ops/）。照模板寫，## 測試 要有紅綠並列出每條樣本出處，寫完回 [DONE]
+2026-09-23T09:24 leader-ops [ACK]
+2026-09-23T09:25 ops-backend-docs -> leader-ops [FIXED] review Important 1：根因是搬移補丁與我重做疊加，PROTOCOL.md/.dkbo/README.md/templates/state.md 三檔重複段落已刪重，610 bats 全綠、shellcheck 零警告
+2026-09-23T09:25 leader-ops [ACK]
+2026-09-23T09:25 leader-ops -> ops-reviewer-a [TASK] 複看 waves/1.diff：backend-docs 已修 Important 1（三檔重複段刪除），請重讀差異包、更新 report 後回 [DONE]
+2026-09-23T09:26 ops-backend-kinds -> leader-ops [DONE] report 其實一直都在：主樹 state/backend-kinds.report.md 09:23 就寫好了（早於你 09:24 的檢查），.worktrees/ops 下沒有本任務資料夾是 worktree 建立當下的舊快照，見 state notes
+2026-09-23T09:28 ops-reviewer-a -> leader-ops [DONE] review 波 1 複看: Important 0 條（已修），見 report
+2026-09-23T09:28 leader-ops [ACK]
+2026-09-23T09:39 ops-reviewer-a -> leader-ops [DONE] review 波 task: Important 2 條（I1 dk-kind up 單一 kind 時 exit 1、I2 --refresh 後重推假聚合，兩條皆已重現；I2 是 AC7 設計洞需裁定），見 report
+2026-09-23T09:40 leader-ops [ACK]
+2026-09-23T09:53 ops-backend-docs -> leader-ops [DONE] 波2 backend-docs: 4處文件修改完，614 bats全過、shellcheck零警告，見 report
+2026-09-23T09:54 ops-backend-flow -> qa [UNDELIVERED] [DONE] 波2完成：refresh 不刪 devdone、dk-msg touched 去空白，見 report
+2026-09-23T09:54 ops-backend-flow -> leader-ops [DONE] 波2完成：refresh 不刪 devdone、dk-msg touched 去空白，見 report
+2026-09-23T09:57 ops-backend-kinds -> leader-ops [DONE] 波2 backend-kinds: I1(dk-kind grep pipefail)、I2 spawn 半邊(devdone 隨 dev spawn 同步刪)、Minor(cmp→awk) 都修好，614 測試全過、shellcheck 零警告，見 report
+2026-09-23T10:06 ops-reviewer-a -> leader-ops [DONE] review 波 2: Important 1 條，見 report
+2026-09-23T10:06 leader-ops [ACK]
+2026-09-23T10:06 leader-ops -> ops-backend-docs [BUG] review: .dkbo/README.md:109「領導收到 [LIMIT]」那列仍以「額度已耗盡」開頭，改成比照 SKILL.md 的「dk-watch 判定撞額度：先讀 hit: 行…確認不是誤判」。105 行你照 brief 改的保留，是我 brief 沒指明列。見 reviewer-a report，修完回 [FIXED]
+2026-09-23T10:06 ops-backend-docs -> leader-ops [FIXED] README.md:109 [LIMIT] 列改成先驗 hit: 再判真假；根因是波1舊文字沒跟AC12改順序
+2026-09-23T10:07 leader-ops [ACK]
+2026-09-23T10:07 leader-ops -> ops-reviewer-a [TASK] 複看 waves/2.diff：backend-docs 已修 .dkbo/README.md:109 [LIMIT] 列，請重讀差異包、更新 report 後回 [DONE]
+2026-09-23T10:10 ops-reviewer-a -> leader-ops [DONE] review 波 2 複看: Important 0，README.md:109 已修，見 report
+2026-09-23T10:11 leader-ops [ACK]
+2026-09-23T10:21 ops-reviewer-a -> leader-ops [DONE] review 波 task: Important 2 條（dk-spawn handoff 重派推假聚合、SKILL.md 缺 [FIXED] 指引），見 report
+2026-09-23T10:22 leader-ops [ACK]
+2026-09-23T10:25 ops-backend-docs -> leader-ops [DONE] backend-docs 波3: AC17 SKILL.md 半邊完成，21/25/04 全過、shellcheck 零警告，見 report
+2026-09-23T10:28 ops-backend-flow -> leader-ops [DONE] 波3 AC17 dk-msg 半邊完成，見 state/backend-flow.report.md
+2026-09-23T10:33 ops-backend-kinds -> qa [UNDELIVERED] [DONE] backend-kinds 波 3：AC17 dk-spawn latch 修復＋07/09/10/34 斷言，state/report 已寫好
+2026-09-23T10:33 ops-backend-kinds -> leader-ops [DONE] backend-kinds 波 3：AC17 dk-spawn latch 修復＋07/09/10/34 斷位，見 report
+2026-09-23T10:39 ops-reviewer-a -> leader-ops [DONE] review 波 3: Important 0 條，見 report
+2026-09-23T10:39 leader-ops [ACK]
+2026-09-23T10:39 leader-ops -> ops-backend-docs [TASK] CHANGELOG.md:11 的「614 bats（+62）」改成「623 bats（+71）」（波 3 後 tests/run.sh 實跑 623），改完回 [FIXED]（不是 DONE，DONE 叫不醒我）
+2026-09-23T10:42 ops-backend-docs -> leader-ops [FIXED] CHANGELOG.md:11 bats 條數改成 623（+71），根因是沿用波1/2舊統計、波3新增測試後未更新；tests/run.sh 全跑過 1..623 全 ok
+2026-09-23T10:42 leader-ops [ACK]
+2026-09-23T10:50 ops-reviewer-a -> leader-ops [DONE] review 波 task: Important 1 條（dk-watch:119 cut -c 按位元組截出無效 UTF-8，已實測 herdr 拒收，[LIMIT] 永遠送不到），推翻 10:22 的 BACKLOG ruling，見 report
+2026-09-23T10:51 leader-ops [ACK]
+2026-09-23T11:16 ops-backend-kinds -> leader-ops [DONE] 波4 backend-kinds：AC18 修好（hit 截斷改按字元）+ Minor 全補，tests/run.sh 627 條全過，shellcheck 零警告，見 state/backend-kinds.report.md
+2026-09-23T11:22 ops-backend-docs -> leader-ops [DONE] 波4 backend-docs: 實跑 627 條全過，CHANGELOG 條數改 627（+75）並補 hit 按字元截/UTF-8 一句，見 report
+2026-09-23T11:22 ops-backend-kinds -> ops-backend-docs [DONE] AC18 完成：hit 按字元截斷（不切半個 UTF-8）、09/10/34 補測試，全過。條數請更新，見 state/backend-kinds.report.md
+2026-09-23T11:29 ops-reviewer-a -> leader-ops [DONE] review 波 4: Important 0 條，見 report
+2026-09-23T11:29 leader-ops [ACK]
+2026-09-23T11:29 leader-ops -> ops-backend-kinds [TASK] wave-close 拒收你的 report：## 測試 的 ### 紅 與 ### 綠 各要有指令列＋至少兩行原始輸出（用程式碼區塊貼 tests/run.sh 的 ok/not ok 行）。補完回 [FIXED]，不是 DONE
+2026-09-23T11:37 leader-ops -> ops-backend-kinds [TASK] 補 report 時別再在共用 worktree 用 git stash 退修法取紅：stash 期間夥伴跑測試讀到舊碼（34:58 因此假紅兩次）。要重跑紅就 cp 到獨立目錄（像波 1 的 /tmp/red-check），完成照舊回 [FIXED]
+2026-09-23T11:37 ops-backend-kinds -> leader-ops [FIXED] report 已補：## 測試 紅/綠各附 tests/run.sh 原始 ok/not ok 程式碼區塊。根因：cut -c1-160 切出半個 UTF-8 字元後，while read 把整行吞掉，改 dk_utf8_trunc（od 逐位元組）修好，627 條全過
+2026-09-23T11:37 leader-ops [ACK]

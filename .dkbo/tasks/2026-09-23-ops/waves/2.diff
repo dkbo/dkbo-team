@@ -1,0 +1,384 @@
+# 營運回饋修補（panova headermerge） — wave 2 since 78c2a58 — 2026-09-23T10:07
+# files changed: 12 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/README.md              |  4 ++--
+ .dkbo/bin/dk-kind            |  2 +-
+ .dkbo/bin/dk-msg             |  4 +++-
+ .dkbo/bin/dk-spawn           |  3 +++
+ .dkbo/bin/dk-wave-open       |  5 +++--
+ .dkbo/lib/kinds.sh           |  5 +++--
+ .dkbo/skills/run/SKILL.md    |  4 ++--
+ CHANGELOG.md                 |  6 +++---
+ tests/unit/06_msg.bats       |  7 +++++++
+ tests/unit/07_spawn.bats     | 16 ++++++++++++++++
+ tests/unit/18_wave_open.bats |  4 ++--
+ tests/unit/34_kind_down.bats |  7 +++++++
+ 12 files changed, 52 insertions(+), 15 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/README.md b/.dkbo/README.md
+index e950aea..bc4a7fb 100644
+--- a/.dkbo/README.md
++++ b/.dkbo/README.md
+@@ -95,21 +95,21 @@ rm -rf "$tmp" && .dkbo/install.sh && git add -A && git commit -m "chore: update
+ 
+ ## 疑難排解
+ | 症狀 | 原因 / 處理 |
+ |---|---|
+ | `dk: not running inside herdr` | 不是從 herdr 的 pane 執行。`herdr` 開啟終端後再試。 |
+ | 員工 pane 說找不到 `.dkbo/` | 安裝後沒 commit，worktree 看不到。commit 後重新 `dk-spawn`。 |
+ | 員工卡住不動 | 卡在審批對話框。dk-watch 會通知（任務員工與雜務員工都會）；切到該 pane 按同意，或檢查 `kinds/<kind>.sh` 的免審批旗標。 |
+ | `herdr 0.8.x is older than the 0.9.0 dkbo needs` | dkbo 對 herdr 的 JSON 形狀與 `--ratio`／`--amount` 語義是實測 0.9.0 得到的，舊版會讓版面歪掉、watcher 靜靜失效，所以直接拒跑。升級 herdr。 |
+ | `herdr X is newer than the 0.9.x series dkbo verified` | 只是提醒，照跑。跑一次 `tests/integration/herdr-real.sh`（零 token）確認形狀沒變，沒問題就把 `.dkbo/lib/common.sh` 的 `DK_HERDR_VERIFIED` 往上調。 |
+ | 想確認守望還在 | 跑 `dk-resume` 看 `watch:` 那行，或 `dk-watch --ensure`（幂等，死了就重啟）。雜務那一側是 `dk-watch --chores --ensure`，pid 記在 `.dkbo/.sessions/chores.watch.pid`。 |
+-| 新任務一派 reviewer 就跳過某個 kind | 專案層熔斷還沒恢復。`dk-kind` 看清單與恢復時間，`dk-kind up <k>` 解除；不要叫員工自己跑，命中行會印在他畫面上。 |
++| 新任務一派 reviewer 就跳過某個 kind | `dk-watch` 判定撞額度、專案層熔斷還沒恢復。`dk-kind` 看清單與恢復時間，`dk-kind up <k>` 解除；不要叫員工自己跑，命中行會印在他畫面上。 |
+ | codex / agy 不照協定回訊 | 確認 `AGENTS.md` 最後一行是入口行，且該 worktree 分支含這個 commit。 |
+ | 領導自己開始寫程式 | 提醒它讀 `.dkbo/LEADER.md` 與當前階段那篇（`skills/{brain,plan,run}/SKILL.md`）；必要時 `/clear` 後重新叫該 skill。 |
+ | 領導收到 `[TIMEOUT]` | reviewer 超過 `DK_REVIEW_TIMEOUT_MIN` 沒 DONE，多半是該 CLI 用量到頂（訊息含 rate limit / quota / 429 / usage limit 會標 `(quota?)`）。該 kind 本任務內熔斷；領導 `dk-wave-close --agent <reviewer>` 後照 `skills/run/SKILL.md` 補位。 |
+-| 領導收到 `[LIMIT]` | 額度已耗盡，`.blocked/<員工>.limit` 追加了 `hit:` 命中行當證據，同一個 kind 也會寫進跨任務的專案層熔斷檔，讓下一個任務自動跳過它；先讀 `hit:` 行或 `herdr agent read` 確認不是誤判，誤判用 `dk-kind up <k>` 解除。 |
++| 領導收到 `[LIMIT]` | `dk-watch` 判定撞額度：先讀 `.blocked/<員工>.limit` 的 `hit:` 行（或 `herdr agent read`）確認不是誤判；真的撞到會同時寫進跨任務的專案層熔斷檔，讓下一個任務自動跳過該 kind，誤判用 `dk-kind up <k>` 解除。 |
+ | `dk-wave-close` 拒絕 | 印出的每一條都是缺的東西：裁定行、dev 的 `## 測試`、測試失敗、`unowned change`（本波改了沒人擁有的檔）。補齊再跑；真要跳過用 `--force` 並在 process 記理由。 |
+ | 跑了 `git clean -xdf` 之後雜務關不掉 | `.dkbo/.sessions/chores/<agent>` 是正在跑的雜務的身分證，因為是 gitignored 所以 `git clean -xdf` 會把它連同其他忽略檔一起清掉；雜務本身（pane、worktree、branch）沒事，但 `dk-chore-close` 從此找不到它。復原：`dk-chore-close <agent> --abandon`（清掉 pane、worktree、branch，不 merge）。 |
+ | `dk-task-close` exit 3 | 多 repo 的預檢有 repo 衝突：訊息列出全部衝突的 repo，**一個 repo 都還沒合併**。去衝突的 repo 手動解，或開一個 it 修復波，解完重跑 `dk-task-close`。 |
+ | `dk-task-close` exit 4 | 預檢都過了，真的合併時中途失敗：訊息印 merged／failed／not attempted 三份清單，已合併的 repo **不會**自動回捲（`merge --abort` 只救得了正在合併的那一個）。先看 failed 的那個 repo 出了什麼事，修好後對還沒合的 repo 補跑合併，不要整個重跑。 |
+ | `dk-task-close` exit 5 | 主樹（不是 worktree）有會被覆蓋的本地變更：先 commit 或 stash 主樹自己的改動，跟任何 repo 的合併衝突無關。 |
+ | 任務結束了但側邊欄還留著那個 tab | 這是設計行為，不是 bug：`dk-task-close` 不會呼叫 `herdr tab close`，因為執行領導自己就住在那個 tab 的根 pane 上，結案指令的最後一行會印 `herdr tab close <DK_TASK_TAB 的值>` 提醒你——看完 report 自己手動關即可。 |
+diff --git a/.dkbo/bin/dk-kind b/.dkbo/bin/dk-kind
+index 3541350..ba355b9 100755
+--- a/.dkbo/bin/dk-kind
++++ b/.dkbo/bin/dk-kind
+@@ -21,20 +21,20 @@ case "$cmd" in
+   up)
+     [ $# -eq 2 ] || usage
+     k="$2"
+     [ -f "$DK_ROOT/kinds/$k.sh" ] || { echo "dk-kind: unknown kind '$k' (no $DK_ROOT/kinds/$k.sh)" >&2; exit 2; }
+     removed=0
+     dk_kinds_down_remove "$k" && removed=1
+     # 綁著任務時才有 DK_KIND_DOWN 可拿；沒綁任務（領導在主樹、任務之間）就只動 kinds-down。
+     if d=$(dk_task_dir 2>/dev/null); then
+       DK_TASK_DIR="$d"; export DK_TASK_DIR; dk_task_env
+       if [[ " ${DK_KIND_DOWN:-} " == *" $k "* ]]; then
+-        new=$(printf '%s\n' "$DK_KIND_DOWN" | tr ' ' '\n' | grep -vx "$k" | tr '\n' ' ' | sed 's/ *$//')
++        new=$(printf '%s\n' "$DK_KIND_DOWN" | tr ' ' '\n' | { grep -vx "$k" || true; } | tr '\n' ' ' | sed 's/ *$//')
+         dk_env_set DK_KIND_DOWN "$new"
+         removed=1
+       fi
+     fi
+     if [ "$removed" = 1 ]; then dk_process "kind $k up" 2>/dev/null || true; echo "kind $k up"
+     else echo "kind $k 沒有熔斷"; fi
+     ;;
+   *) usage;;
+ esac
+diff --git a/.dkbo/bin/dk-msg b/.dkbo/bin/dk-msg
+index cc7d4ab..65d80df 100755
+--- a/.dkbo/bin/dk-msg
++++ b/.dkbo/bin/dk-msg
+@@ -7,21 +7,23 @@ dk_require_herdr
+ # AC10：dev 的 [DONE] 必須 status: done（既有檢查）之外，再驗 state 的形狀。只驗 dev，
+ # 不驗 reviewer、qa 與雜務。回一行錯誤描述（不含 "dk-msg: state 格式錯：" 前綴）；合法就不印任何東西。
+ dk_state_touched_shape_error() { # STATE_FILE → 共用契約「state 的 touched 文法」
+   local f="$1" line n=0 in_t=0 rest path
+   while IFS= read -r line || [ -n "$line" ]; do
+     n=$((n+1))
+     if [[ "$line" =~ ^[A-Za-z_]+: ]]; then
+       in_t=0
+       case "$line" in
+         touched:*)
+-          rest="${line#touched:}"; rest="${rest# }"
++          rest="${line#touched:}"
++          # 去掉冒號後全部空白（不只一格），空字串與 [] 都合法。
++          while [ "${rest# }" != "$rest" ]; do rest="${rest# }"; done
+           if [ -n "$rest" ] && [ "$rest" != "[]" ]; then
+             echo "第 $n 行：touched: 後面只能是空白或 []，多筆改寫成下面每行 '  - path'"; return
+           fi
+           in_t=1
+           ;;
+       esac
+       continue
+     fi
+     [ "$in_t" = 1 ] || continue
+     [ -n "$line" ] || continue
+diff --git a/.dkbo/bin/dk-spawn b/.dkbo/bin/dk-spawn
+index 56a1775..1dfabdb 100755
+--- a/.dkbo/bin/dk-spawn
++++ b/.dkbo/bin/dk-spawn
+@@ -104,20 +104,23 @@ else
+ fi
+ [ -n "$pane" ] || dk_die "pane split returned no pane_id"
+ # shellcheck disable=SC2086
+ if ! herdr agent start "$agent" --kind "$kind" --pane "$pane" -- $args >/dev/null; then
+   # pane 刻意保留：agent start 失敗多半是 CLI 在啟動時跳了東西（資料夾信任詢問、升級提示、
+   # 登入過期），那個畫面就在 pane 裡。關掉它等於把唯一的證據銷毀，領導只會看到「失敗」兩個字。
+   dk_process "spawn $agent failed: pane $pane kept for diagnosis"
+   dk_die "agent start failed for $agent; pane $pane 保留著 —— herdr pane read $pane --source recent-unwrapped 看它卡在什麼，處理後 herdr pane close $pane"
+ fi
+ echo "$agent $pane $(date +%s) $group $tab_no $slot" >> "$dir/.panes"
++# 整枝評議 I2：波開著時把一位 group=dev 成員寫進 .panes 的同一步刪掉 wave-N.devdone，
++# 新 dev 交 [DONE] 時 dk-watch 才會再推聚合；devdone 的語意屬 dk-watch，這裡只負責刪。
++if [ -n "${DK_WAVE:-}" ] && [ "$group" = dev ]; then rm -f "$dir/.blocked/wave-$DK_WAVE.devdone"; fi
+ 
+ # 這一刻 state 的內容快照，給 dk-watch 的 dev 聚合分辨「這一波的交付」與「上一波留在檔裡的
+ # status: done」。state 檔跨波共用而聚合標記逐波，少了它，開波到員工動筆之間的空窗會被判成
+ # 全員完成（BACKLOG 2026-09-19 實測兩次）。用 cksum 不用 mtime：`date -r` 在 GNU 與 BSD
+ # 語義不同。員工的 state 由員工自己寫，dkbo 不碰它 —— 快照落在任務目錄，不是 state 裡。
+ mkdir -p "$dir/.blocked"
+ if [ -f "$state" ]; then cksum < "$state"; else printf ''; fi > "$dir/.blocked/$agent.spawn"
+ 
+ # 換腦袋這一步一定有 ruling，是結構保證不是事後驗:理由由呼叫端給，格式由腳本補完。
+ # 落在 pane 與 agent 真的起來之後：早落盤的話，這裡上面任何一步 dk_die 都會留下
+diff --git a/.dkbo/bin/dk-wave-open b/.dkbo/bin/dk-wave-open
+index 008e796..41a417d 100755
+--- a/.dkbo/bin/dk-wave-open
++++ b/.dkbo/bin/dk-wave-open
+@@ -50,22 +50,23 @@ for m in $members; do m="${m%%(*}"
+   own=$(dk_brief_owners "$brief" | awk -F'|' -v m="$m" '$1==m {printf "| %s | %s | %s |\n", $1,$2,$3}')
+   [ -n "$own" ] || echo "dk-wave-open: $m has no row in 檔案所有權 (run dk-brief-check)" >&2
+   dk_render "$DK_ROOT/templates/brief-member.md" "DISPLAY=$DK_DISPLAY" "MEMBER=$m" "WAVE=$n" "BRIEF=$brief" "GOAL=$goal" \
+     "CONSTRAINTS=$constraints" \
+     "WAVE_ROWS=$rows" "OWNER_ROWS=$own" "CONTRACT=$contract" "ACCEPTANCE=$acc" "PEERS=$peers" "REPOS=$repos_list" > "$dir/briefs/$m.md"
+ done
+ if [ "$refresh" = 1 ]; then
+   # 不改 DK_WAVE、不改 base、不動 .panes、不 spawn —— 只是切片重產與逾時重新起算。
+   dk_env_set DK_WAVE_STARTED "$(date +%s)"
+   # 整波逾時從這一刻重新起算：上一輪留下的逾時標記作廢。
+-  # 波中新加的 dev 交 [DONE] 時 dk-watch 才會再推一次聚合：不刪的話 dev 的 [DONE] 只落盤，領導永遠收不到。
+-  rm -f "$dir/.blocked/wave-$n.timeout" "$dir/.blocked/wave-$n.devdone"
++  # devdone 標記不在這裡刪：refresh 當下刪會在新成員 spawn 前的空窗重推假聚合（整枝評議 I2）。
++  # 改由 dk-spawn 在波開著時、把一位 group=dev 成員寫進 .panes 的同一步刪掉它。
++  rm -f "$dir/.blocked/wave-$n.timeout"
+   dk_process "wave-refresh $n members $peers"
+   echo "wave $n refreshed; slices in $dir/briefs/"
+   exit 0
+ fi
+ dk_env_set DK_WAVE "$n"; dk_env_set DK_WAVE_STARTED "$(date +%s)"
+ # 逐 repo 的 base 先落盤，總結那一行最後 —— dk_ts_pick 取的是最後一筆相符的行，
+ # 本波耗時（dk-wave-close 的 dk_ts_pick … wave-open N）要的是總結行的時間戳。
+ while read -r rname _rroot rwt _rbase; do
+   [ -n "$rname" ] && [ -d "$rwt" ] || continue
+   dk_process "wave-open $n repo $rname base $(git -C "$rwt" rev-parse --short=7 HEAD)"
+diff --git a/.dkbo/lib/kinds.sh b/.dkbo/lib/kinds.sh
+index 9006a7f..ec0745a 100644
+--- a/.dkbo/lib/kinds.sh
++++ b/.dkbo/lib/kinds.sh
+@@ -177,24 +177,25 @@ dk_kinds_down_set() { # KIND EPOCH exact|guess TASKNAME AGENT HIT — flock 序
+           printf '%s %s %s %s %s %s %s\n' "$k" "$e2" "$ex2" "$rt" "$tn" "$ag2" "$rest" >> "$tmp"
+         fi
+       done < "$f"
+     fi
+     [ "$wrote" = 1 ] || printf '%s %s %s %s %s %s %s\n' "$kind" "$epoch" "$exact" "$recorded" "$taskname" "$agent" "$hit" >> "$tmp"
+     mv "$tmp" "$f"
+   ) 9>"$lock"
+ }
+ 
+ dk_kinds_down_remove() { # KIND → 0 表示真的拿掉了至少一列；沒有檔或沒命中回 1
+-  local kind="$1" f lock rc
++  local kind="$1" f lock rc dropped
+   f=$(dk_kinds_down_file); lock="$DK_ROOT/.sessions/kinds-down.lock"
+   [ -f "$f" ] || return 1
+   mkdir -p "$(dirname "$lock")"
+   (
+     flock -w 5 9 || echo "dk_kinds_down_remove: lock timeout on $lock; writing anyway" >&2
+     local tmp; tmp="$f.tmp.$$"
++    dropped=$(awk -v k="$kind" '$1==k{c++} END{print c+0}' "$f")
+     awk -v k="$kind" '$1!=k' "$f" > "$tmp"
+-    if cmp -s "$tmp" "$f"; then rm -f "$tmp"; exit 1; fi
++    if [ "$dropped" -eq 0 ]; then rm -f "$tmp"; exit 1; fi
+     mv "$tmp" "$f"; exit 0
+   ) 9>"$lock"
+   rc=$?
+   return "$rc"
+ }
+diff --git a/.dkbo/skills/run/SKILL.md b/.dkbo/skills/run/SKILL.md
+index 9414f1e..2e8bed1 100644
+--- a/.dkbo/skills/run/SKILL.md
++++ b/.dkbo/skills/run/SKILL.md
+@@ -22,29 +22,29 @@ description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指
+ 6. 純文件波：審查欄寫 `skip: <理由>`，領導 `dk-process "review N skipped: <理由>"`，wave-close 就放行。
+ 7. 收到 `[ESCALATE]`：能依 brief 判定就 `dk-msg <員工> "[DECISION] ..."` 並記 `ruling:`；不能就問人（關卡②），得到答案後回 DECISION 並在 `decisions.md` 加一行。收到 `[BLOCKED]`：告知人去按審批。
+ 8. 依結果增刪下一波，記 process。
+ 
+ ## 結案
+ 1. 關卡③前先整分支評議：`dk-review-pack --task`，再 `dk-review --task --tier L`（L 檔 reviewer 讀 `waves/task.diff`）。Important 修掉或記 ruling，才寫 `report.md`（照範本；遺留段列出未經審查的波）。關卡③：給人拍板。
+ 2. `dk-task-close`。它會合併回主分支，然後**把這個任務的記憶 commit 進主樹**（任務目錄、`tasks/INDEX.md`、`decisions.md`，只有這幾條路徑，你工作樹上的其他改動不會被掃進去）。合併衝突時它會停：不要自己解，問人或開 `it` 的修復波。放棄用 `dk-task-close --abandon "<原因>"`。
+ 
+ ## 故障
+ - 任何員工的 `[LIMIT]`（dk-watch 推來）：先讀 `.blocked/<agent>.limit` 的 `hit:` 行（或 `herdr agent read`）判斷真假。誤判就 `dk-kind up <k>` 解熔斷並記 ruling；不要叫員工自己跑 `dk-kind`，命中行會印在他畫面上，等於自己把自己熔斷。真的撞額度才照舊：它跟 `[BLOCKED]` 不同 —— 按審批救不回來，要換人或等額度；專案層熔斷會讓下一個任務自動跳過該 kind。reviewer 就照下一條處理；dev／qa 則 `dk-wave-close --agent <員工>` 關掉後用未熔斷的 kind 重派。
+-- reviewer `[TIMEOUT]`（dk-watch 推來；該 kind 已寫進 `.task.env` 的 `DK_KIND_DOWN`）：`dk-wave-close --agent <reviewer>` 關它。達 `DK_REVIEW_MIN` 照常裁定；不夠就 `dk-review --kinds "<未熔斷者>"` 補一位；全部熔斷 → `dk-process "review N skipped: all kinds down"`，report.md 遺留段標「本波未經審查」。同任務內解除熔斷：編輯 `.task.env` 的 `DK_KIND_DOWN` 並 `dk-process "kind <k> up"`；`dk-task-close` 會清掉。**`.blocked/<員工>.limit` 標記檔不要刪** —— 它就是「這個畫面已經判過了」的憑據，刪掉的話 dk-watch 下一輪讀到同一個畫面會再熔斷同一個 kind 一次。
++- reviewer `[TIMEOUT]`（dk-watch 推來；該 kind 已寫進 `.task.env` 的 `DK_KIND_DOWN`）：`dk-wave-close --agent <reviewer>` 關它。達 `DK_REVIEW_MIN` 照常裁定；不夠就 `dk-review --kinds "<未熔斷者>"` 補一位；全部熔斷 → `dk-process "review N skipped: all kinds down"`，report.md 遺留段標「本波未經審查」。同任務內解除熔斷：`dk-kind up <k>`（同時清掉綁著任務的 `DK_KIND_DOWN`，並記 `kind <k> up`）；`dk-task-close` 會清掉。**`.blocked/<員工>.limit` 標記檔不要刪** —— 它就是「這個畫面已經判過了」的憑據，刪掉的話 dk-watch 下一輪讀到同一個畫面會再熔斷同一個 kind 一次。
+ - `dk-task-close` 或 `dk-chore-close` 回 `uncommitted changes`：worktree 裡有沒 commit 的變更，它不合併也不刪任何東西。任務：在 worktree 內 `git add -A && git commit` 後重跑；雜務：`dk-msg <員工> "[TASK] commit 你的變更"` 後重跑。真的要丟掉才用 `--abandon`。
+ - wave-close 測試失敗：它不關 pane；`dk-msg <擁有者> "[BUG] wave-close tests: <最後幾行>"`；連續兩次失敗升關卡②。
+ - wave-close 回 `unowned change: <路徑>`：這一波真的改了本波沒人擁有的檔（含在 worktree 裡動 `.dkbo/` 規則檔）。先判斷該不該改：該改就在 brief 的檔案所有權補給該成員並記 ruling，再重跑；不該改就 `dk-msg <該波成員> "[BUG] 還原 <路徑>"`。真要放行才 `--force`，並在 report.md 遺留段記一行。
+ - wave-close 回 `unreported change`（只警告、不阻擋）：某成員改了自己擁有的檔卻沒寫進 state 的 `touched`。`dk-msg <成員> "[TASK] 補 state touched"`。
+ - wave-close 回 `commit failed`：pane 已關但 commit 沒成（多半是專案的 pre-commit hook）。在 worktree 內自己 `git add -A && git commit` 補上，不要跳過 —— `dk-task-close` 會因未 commit 而拒絕結案。
+ - dev report 缺 `## 測試`：wave-close 拒絕；`dk-msg <dev> "[TASK] 補 report 測試段"`。
+ - 員工 `[ESCALATE] context` 或 pane 掛掉：`dk-spawn` 同角色同別名 `--resume`，提示會叫他從 state 續作；它會先關掉同名舊 pane。
+ - 員工／reviewer 的 `agent start` 失敗（`dk-spawn` 回「pane … 保留著」）：**那個 pane 沒有被關掉，證據還在**。`herdr pane read <pane> --source recent-unwrapped` 看它卡在什麼 —— 多半是 CLI 在啟動時跳了資料夾信任詢問、升級提示或登入過期。處理完（按掉提示或先在別處升級該 CLI）再重跑 `dk-spawn`，然後 `herdr pane close <pane>` 收掉那個殘留 pane。
+ - reviewer 第一次派工失敗（`review N spawned` 那行標 `<agent>(<kind>,prompt-failed)`）：`herdr agent read <agent>` 看狀態，再 `herdr agent prompt <agent> "..."` 重新提示，不算一次 DONE。
+ - 收到 `[TIMEOUT] wave N`（dk-watch 推來，整波超過 `DK_WAVE_TIMEOUT_MIN` 分鐘還沒收尾）：看這一波卡在誰身上 —— `dk-resume` 的本波段與每位成員的 state。該補訊息的補、該升報的升報；真的需要更久就調 `settings.env` 或記一行 process 說明原因。
+ - `process.md` 出現 `herdr-degraded: <呼叫>`：herdr 那一側的呼叫失敗了，**守望與版面這一輪是降級的**（可能偵測不到 blocked／timeout、版面不再均分）。確認 herdr 還活著且版本沒變，再 `dk-watch --ensure` 重起守望。
+ - 同一個 bug 修兩次都沒好：不要再派第三個人。`dk-msg <qa> "[TASK] 暫停重驗"`，然後把兩位的 report 與 reviewer 的原始意見一起交給人（關卡②）。第三次還是同一個洞，多半表示 brief 的驗收標準本身有歧義，那是人要裁定的事。
+ 
+ - 送 `[TASK]`／`[DECISION]` 前，先讀 messages.log 裡未 ack 的訊息（`dk-msg` 會自動提示未 ack 則數）。
+-- 有視覺變更的任務：計畫中最後一波結波後、`dk-review-pack --task` 之前，先請人看畫面（dev server 或截圖），確認沒有追加才跑整枝評議；波中改 brief 則改 `brief.md` → `dk-wave-open <N> --refresh` → 再 `dk-msg <員工> "[TASK] 重讀切片"`。
++- 有視覺變更的任務：計畫中最後一波結波後、`dk-review-pack --task` 之前，先請人看畫面（dev server 或截圖），確認沒有追加才跑整枝評議；波中改 brief 則改 `brief.md` → `dk-wave-open <N> --refresh` → 再 `dk-msg <員工> "[TASK] 重讀切片"`；新加的成員接著 `dk-spawn`。
+ 
+ ## 不屬於本任務的請求
+ 人在任務進行中丟來獨立的請求（翻譯、畫圖、跟本任務無關的小修）：告訴他那是大腦的事，叫 `/dkbo-brain`（`.dkbo/skills/brain/SKILL.md`）。不要自己用 `dk-chore` 插隊。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 78b0257..e776079 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,21 +1,21 @@
+ # Changelog
+ 
+ ## 0.12.0 — 2026-09-23
+ 
+ - feat(kinds)!: 跨任務的專案層熔斷檔 `.dkbo/.sessions/kinds-down`——`dk-watch` 判定撞額度時除了照舊寫本任務 `DK_KIND_DOWN`，另在這個檔追加或更新一列（同 kind 取較晚的恢復時間，不重複），寫檔走 flock；reviewer `[TIMEOUT]` 造成的熔斷不寫這個檔，因為逾時不代表額度用完。派人前 `dk_review_kinds` 把未恢復的 kind 視同已熔斷：`--kind` 明寫且命中就拒絕（`dk-spawn` exit 1），角色檔預設命中則照派但印警告，避免一次誤判把下一個任務每個角色都擋死。新增 `dk-kind [status]` 看清單、`dk-kind up <k>` 解除（同時清 kinds-down 與綁著任務的 `DK_KIND_DOWN`）；`dk-resume` 的 `kinds down:` 行附印專案層未恢復的 kind。
+-- feat(kinds): 恢復時間解析全部走可攜純算術，不依賴 `date -d`；agy 認「Resets in <N>h<M>m[<S>s]」標 `exact`，codex 認「try again at <月份縮寫> <日><序數>, <年> <時>:<分> <AM|PM>」換算後標 `exact`，兩者都解析不到才用「現在 + 5 小時」標 `guess`。
++- feat(kinds): 恢復時間解析全部走可攜純算術，不依賴 `date -d`；agy 認「Resets in <N>h<M>m[<S>s]」與沒有小時的「Resets in <M>m[<S>s]」標 `exact`，codex 認「try again at <月份縮寫> <日><序數>, <年> <時>:<分> <AM|PM>」換算後標 `exact`，兩者都解析不到才用「現在 + 5 小時」標 `guess`。
+ - fix(codex): `kinds/codex.sh` 的 `KIND_QUOTA_RE` 移除第 3 個分支——它跟 `kinds/claude.sh` 額度式子的第 2 個分支同字串，同時命中「快到額度、切模型」選單的標題與說明文字，把暫時性限流誤判成撞額度並熔斷；第 1、2、4 個分支保留，claude 與 agy 的額度式子不動。此後 codex 只印那個片語不再熔斷——這是想要的，不是回歸；0.11.2「已知仍未處理」的這一項本版已處理。
+ - feat(watch): `[LIMIT]` 留畫面證據——`handle_limit` 在 `.blocked/<agent>.limit` 追加最多 5 行 `hit: <命中的畫面行>`，送給領導的 `[LIMIT]` 訊息尾端附第一條命中行，process.md 的 `limit …` 行不附（避免領導讀 process 時畫面冒出額度字樣）。
+-- feat(flow): `dk-wave-open <N> --refresh` 讓波中改 brief 可重產第 N 波所有成員的切片、重設整波逾時起算點，不改 base、不重派；`dk-msg` 在切片比 brief 舊、或領導有未 ack 的訊息時各印一行提示但照送；dev 送 `[DONE]` 前驗 state 的 `status`／`touched`／`report` 三個頂格鍵與 `touched` 文法，不過拒絕並指出哪裡錯；`dk-task-close` 結案後把時間表「任務」列的結束時間與 report.md 的 `結果：` 行改寫成最終值，不再帶「（進行中）」。
++- feat(flow): `dk-wave-open <N> --refresh` 讓波中改 brief 可重產第 N 波所有成員的切片、重設整波逾時起算點，不改 base、不重派、不刪 `.blocked/wave-N.devdone`（改由 `dk-spawn` 在波開著時加入 dev 成員的同一步刪，避免新成員 spawn 前的空窗重推假聚合）；`dk-msg` 在切片比 brief 舊、或領導有未 ack 的訊息時各印一行提示但照送；dev 送 `[DONE]` 前驗 state 的 `status`／`touched`／`report` 三個頂格鍵與 `touched` 文法，不過拒絕並指出哪裡錯；`dk-task-close` 結案後把時間表「任務」列的結束時間與 report.md 的 `結果：` 行改寫成最終值，不再帶「（進行中）」。
+ - docs: `skills/run/SKILL.md` 的 `[LIMIT]` 故障段改寫成先驗 `hit:` 再判真假、補送 TASK/DECISION 前讀未 ack、視覺變更任務先給人看畫面、波中改 brief 走 `--refresh` 的流程；三份 README 補 `dk-kind`／`--refresh`；`.dkbo/README.md` 疑難排解補專案層熔斷；`PROTOCOL.md`／`templates/state.md` 寫明 `touched` 的清單文法。
+-- 測試：21/25/04 補斷言；shellcheck 零警告。
++- 測試：614 bats（+62）；21/25/04 補斷言；shellcheck 零警告。
+ - 升級：`.dkbo/.sessions/kinds-down` 與其鎖檔 `kinds-down.lock` 是新增的執行期檔（已被 `.gitignore` 排除，不進版控）；新增 bin `dk-kind`；沒有新 `settings.env` 鍵、沒有新 skill、`install.sh` 沒有新 symlink，`.task.env` 沒有新鍵。
+ 
+ ## 0.11.2 — 2026-09-23
+ 
+ - fix(codex): codex 的「Approaching rate limits / Switch model」選單會停住等人按 Enter，但 `kinds/codex.sh` 的 `KIND_BLOCK_RE` 沒有這個選單的字樣，`dk-watch` 認不出這種卡住（gamemore 實跑樣本 24、64 都漏掉）。式子補上 `Press enter to`——收前綴不收整句：窄 pane 會截掉最後一行的尾巴，實測原文是 `Press enter to confir` 與 `Press enter to con`，整句 `Press enter to confirm` 兩份都認不得。已知仍未處理：寬 pane 上這個選單的標題 `Approaching rate limits` 會先命中額度式子的裸 `rate limit`（`dk-watch` 額度優先），被判成撞額度並熔斷 codex，但這個畫面是「快到了」不是「已耗盡」；實測樣本 2.2 上方另有真的額度用完訊息，所以結果剛好是對的，留待確認 codex 真的耗盡時印什麼再收窄。
+ - 測試：552 bats（+2，`03_kinds.bats`，用實測原文）；shellcheck 零警告。
+ - 升級：純修補，沒有新鍵、新依賴、新 skill。
+ 
+ ## 0.11.1 — 2026-09-23
+ 
+diff --git a/tests/unit/06_msg.bats b/tests/unit/06_msg.bats
+index 3f7fd77..a68ed64 100644
+--- a/tests/unit/06_msg.bats
++++ b/tests/unit/06_msg.bats
+@@ -340,16 +340,23 @@ state_ok() { # DIR — 一份合法的 dev state
+   [ "$status" -eq 2 ]
+   [[ "$output" == *"state 格式錯"* ]]
+ }
+ @test "AC10: touched 零項（裸 touched: 與 touched: [] 皆合法）與 touched 有多筆都放行" {
+   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+   state_ok "$d"
+   DK_AGENT=login-backend run dk-msg leader "[DONE] 都合法"
+   [ "$status" -eq 0 ]
+   grep -q 'DONE' "$d/messages.log"
+ }
++@test "AC10: touched:  [] （冒號後多個空白）也合法" {
++  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
++  printf 'status: done\ntouched:  []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
++  printf 'x' > "$d/state/backend.report.md"
++  DK_AGENT=login-backend run dk-msg leader "[DONE] 都合法"
++  [ "$status" -eq 0 ]
++}
+ @test "AC10: 只驗 dev，不驗 qa 與 reviewer" {
+   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+   printf 'status: done\n' > "$d/state/qa.md"
+   DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"
+   [ "$status" -eq 0 ]
+ }
+diff --git a/tests/unit/07_spawn.bats b/tests/unit/07_spawn.bats
+index 950ea60..dea18f5 100644
+--- a/tests/unit/07_spawn.bats
++++ b/tests/unit/07_spawn.bats
+@@ -224,10 +224,26 @@ down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
+   [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+   refute_grep '^pane split' "$HERDR_STUB_LOG"
+ }
+ @test "AC3: 沒給 --kind、角色預設命中專案層熔斷 → 只警告，照派" {
+   down_claude
+   run dk-spawn frontend cart; [ "$status" -eq 0 ]
+   [[ "$output" == *"kind claude 在專案層熔斷到"* ]]; [[ "$output" == *"dk-kind up claude"* ]]
+   grep -q '^pane split' "$HERDR_STUB_LOG"
+   grep -q '^agent start login-frontend-cart --kind claude ' "$HERDR_STUB_LOG"
+ }
++
++# --- AC16（整枝評議 I2 spawn 半邊）：dev 進 .panes 的同一步刪 wave-N.devdone -------
++@test "AC16 I2: 波開著時 spawn 一位 group=dev 成員 → wave-N.devdone 被刪" {
++  fixture_brief "$d"; dk-wave-open 1 >/dev/null
++  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  [ ! -f "$d/.blocked/wave-1.devdone" ]
++}
++@test "AC16 I2: 波開著時 spawn qa 或 reviewer（group=review）→ wave-N.devdone 不刪" {
++  fixture_brief "$d"; dk-wave-open 1 >/dev/null
++  mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
++  run dk-spawn qa; [ "$status" -eq 0 ]
++  [ -f "$d/.blocked/wave-1.devdone" ]
++  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
++  [ -f "$d/.blocked/wave-1.devdone" ]
++}
+diff --git a/tests/unit/18_wave_open.bats b/tests/unit/18_wave_open.bats
+index 9fa000b..f4c77db 100644
+--- a/tests/unit/18_wave_open.bats
++++ b/tests/unit/18_wave_open.bats
+@@ -121,26 +121,26 @@ multirepo_task() {
+ 
+ @test "AC7: --refresh 把新加進波次表的成員一起產出切片" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]
+   [ ! -f "$d/briefs/frontend-cart.md" ]
+   sed -i '/^| 1 | 實作 | qa | 驗 API | S | 全過 | |$/a | 1 | 實作 | frontend-cart | 補一塊 | S | 可用 | |' "$d/brief.md"
+   run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]
+   [ -f "$d/briefs/frontend-cart.md" ]
+   grep -q ' wave-refresh 1 members backend(M) qa(S) frontend-cart(S)$' "$d/process.md"
+ }
+ 
+-@test "AC7: --refresh 刪掉這一波的整波逾時與 devdone 標記，讓它們重新起算" {
++@test "AC7: --refresh 刪掉這一波的整波逾時標記，devdone 已 delivered 時仍留著" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]
+   mkdir -p "$d/.blocked"
+   printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.timeout"
+   printf 'notified\ndelivered\n' > "$d/.blocked/wave-1.devdone"
+   run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]
+   [ ! -f "$d/.blocked/wave-1.timeout" ]
+-  [ ! -f "$d/.blocked/wave-1.devdone" ]
++  [ -f "$d/.blocked/wave-1.devdone" ]
+ }
+ 
+ @test "AC7: 既有「wave N was already opened」的拒絕只對不帶 --refresh 的呼叫成立" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]   # process.md 已經有一行 wave-open 1
+   run dk-wave-open 1 --refresh; [ "$status" -eq 0 ]   # 帶 --refresh 不會被那一行擋下
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]   # 不帶 --refresh 照樣被擋
+ }
+diff --git a/tests/unit/34_kind_down.bats b/tests/unit/34_kind_down.bats
+index 63c10b1..c167dc8 100644
+--- a/tests/unit/34_kind_down.bats
++++ b/tests/unit/34_kind_down.bats
+@@ -175,20 +175,27 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
+ @test "dk-kind up：拿掉 kinds-down 與綁著任務時的 DK_KIND_DOWN，process 記一行" {
+   d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
+   sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex agy"/' "$d/.task.env"
+   now=$(date +%s)
+   dk_kinds_down_set codex "$((now + 3600))" exact my-task agentA hit1
+   run dk-kind up codex; [ "$status" -eq 0 ]; [ "$output" = "kind codex up" ]
+   refute_grep '^codex ' "$DK_ROOT/.sessions/kinds-down"
+   grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
+   grep -q ' kind codex up$' "$d/process.md"
+ }
++@test "AC16 I1: DK_KIND_DOWN 只有目標 kind 時 up 仍要成功" {
++  d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
++  sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex"/' "$d/.task.env"
++  run dk-kind up codex; [ "$status" -eq 0 ]; [ "$output" = "kind codex up" ]
++  grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
++  grep -q ' kind codex up$' "$d/process.md"
++}
+ @test "dk-kind up：兩張清單都沒有這個 kind 就印說明並 exit 0" {
+   d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
+   run dk-kind up codex; [ "$status" -eq 0 ]
+   [[ "$output" == *"沒有熔斷"* ]]
+   refute_grep 'kind codex up' "$d/process.md"
+ }
+ @test "dk-kind up：沒綁任務時只動 kinds-down，不因為 dk_task_dir 失敗而死" {
+   rm -f "$DK_ROOT/.sessions/${HERDR_PANE_ID:?}"
+   now=$(date +%s)
+   dk_kinds_down_set codex "$((now + 3600))" exact my-task agentA hit1
+
