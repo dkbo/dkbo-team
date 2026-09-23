@@ -65,3 +65,6 @@ teardown() { teardown_project; }
 @test "AC17: 波中改 brief 只請原 dev 重做時要回 [FIXED]，不再回 [DONE]" {
   grep -q -- '回 `\[FIXED\]`' "$DK_ROOT/skills/run/SKILL.md"
 }
+@test "整枝評議判不修時 ruling 要標明前提是實測還是推測" {
+  grep -q -- '前提是\*\*實測\*\*還是\*\*推測\*\*' "$DK_ROOT/skills/run/SKILL.md"
+}

@@ -27,7 +27,7 @@ description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指�
 
 ## 結案
 1. 有視覺變更的任務：計畫中最後一波結波後、`dk-review-pack --task` 之前，先請人看畫面（dev server 或截圖），確認沒有追加才跑整枝評議。
-2. 關卡③前先整分支評議：`dk-review-pack --task`，再 `dk-review --task --tier L`（L 檔 reviewer 讀 `waves/task.diff`）。Important 修掉或記 ruling，才寫 `report.md`（照範本；遺留段列出未經審查的波）。關卡③：給人拍板。
+2. 關卡③前先整分支評議：`dk-review-pack --task`，再 `dk-review --task --tier L`（L 檔 reviewer 讀 `waves/task.diff`）。Important 修掉或記 ruling，才寫 `report.md`（照範本；遺留段列出未經審查的波）。判成「不修、記 BACKLOG」時（Important 降級或 Minor 不修都算），ruling 的原因要標明前提是**實測**還是**推測**；「只影響顯示」「不會發生」這類推測不能當不修的理由——先實測，或照修。關卡③：給人拍板。
 3. `dk-task-close`。它會合併回主分支，然後**把這個任務的記憶 commit 進主樹**（任務目錄、`tasks/INDEX.md`、`decisions.md`，只有這幾條路徑，你工作樹上的其他改動不會被掃進去）。合併衝突時它會停：不要自己解，問人或開 `it` 的修復波。放棄用 `dk-task-close --abandon "<原因>"`。
 
 ## 故障
