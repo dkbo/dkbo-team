@@ -24,7 +24,11 @@ teardown() { teardown_project; }
 }
 @test "rejects unknown model or effort" {
   run dk_kind_args claude haiku/low; [ "$status" -eq 1 ]
-  run dk_kind_args claude opus/max;  [ "$status" -eq 1 ]
+  run dk_kind_args claude opus/ultra; [ "$status" -eq 1 ]
+}
+@test "claude 宣告了 CLI 2.1.280 起接受的 xhigh 與 max" {
+  [ "$(dk_kind_args claude opus/xhigh)" = "--model opus --effort xhigh --permission-mode auto --add-dir $DK_PROJECT_ROOT" ]
+  [ "$(dk_kind_args claude sonnet/max)" = "--model sonnet --effort max --permission-mode auto --add-dir $DK_PROJECT_ROOT" ]
 }
 @test "available kinds intersects help, PATH and kinds dir" {
   mkdir -p "$PROJECT/fakebin"; printf '#!/bin/sh\n' > "$PROJECT/fakebin/claude"; chmod +x "$PROJECT/fakebin/claude"

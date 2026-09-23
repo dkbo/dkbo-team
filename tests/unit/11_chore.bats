@@ -14,7 +14,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   grep -q '^branch=-$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
   split=$(grep '^pane split' "$HERDR_STUB_LOG"); [[ "$split" == *"--current --direction right --cwd $PROJECT --no-focus"* ]]
   [[ "$split" == *"--env DK_CHORE_FILE=$f"* ]]; [[ "$split" == *"--env DK_CHORE_CODE=0"* ]]
-  grep -q '^agent start chore-frontend-1 --kind claude --pane wC:p2 -- --model sonnet --effort low' "$HERDR_STUB_LOG"
+  grep -q '^agent start chore-frontend-1 --kind claude --pane wC:p2 -- --model opus --effort low' "$HERDR_STUB_LOG"
   grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
   ! grep -q '^worktree create' "$HERDR_STUB_LOG"
 }

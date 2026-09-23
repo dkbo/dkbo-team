@@ -49,18 +49,18 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 }
 @test "reviewer tier defaults to DK_REVIEW_TIER (ships as M)" {
   open_wave 1; run dk-review; [ "$status" -eq 0 ]
-  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model sonnet --effort medium' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort medium' "$HERDR_STUB_LOG"
 }
 @test "DK_REVIEW_TIER=L lifts reviewers to the L tier without touching roles/reviewer.md" {
   printf 'DK_REVIEW_TIER="L"\n' >> "$DK_ROOT/settings.env"
   open_wave 1; run dk-review; [ "$status" -eq 0 ]
   grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort high' "$HERDR_STUB_LOG"
-  grep -q '^  M: sonnet/medium$' "$DK_ROOT/roles/reviewer.md"   # 角色檔的 tier 語義沒被動過
+  grep -q '^  M: opus/medium$' "$DK_ROOT/roles/reviewer.md"   # 角色檔的 tier 語義沒被動過
 }
 @test "--tier still overrides DK_REVIEW_TIER" {
   printf 'DK_REVIEW_TIER="L"\n' >> "$DK_ROOT/settings.env"
   open_wave 1; run dk-review --tier M; [ "$status" -eq 0 ]
-  grep -q -- '--model sonnet --effort medium' "$HERDR_STUB_LOG"
+  grep -q -- '--model opus --effort medium' "$HERDR_STUB_LOG"
 }
 @test "a DK_REVIEW_TIER that is not M or L is refused, naming settings.env" {
   printf 'DK_REVIEW_TIER="S"\n' >> "$DK_ROOT/settings.env"

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0 — 2026-09-23
+
+- feat(kinds)!: claude kind 三檔全換 Opus 5.5，只用 effort 分檔——`KIND_DEFAULT_TIERS` 由 `S=sonnet/low M=sonnet/medium L=opus/high` 改成 `S=opus/low M=opus/medium L=opus/high`；六份角色檔照同一條規則改：sonnet 一律換成同 effort 的 opus（qa 的 L 由 `sonnet/high` 改 `opus/high`，it 由 `sonnet/low`／`sonnet/low`／`sonnet/medium` 改 `opus/low`／`opus/low`／`opus/medium`）。依據（2026-09-23，Opus 5.5 發布隔天）：Artificial Analysis Intelligence Index 的 opus/low 42、opus/medium 51、opus/high 54，sonnet/low 24、sonnet/medium 28、sonnet/max 38，fable 5.1 最高 53、價格是 opus 的 2.5 倍；每題成本 opus/low $0.55 與 sonnet/low $0.51 相當（opus 單價兩倍但用的 token 少）。Vals 的 Terminal-Bench 2.1 opus 87.6% 對 sonnet 74.5%，與 AA 方向一致。S 檔另有 Anthropic〈What a task costs on Opus 5.5〉的建議：機械式改動留在 Opus 5.5 low，Sonnet/Haiku 只給查找、不給寫碼——dkbo 的 S 定義正是純機械改動。尚未驗證的是 opus/low 對 sonnet 的實跑比較（第三方只有 AA 分 effort 測過，Vals Index（max）上兩者只差 1 分），第一次實跑 S 檔時留意品質與額度。reviewer 的 M/L 仍解析到不同旗標（`opus/medium` 對 `opus/high`），0.4.0 記下的「M 與 L 不得同義」照舊成立。領導走 L 檔，仍是 `opus/high`，不受影響。sonnet 留在 `KIND_MODEL_EFFORTS`，`--model sonnet` 手動指定仍可用。
+- feat(kinds): `KIND_MODEL_EFFORTS` 的 opus 與 sonnet 補上 `xhigh`、`max`（claude CLI 2.1.280 的 `--effort` 已收這兩個值），可用 `--model`/`--effort` 或角色檔手動指定；出廠檔位不用它們。
+- 已知風險：Opus 5.5 的安全分類比前代寬（新增 bio、reasoning_extraction），Vals 註記它在多個 benchmark 需要 server-side fallback 補分；員工 pane 被拒答時畫面長什麼樣還沒實測，`KIND_BLOCK_RE` 沒有收——第一次實跑撞到時把原文補進來。
+- 測試：634 bats（+1，`03_kinds.bats` 驗 xhigh/max 可用；`20_review.bats` 的 reviewer M 檔改驗 `opus/medium`、`11_chore.bats` 的預設 S 檔改驗 `opus/low`；`03`/`13` 拿來驗「不認得的 effort」的值由 `max` 改成 `ultra`）；shellcheck 零警告。
+- 升級：**角色檔不會跟著升**——更新 dkbo 的 rsync 對 `roles/` 是 `--ignore-existing`，既有專案只拿到 `kinds/claude.sh` 的新出廠檔位與 effort 清單，派人時實際用的角色檔 `tiers:` 仍是舊值。要採用就照上面那條規則手動改 `roles/*.md` 的 `S:`/`M:`/`L:` 行（或對照本版 `roles/README.md` 的團隊表）。沒有新鍵、新依賴、新 skill。
+
 ## 0.12.1 — 2026-09-23
 
 - fix(install): `templates/seed/` 的起始檔改名為 `*.seed.md`／`settings.seed.env`——0.12.0 用的是 `PROJECT.md`、`decisions.md`、`settings.env` 原名，而「更新 dkbo」那條 rsync 的 `--exclude=PROJECT.md` 等是比對檔名、不分目錄，升級時連 seed 裡的同名檔一起排除，升過級的專案日後缺檔再跑 `install.sh` 會因 seed 不存在而中斷。改名後兩條 rsync 照 README 原樣跑，seed 一個不少。

@@ -43,5 +43,6 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  [[ "$sec" == *"fix(install)"* ]] && [[ "$sec" == *"seed"* ]] || { echo "首節缺 fix(install) 的 seed 改名"; false; }
+  [[ "$sec" == *"feat(kinds)!"* ]] && [[ "$sec" == *"S=opus/low M=opus/medium"* ]] || { echo "首節缺 claude 檔位換 opus"; false; }
+  [[ "$sec" == *"xhigh"* ]] || { echo "首節缺 effort 清單補 xhigh/max"; false; }
 }

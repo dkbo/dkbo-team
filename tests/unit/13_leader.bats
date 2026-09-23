@@ -14,7 +14,7 @@ teardown() { teardown_project; }
 }
 @test "dk-leader rejects unknown model/effort and unknown kind" {
   run dk-leader pay x --model gpt-5; [ "$status" -eq 1 ]; [[ "$output" == *"unknown model"* ]]
-  run dk-leader pay x --effort max; [ "$status" -eq 1 ]; [[ "$output" == *"unknown effort"* ]]
+  run dk-leader pay x --effort ultra; [ "$status" -eq 1 ]; [[ "$output" == *"unknown effort"* ]]
   run dk-leader pay x --kind nope;  [ "$status" -eq 1 ]
   refute_grep '^agent start' "$HERDR_STUB_LOG"
 }
