@@ -48,3 +48,4 @@
 2026-09-24T19:38 ruling: [自主] park minor M4（36_fixture 用 GNU 專屬 touch -d、stat -c）— 實測 .github/workflows/ci.yml 三個 job 都是 ubuntu-latest，既有測試也大量用 GNU sed -i — 若錯代價：macOS 開發機跑 36 會紅，改成 perl／python 取 mtime
 2026-09-24T19:38 ruling: [自主] park minor M5（沒有 setsid 的平台，員工 pane 叫回的守望留在員工的行程群組）— brief 全域約束明文接受 setsid 選用；Linux 走 setsid 不受影響，macOS 上死了也會留 signal／exit 行並被下一則 dk-msg 叫回（推測，未在 macOS 實測）— 若錯代價：macOS 上守望隨員工 pane 關閉而死，最多等到下一則訊息才回來
 2026-09-24T20:14 gate3 approved
+2026-09-24T20:14 task-close merged 82bd82b
