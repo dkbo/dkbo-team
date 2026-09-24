@@ -546,3 +546,11 @@ SH
   [ ! -s "$d/.blocked/msgq-login-reviewer-a" ]
   [ ! -e "$d/.blocked/msgq-login-reviewer-a.tmp" ]
 }
+
+@test "整枝評議 Minor①：redispatch 的鎖檔在 .blocked/panes.lock，不在任務目錄根（結案不被 commit 進記憶）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/panes.lock" ]
+  [ ! -e "$d/.panes.lock" ]
+}

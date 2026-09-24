@@ -85,7 +85,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-task-new` / `dk-brief-check` | 只建任務目錄（不切 worktree，`/dkbo-run` 交棒時才實體化）；brief 的機械檢查 |
 | `dk-brief-review` | 開工前派 1 到 3 位 reviewer 審 brief 與需求原文（AI 閘，關卡①前的第二道） |
 | `dk-wave-open N` / `dk-spawn <角色>` | 開一波、切成員切片（`--refresh` 依當下 brief 重產第 N 波所有成員的切片、重算逾時）；開員工 pane 並下提示 |
-| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <證據>]` | 列出專案層熔斷的 kind 與恢復時間；解除一個 kind 的熔斷；從其他來源確認額度耗盡時手動登記（沒給 `--until` 就猜現在＋5 小時） |
+| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <文字>]` | 列出專案層熔斷的 kind 與恢復時間；解除一個 kind 的熔斷；從其他來源確認額度耗盡時手動登記（沒給 `--until` 就猜現在＋5 小時） |
 | `dk-msg <對象> "[類型] 內文"` | 等對方閒置再送訊息，記進 messages.log |
 | `dk-review-pack N` / `dk-review` | 打包差異；派 1 到 3 位 reviewer |
 | `dk-wave-close` | 四道閘後關 pane，並在 worktree 內 commit 這一波 |

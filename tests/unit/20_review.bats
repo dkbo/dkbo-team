@@ -104,3 +104,11 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
   run dk-review --task --kinds claude; [ "$status" -eq 0 ]; [ "$output" = "review task: login-reviewer-a(claude)" ]
 }
+@test "bklog Minor①: 別名用完的提示寫明關 pane 不會把別名還回來、只留 skipped 的出路" {
+  open_wave 1
+  dk-review --kinds "claude codex agy" >/dev/null; dk-review --kinds "claude codex agy" >/dev/null
+  run dk-review --kinds claude; [ "$status" -eq 1 ]
+  [[ "$output" == *"關 pane 不會把別名還回來"* ]]
+  [[ "$output" == *'dk-process "review 1 skipped: <理由>"'* ]]
+  refute_grep -q 'dk-wave-close --agent' <<< "$output"
+}

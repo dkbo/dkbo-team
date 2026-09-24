@@ -51,7 +51,7 @@ dk_review_aliases() { # ALL_ALIASES KINDS [LABEL] → 前 N 個別名（N = kind
     [[ "$used" == *" $al "* ]] && continue
     out="${out:+$out }$al"; n=$((n-1))
   done
-  [ "$n" -eq 0 ] || dk_die "reviewer 別名用完了（池：$all；${3:-} 已派：${used:-無}）—— 先 dk-wave-close --agent 收掉不用的，或記 dk-process \"${3:-review} skipped: <理由>\""
+  [ "$n" -eq 0 ] || dk_die "reviewer 別名用完了（池：$all；${3:-} 已派：${used:-無}）—— 關 pane 不會把別名還回來（已派名單只增不減），只能記 dk-process \"${3:-review} skipped: <理由>\" 收掉這一輪"
   printf '%s' "$out"
 }
 

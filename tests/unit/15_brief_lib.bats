@@ -91,3 +91,7 @@ T
 @test "bklog AC10: templates/brief.md 的共用契約說明句講得出 <成員>@波<N>" {
   dk_brief_section "$DK_ROOT/templates/brief.md" "## 共用契約" | grep -q '^（一列一個契約。.*`<成員>@波<N>`'
 }
+@test "bklog Minor②: dk_brief_ncols 印欄數（\| 不算分隔），再附上指定欄的值" {
+  [ "$(printf '%s\n' 'a|b\|c|d' | dk_brief_ncols)" = 3 ]
+  [ "$(printf '%s\n' 'a|b\|c|d' 'x|y' | dk_brief_ncols 1 2)" = "$(printf '3\ta\tb\\|c\n2\tx\ty')" ]
+}

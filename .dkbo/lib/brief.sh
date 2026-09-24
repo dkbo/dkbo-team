@@ -36,7 +36,9 @@ dk_brief_md_rows() { # NCOLS [COL VALUE]... ← dk_brief_* 的列（stdin）→ 
     { k = split(conds, q, "\034"); ok = 1; for (i = 1; i + 1 <= k; i += 2) if (c[q[i]] != q[i+1]) ok = 0
       if (!ok) next; out = "|"; for (i = 1; i <= n; i++) out = out " " c[i] " |"; print out }'
 }
-dk_brief_ncols() { awk "$DK__BRIEF_SPLIT"'{ print nf }'; }   # ← dk_brief_* 的列（stdin）→ 每列的欄數（\| 不算分隔）
+dk_brief_ncols() { # [COL]... ← dk_brief_* 的列（stdin）→ 每個非空列印欄數（\| 不算分隔），再以 tab 接上指定欄的值
+  awk -v cols="$*" "$DK__BRIEF_SPLIT"'NF { k = split(cols, q, " "); out = nf; for (i = 1; i <= k; i++) out = out "\t" c[q[i]]; print out }'
+}
 dk_brief_wave_members() { dk_brief_waves "$1" | awk -v n="$2" "$DK__BRIEF_SPLIT"'c[1]==n {print c[3] "(" c[5] ")"}'; }
 dk_brief_wave_review()  { dk_brief_waves "$1" | awk -v n="$2" "$DK__BRIEF_SPLIT"'c[1]==n && c[7]!="" {print c[7]; exit}'; }
 dk_brief_acceptance()   { [ -f "$1" ] || { echo "dk: no brief at $1" >&2; return 1; }; dk_brief_section "$1" "## 驗收標準" | grep -E '^- \[.\] ' || true; }

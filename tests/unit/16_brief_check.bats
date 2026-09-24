@@ -257,3 +257,17 @@ ac8_repo() {
     for i in $(seq 1 1500); do dk_glob_check "" "main:tests/**" >/dev/null || { echo "誤判 at $i"; exit 1; }; done; echo ok'
   [ "$status" -eq 0 ]; [ "$output" = ok ]
 }
+# ── bklog 波 2 Minor ③：重疊判斷的可改欄也要跳脫感知地切 ──────────────────────
+@test "bklog Minor③: 可改欄含 \| 時重疊判斷不錯位（不漏判、不誤判）" {
+  # 裸 awk -F'|' 會在 \| 那裡切斷可改欄：後面的 src/api/** 整段遺失 → 漏判與 it 的重疊
+  sed -i 's#^| backend | src/api/\*\* |#| backend | x\\|y, src/api/** |#' "$b"
+  printf '| it | src/api/types.ts | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 所有權 backend/it: 可改範圍重疊"* ]]
+  # 兩條不同的 glob 共用 \| 之前的前綴：切斷後會變成同一條 "src/a\" → 誤判重疊
+  fixture_brief "$d"; sed -i 's#^| backend | src/api/\*\* |#| backend | src/a\\|b |#; s#^| frontend-cart | src/web/\*\* |#| frontend-cart | src/a\\|c |#' "$b"
+  run dk-brief-check; refute_grep -q '重疊' <<< "$output"
+}
+@test "bklog Minor②: 欄數閘走 dk_brief_ncols，不再內聯一份切欄 awk" {
+  grep -q 'dk_brief_ncols' "$DK_ROOT/bin/dk-brief-check"
+  refute_grep -q 'print nf' "$DK_ROOT/bin/dk-brief-check"
+}

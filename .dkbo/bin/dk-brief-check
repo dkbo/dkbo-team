@@ -43,8 +43,9 @@ done <<< "$(printf '%s\n' "$owners" | sed "s/\\\\|/$esc/g")"
 while IFS=$'\t' read -r nc m; do
   [ -n "$nc" ] || continue
   [ "$nc" -ge 3 ] && [ "$nc" -le 4 ] || fail "所有權 $m" "每列須 3 或 4 欄（成員｜可改｜只讀［｜獨佔資源］），得到 $nc 欄（欄內的字面管線要寫成 \\|）"
-done <<< "$(printf '%s\n' "$owners" | awk "$DK__BRIEF_SPLIT"'NF {print nf "\t" c[1]}')"
-all_globs=$(printf '%s\n' "$owners" | awk -F'|' '{n=split($2,g,","); for(i=1;i<=n;i++){x=g[i]; gsub(/^ +| +$/,"",x); if(x!="" && x!="—") print $1 "\t" x}}')
+done <<< "$(printf '%s\n' "$owners" | dk_brief_ncols 1)"
+# 可改欄同樣要跳脫感知地切：裸 -F'|' 會在 \| 處把可改欄切斷，後面的 glob 整段漏判重疊。
+all_globs=$(printf '%s\n' "$owners" | awk "$DK__BRIEF_SPLIT"'{n=split(c[2],g,","); for(i=1;i<=n;i++){x=g[i]; gsub(/^ +| +$/,"",x); if(x!="" && x!="—") print c[1] "\t" x}}')
 overlap() { # G1 G2 → 0 when the two 可改 globs can match the same path (literal equality, or a dir/** tree containing the other)
   # 多 repo 時先按 repo 分組：兩個 repo 裡的同一條 glob 是兩組不同的檔，不算重疊。
   local a b ra rb s
@@ -128,7 +129,7 @@ done <<< "$(printf '%s\n' "$waves" | sed "s/\\\\|/$esc/g")"
 while IFS=$'\t' read -r nc w m; do
   [ -n "$nc" ] || continue
   [ "$nc" -eq 7 ] || fail "波次表 $w $m" "每列須 7 欄，得到 $nc 欄（欄內的字面管線要寫成 \\|）"
-done <<< "$(printf '%s\n' "$waves" | awk "$DK__BRIEF_SPLIT"'NF {print nf "\t" c[1] "\t" c[3]}')"
+done <<< "$(printf '%s\n' "$waves" | dk_brief_ncols 1 3)"
 for w in $(printf '%s\n' "$waves" | cut -d'|' -f1 | grep -E '^[0-9]+$' | sort -un); do
   [ -n "$(dk_brief_wave_review "$brief" "$w")" ] || fail "波次表 $w" "審查欄未填（預設 / skip: <理由> / kinds: …）"
   devs=0

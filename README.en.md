@@ -85,7 +85,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-task-new` / `dk-brief-check` | Create the task directory only (no worktree — `/dkbo-run` materializes it at handoff); mechanical brief check |
 | `dk-brief-review` | Before work starts, dispatch 1 to 3 reviewers to review the brief and the raw request (an AI gate, the second one before gate 1) |
 | `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices (`--refresh` re-derives every member's slice for wave N from the current brief and resets the wave timeout); open a worker pane and prompt it |
-| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <evidence>]` | List kinds tripped at the project level and their recovery time; clear the breaker for one kind; record by hand a quota exhaustion confirmed elsewhere (without `--until` it guesses now + 5 hours) |
+| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <text>]` | List kinds tripped at the project level and their recovery time; clear the breaker for one kind; record by hand a quota exhaustion confirmed elsewhere (without `--until` it guesses now + 5 hours) |
 | `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
 | `dk-review-pack N` / `dk-review` | Build the diff pack; dispatch one to three reviewers |
 | `dk-wave-close` | Four gates, then close panes and commit the wave inside the worktree |

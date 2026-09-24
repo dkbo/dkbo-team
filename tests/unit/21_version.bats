@@ -47,7 +47,9 @@ teardown() { teardown_project; }
            'feat(review)' 'p1`–`p6' 'feat(msg)' '背景送' '[UNDELIVERED]' '（你已交付過' \
            'feat(process)' 'minor 行格式不符' 'feat(brief)' 'WARN 所有權' '<成員>@波<N>' '\|' \
            'feat(leader)!' 'HERDR_WORKSPACE_ID' 'docs(protocol)' '取紅' 'state too long' \
-           'docs(readme)' '任務 tab 不自動關' '測試：'; do
+           'docs(readme)' '任務 tab 不自動關' 'fix(repos)' 'SIGPIPE' 'fix(wave)' 'panes.lock' '別名還回來' 'all_globs' '測試：'; do
     [[ "$sec" == *"$w"* ]] || { echo "CHANGELOG 首節缺 $w"; false; }
   done
+  # 測試條數是實跑值，不留 N 佔位
+  grep -qE '^- 測試：[0-9]+ bats（\+[0-9]+；' <<< "$sec" || { echo "CHANGELOG 首節測試條數仍是佔位"; false; }
 }

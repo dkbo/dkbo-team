@@ -10,7 +10,9 @@ if [ "${1:-}" = --agent ]; then   # close one employee (e.g. a timed-out reviewe
   line=$(awk -v a="$a" '$1==a' "$dir/.panes" | tail -1); [ -n "$line" ] || dk_die "no live pane for $a"
   read -r _ pane _ _ tab _ <<< "$line"
   herdr pane close "$pane" >/dev/null 2>&1 </dev/null || true
-  grep -v "^$a " "$dir/.panes" > "$dir/.panes.tmp" || true; mv "$dir/.panes.tmp" "$dir/.panes"
+  mkdir -p "$dir/.blocked"   # 與 dk-msg redispatch、dk-spawn 同一把鎖：背景送達的 redispatch 可能同時改寫 .panes
+  ( flock -w 5 9 || true
+    grep -v "^$a " "$dir/.panes" > "$dir/.panes.tmp" || true; mv "$dir/.panes.tmp" "$dir/.panes" ) 9>"$dir/.blocked/panes.lock"
   # 聚合標記要重置：這位多半是撞額度被關掉、等著換 kind 重派的。標記若停在 delivered，
   # 補上的那位做完也不會再有人通知領導，整波就這樣啞掉。
   # latch 也要收：這位的交付隨著 pane 一起作廢，否則補上的那位什麼都還沒寫，聚合就先喊全員完成
@@ -50,7 +52,8 @@ if [ "$legacy" = 0 ]; then
     vline=$(grep -E "^[^ ]+ review $n verdict" "$dir/process.md" | tail -1 || true)
     if [ -n "$vline" ]; then
       for al in $(grep -E "^[^ ]+ review $n spawned " "$dir/process.md" | tail -1 | grep -oE 'reviewer-[a-z]' | sed 's/reviewer-//' | sort -u); do
-        case "$vline" in *"$al:"*) ;; *) problems="$problems\n  review $n verdict does not account for reviewer $al (record its result, or '$al: skipped (<理由>)')";; esac
+        # 詞界比對（前面是行首或空白）：子字串比對會讓 note:／if: 冒充 e:／f: 的交代
+        case " $vline" in *" $al:"*) ;; *) problems="$problems\n  review $n verdict does not account for reviewer $al (record its result, or '$al: skipped (<理由>)')";; esac
       done
     fi
   fi
@@ -174,7 +177,7 @@ while read -r agent pane _epoch _group tab _; do
   herdr pane close "$pane" >/dev/null </dev/null && closed=$((closed+1))
   if [ -n "${tab:-}" ] && [[ " $tabs " != *" $tab "* ]]; then tabs="$tabs $tab"; fi
 done < "$dir/.panes"
-: > "$dir/.panes"
+mkdir -p "$dir/.blocked"; ( flock -w 5 9 || true; : > "$dir/.panes" ) 9>"$dir/.blocked/panes.lock"
 if [ "$legacy" = 1 ]; then dk_process "wave-close: $closed agents closed"
 else
   dk_env_set DK_WAVE ""; dk_env_set DK_WAVE_STARTED ""

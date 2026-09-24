@@ -44,11 +44,10 @@ teardown() { teardown_project; }
       .dkbo/tasks/*|.dkbo/decisions.md|CHANGELOG.md) continue ;;
       tests/unit/25_docs_policy.bats) continue ;;
     esac
-    # 只禁舊的 tab 位置句型「workspace（…計畫時記下」；「退回計畫時記下的 DK_WORKSPACE」講的是退路來源，照留
-    refute_grep -E 'workspace（[^）]*計畫時記下|recorded at plan time' "$REPO_ROOT/$f"
+    refute_grep -E '計畫時記下|recorded at plan time' "$REPO_ROOT/$f"
   done < <(git -C "$REPO_ROOT" ls-files)
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  refute_grep -E 'workspace（[^）]*計畫時記下' <<< "$sec"
+  refute_grep -E '計畫時記下|recorded at plan time' <<< "$sec"
   for f in README.md .dkbo/README.md .dkbo/LEADER.md .dkbo/PROJECT.md .dkbo/skills/run/SKILL.md; do
     grep -qF '你叫 `/dkbo-run` 當下所在的 workspace' "$REPO_ROOT/$f" || { echo "$f 缺新說法"; false; }
     refute_grep -F '任務所屬的 workspace' "$REPO_ROOT/$f"
@@ -87,6 +86,10 @@ teardown() { teardown_project; }
   done
   grep -E '^\| `dk-task-close`' "$REPO_ROOT/README.md" | grep -qF '任務 tab 不自動關'
   grep -E '^\| `dk-task-close`' "$REPO_ROOT/README.en.md" | grep -qF 'herdr tab close <id>'
+  # dk-kind down 的簽名照契約原句
+  grep -qF -- '`dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <文字>]`' "$REPO_ROOT/README.md"
+  grep -qF -- '`dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <文字>]`' "$DK_ROOT/README.md"
+  grep -qF -- '`dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <text>]`' "$REPO_ROOT/README.en.md"
 }
 
 @test "AC13: skills/run/SKILL.md 帶新規範的五個字串，三份 README 都提到 dk-kind" {

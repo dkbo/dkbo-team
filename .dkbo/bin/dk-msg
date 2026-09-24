@@ -168,8 +168,11 @@ redispatch() { # AGENT — 只動 .panes 裡真的有的列；雜務與已收工
   p="$dir/.panes"; sf="$dir/state/${a#"$DK_SHORT"-}.md"
   [ -f "$p" ] || return 0
   awk -v n="$a" '$1==n{f=1} END{exit !f}' "$p" || return 0
-  # AC5 之後這一步在背景、送達那一刻才跑：多位收件者的背景那一份會同時改寫 .panes，用 flock 互斥；
-  # dk-spawn 的 `>> .panes` 不拿這把鎖，所以 mv 前再比一次內容，變了就重讀重寫，不蓋掉新 append 的列（review Minor 7）。
+  # AC5 之後這一步在背景、送達那一刻才跑：多位收件者的背景那一份會同時改寫 .panes，用 flock 互斥。
+  # 改寫 .panes 的人（dk-spawn、dk-wave-close）都拿同一把 .blocked/panes.lock；鎖檔放 .blocked/ 而不是任務目錄根，
+  # 結案時跟著 .blocked 一起刪，不會被 commit 進記憶。拿鎖逾時仍照做，所以 mv 前再比一次內容，
+  # 變了就重讀重寫，不蓋掉別人剛 append 的列（review Minor 7）。
+  mkdir -p "$dir/.blocked"
   ( flock -w 5 9 || true
     local before n=0
     while :; do
@@ -177,8 +180,7 @@ redispatch() { # AGENT — 只動 .panes 裡真的有的列；雜務與已收工
       awk -v n="$a" -v t="$(date +%s)" 'NF>=3 && $1==n {$3=t} {print}' "$p" > "$p.tmp"
       if [ "$(cksum < "$p")" = "$before" ] || [ "$n" -ge 5 ]; then mv "$p.tmp" "$p"; break; fi
       n=$((n+1))
-    done ) 9>"$p.lock"
-  mkdir -p "$dir/.blocked"
+    done ) 9>"$dir/.blocked/panes.lock"
   rm -f "$dir/.blocked/$a.timeout"   # 上一輪的逾時已結案；留著的 delivered 會讓這一輪永遠不再報
   if [ -f "$sf" ]; then cksum < "$sf"; else printf ''; fi > "$dir/.blocked/$a.redispatch"
   # AC6：重派 dev 就是開新的一輪交付。上一輪的 latch 與本波聚合標記不刪，dk-watch 會拿舊的 done
