@@ -54,13 +54,13 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   screen "rate limit reached"
   HERDR_STUB_FAIL="agent wait" dk-watch --once
   grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
-  ! grep -q '^delivered$' "$d/.blocked/login-qa.limit"
+  refute_grep -q '^delivered$' "$d/.blocked/login-qa.limit"
   dk-watch --once; grep -q '^delivered$' "$d/.blocked/login-qa.limit"
 }
 @test "額度優先於審批：兩種字樣同時在畫面上時判額度" {
   screen "Run this command?\nYou've hit your usage limit"
   dk-watch --once
-  grep -q '\[LIMIT\]' "$HERDR_STUB_LOG"; ! grep -q '\[BLOCKED\]' "$HERDR_STUB_LOG"
+  grep -q '\[LIMIT\]' "$HERDR_STUB_LOG"; refute_grep -q '\[BLOCKED\]' "$HERDR_STUB_LOG"
 }
 
 # --- AC13: state 已 status: done 的 agent 不做額度與審批的畫面判定（highfix 第二次誤判）---
@@ -124,7 +124,7 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   screen 'Requesting permission for:\nRun this command?'
   dk-watch --once
   grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
-  ! grep -q 'kind agy down' "$d/process.md"
+  refute_grep -q 'kind agy down' "$d/process.md"
   grep -q '\[BLOCKED\] from dk-watch: login-reviewer-c' "$HERDR_STUB_LOG"
 }
 @test "reviewer 逾時且畫面沒話說：維持原本的熔斷" {
@@ -246,5 +246,5 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   : > "$d/.panes"; echo '# r' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]
   for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$epid" 2>/dev/null || break; done
-  ! kill -0 "$epid" 2>/dev/null
+  refute kill -0 "$epid" 2>/dev/null
 }

@@ -47,17 +47,17 @@ teardown() { teardown_project; }
 @test "spawn validates agent name before touching herdr" {
   run dk-spawn frontend 'Big Cart!'
   [ "$status" -eq 1 ]
-  ! grep -q '^pane split' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
 }
 @test "spawn keeps the pane when agent start fails, so the startup prompt survives" {
   # e2e 實測：codex 卡在「Update available!」升級提示而 agent start 失敗，
   # 舊行為把 pane 關掉連證據一起銷毀，現場查不出原因（RESULTS-2026-09-11 ⑧）
   HERDR_STUB_FAIL="agent start" run dk-spawn qa
   [ "$status" -eq 1 ]
-  ! grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
   [[ "$output" == *"wC:p2"* ]] && [[ "$output" == *"pane read"* ]]
   grep -q 'spawn login-qa failed: pane wC:p2 kept' "$d/process.md"
-  ! grep -q '^login-qa ' "$d/.panes"
+  refute_grep -q '^login-qa ' "$d/.panes"
 }
 @test "spawn --resume closes and dedupes the old pane entry" {
   echo "login-qa wC:p9" >> "$d/.panes"
@@ -89,19 +89,19 @@ teardown() { teardown_project; }
   run dk-spawn qa; [ "$status" -eq 0 ]; [ "$output" = "login-qa wB:p10" ]
   tc=$(grep '^tab create' "$HERDR_STUB_LOG")
   [[ "$tc" == "tab create --workspace wB --cwd $WORKTREE_PATH --label login-2 --no-focus --env DK_ROOT=$DK_ROOT --env DK_TASK_DIR=$d --env DK_ROLE=qa --env DK_AGENT=login-qa"* ]]
-  ! grep -q '^pane split' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
   grep -q '^agent start login-qa --kind claude --pane wB:p10 ' "$HERDR_STUB_LOG"
   grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; grep -q 'tab 2 wB:t2 opened' "$d/process.md"
 }
 @test "tab create failure dies before starting an agent" {
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
-  HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; ! grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
+  HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
 }
 @test "agent start failure on a new tab keeps the tab so the startup prompt survives" {
   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
   HERDR_STUB_FAIL="agent start" run dk-spawn qa; [ "$status" -eq 1 ]
-  ! grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  refute_grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
   grep -q 'spawn login-qa failed: pane .* kept for diagnosis' "$d/process.md"
 }

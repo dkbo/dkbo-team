@@ -60,7 +60,7 @@ teardown() { teardown_project; }
 @test "ENTRY.md tells a plain session it is NOT the leader" {
   # 這次改版的核心：入口只認身分、不再把人帶進領導規範。
   # 最可能的回歸是有人為了方便又把 leader 分支接回 LEADER.md。
-  ! grep -q 'LEADER\.md' "$DK_ROOT/ENTRY.md"
+  refute_grep -q 'LEADER\.md' "$DK_ROOT/ENTRY.md"
   for w in dkbo-brain dkbo-plan dkbo-run dk-whoami dk-resume; do
     grep -q -- "$w" "$DK_ROOT/ENTRY.md"
   done

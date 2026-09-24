@@ -12,6 +12,9 @@ setup_project() {
   for v in ${!DK_@}; do unset "$v"; done
   PROJECT="$(mktemp -d)"
   cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
+  # .sessions/ 是主樹的執行期狀態（gitignore，只追蹤 .gitkeep）。原樣帶進來的話，開發機上一筆
+  # 未過期的 kinds-down 就讓 10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
+  find "$PROJECT/.dkbo/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
   # 源碼倉自己的 settings.env 是 dogfood 任務在用的（DK_TEST_CMD=tests/run.sh 給 gate c），
   # fixture 不能原樣繼承：gate c 會在假 worktree 裡跑一個不存在的指令，每條「閘全過」的
@@ -93,24 +96,18 @@ fixture_task() { # $1=short $2=display —— setup_multirepo 跑過的話，照
   sed -e "s#{{DISPLAY}}#$2#g; s#{{SHORT}}#$1#g; s#{{BRANCH}}#dk/$1#g; s#{{WORKTREE}}#$WORKTREE_PATH#g; s#{{SOURCE}}#test#g" \
     "$DK_ROOT/templates/brief.md" > "$d/brief.md"
   : > "$d/process.md"; : > "$d/messages.log"; : > "$d/.panes"
-  cat > "$d/.task.env" <<E
-DK_SHORT="$1"
-DK_DISPLAY="$2"
-DK_BRANCH="dk/$1"
-DK_WORKTREE="$WORKTREE_PATH"
-DK_WORKSPACE="wB"
-DK_ROOT_PANE="wB:p1"
-DK_BASE="$(git -C "$PROJECT" rev-parse HEAD)"
-DK_WATCH_PID=""
-DK_EVENTS_PID=""
-DK_WAVE=""
-DK_WAVE_STARTED=""
-DK_KIND_DOWN=""
-DK_TABS=""
-E
+  # .task.env 跟 dk-task-new 走同一條路：套 templates/task.env、用 common.sh 的 dk_render。
+  # 手寫 heredoc 的舊版跟模板漂移過（缺 DK_TASK_TAB 與 DK_LEADER_PANE，改那一行的 sed 靜默
+  # 變成空操作）。子 shell 裡 source：呼叫端多半沒載 common.sh，也不能被它塞進函式與變數。
+  # LEADER_PANE 刻意給空字串 —— 舊版根本沒有這個鍵，照 dk-task-new 填根 pane 會改掉既有測試的語意。
+  ( . "$DK_ROOT/lib/common.sh"
+    dk_render "$DK_ROOT/templates/task.env" "SHORT=$1" "DISPLAY=$2" "BRANCH=dk/$1" \
+      "WORKTREE=$WORKTREE_PATH" "WORKSPACE=wB" "TASK_TAB=" "ROOT_PANE=wB:p1" "LEADER_PANE=" \
+      "BASE=$(git -C "$PROJECT" rev-parse HEAD)" "NO_WORKTREE=" ) > "$d/.task.env" || return 1
+  fixture_env_check "$DK_ROOT/templates/task.env" "$d/.task.env" || return 1
   # .repos 在真實流程裡是 dk-leader --run 寫的；fixture 直接落一份，單 repo 模式也有（一列，
   # 名字固定 main），這樣每個讀 .repos 的呼叫端只有一條路。
-  local n p wt
+  local e n p wt
   : > "$d/.repos"
   for e in $(fixture_repos); do
     n=${e%%=*}; p=${e#*=}
@@ -121,6 +118,18 @@ E
   done
   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
   echo "$d"
+}
+# fixture_task 的自檢：套完仍殘留 {{…}}，或少了模板裡的任一 DK_* 鍵，就把名字印到 stderr 並回 1。
+# fixture 多半跑在 d=$(…) 裡，那裡沒有 set -e —— 不自己回非零，壞掉的 .task.env 會一路綠下去。
+fixture_env_check() { # TEMPLATE ENV_FILE
+  local k miss="" left
+  for k in $(sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"); do
+    grep -q "^$k=" "$2" || miss="$miss $k"
+  done
+  left=$(grep -o '{{[^}]*}}' "$2" | tr -d '{}' | tr '\n' ' ' || true)
+  [ -z "$miss" ] || echo "fixture_task: $2 缺鍵:$miss" >&2
+  [ -z "$left" ] || echo "fixture_task: $2 殘留佔位符: $left" >&2
+  [ -z "$miss$left" ]
 }
 # fixture 用的 <名>=<repo 根> 清單（單 repo 一項）。路徑不含空白，所以可以用空白分隔的字串傳。
 fixture_repos() {
@@ -171,4 +180,9 @@ B
 # 用一個普通函式回非零，set -e 才抓得到。
 refute_grep() { # 用法同 grep；命中即失敗
   if grep -q "$@"; then echo "refute_grep: 不該命中卻命中了: $*" >&2; return 1; fi
+}
+# 非 grep 的否定斷言用這個：`! cmd` 同樣豁免 set -e。指令成功就把指令印到 stderr 並回 1。
+# 不改用 run 再查 $status：run 會覆寫呼叫端的 $status 與 $output。
+refute() { # CMD [ARGS…]；指令成功即失敗
+  if "$@"; then echo "refute: 不該成功卻成功了: $*" >&2; return 1; fi
 }

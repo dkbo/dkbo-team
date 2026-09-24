@@ -49,10 +49,10 @@ expect() { [ "$(dk_layout_slot dev "$p")" = "$1" ] || { echo "got: $(dk_layout_s
   printf 'a wB:p2 0 dev 1 1\nz wB:p20 0 review 3 1\n' > "$d/.panes"
   dk_layout_even 2
   grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; grep -q '^DK_TABS="3=wB:t3"$' "$d/.task.env"; grep -q 'tab 2 wB:t2 closed' "$d/process.md"
-  ! grep -q '^pane layout' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane layout' "$HERDR_STUB_LOG"
 }
 @test "dk_layout_even: herdr failure is swallowed; legacy rows are ignored" {
   d=$(fixture_task login x); export DK_TASK_DIR="$d"; dk_task_env
   printf 'a wB:p2\nb wB:p3 0 dev 1 2\n' > "$d/.panes"
-  HERDR_STUB_FAIL="pane layout" dk_layout_even 1; ! grep -q '^pane resize' "$HERDR_STUB_LOG"
+  HERDR_STUB_FAIL="pane layout" dk_layout_even 1; refute_grep -q '^pane resize' "$HERDR_STUB_LOG"
 }

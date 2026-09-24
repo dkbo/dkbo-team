@@ -22,7 +22,7 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 @test "downed kinds are skipped; all down exits 1 with the skip hint" {
   open_wave 1; sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex"/' "$d/.task.env"
   run dk-review --kinds "codex claude"; [ "$status" -eq 0 ]; [[ "$output" == *"review 1: login-reviewer-a(claude)" ]]; [[ "$output" == *"codex is down"* ]]
-  : > "$HERDR_STUB_LOG"; run dk-review --kinds codex; [ "$status" -eq 1 ]; [[ "$output" == *'review 1 skipped: all kinds down'* ]]; ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"; run dk-review --kinds codex; [ "$status" -eq 1 ]; [[ "$output" == *'review 1 skipped: all kinds down'* ]]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
 }
 @test "--task reviews the whole branch pack" {
   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
@@ -45,7 +45,7 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 @test "every spawn failing exits 1 without a spawn-failed process line" {
   open_wave 1
   HERDR_STUB_FAIL="agent start" run dk-review; [ "$status" -eq 1 ]
-  [[ "$output" == *"no reviewer spawned (dk-spawn failed for: claude)"* ]]; ! grep -q 'spawn-failed' "$d/process.md"; ! grep -q ' review 1 spawned' "$d/process.md"
+  [[ "$output" == *"no reviewer spawned (dk-spawn failed for: claude)"* ]]; refute_grep -q 'spawn-failed' "$d/process.md"; refute_grep -q ' review 1 spawned' "$d/process.md"
 }
 @test "reviewer tier defaults to DK_REVIEW_TIER (ships as L)" {
   open_wave 1; run dk-review; [ "$status" -eq 0 ]
@@ -65,7 +65,7 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 @test "a DK_REVIEW_TIER that is not M or L is refused, naming settings.env" {
   printf 'DK_REVIEW_TIER="S"\n' >> "$DK_ROOT/settings.env"
   open_wave 1; run dk-review
-  [ "$status" -eq 1 ]; [[ "$output" == *"settings.env"* ]]; ! grep -q '^agent start' "$HERDR_STUB_LOG"
+  [ "$status" -eq 1 ]; [[ "$output" == *"settings.env"* ]]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
 }
 @test "整枝評議帶累積的 Minor，逐波審查不帶" {
   open_wave 1

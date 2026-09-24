@@ -10,12 +10,12 @@ teardown() { teardown_project; }
 
 @test "dk_ver_ge compares versions numerically, without sort -V" {
   dk_ver_ge 0.10.0 0.9.0        # the trap: lexically "0.10.0" < "0.9.0"
-  ! dk_ver_ge 0.9.0 0.10.0
+  refute dk_ver_ge 0.9.0 0.10.0
   dk_ver_ge 0.9.0 0.9.0
   dk_ver_ge 1.0 0.9.9
-  ! dk_ver_ge 0.8.9 0.9.0
+  refute dk_ver_ge 0.8.9 0.9.0
   dk_ver_ge 0.9 0.9.0           # a missing component counts as 0
-  ! dk_ver_ge 0.9 0.9.1
+  refute dk_ver_ge 0.9 0.9.1
   dk_ver_ge 0.9.10 0.9.9
   dk_ver_ge 1.2.0-rc1 1.2.0     # a suffix is ignored, not treated as older
   dk_ver_ge 0.09.0 0.9.0        # a leading zero is decimal, not octal
@@ -100,7 +100,7 @@ teardown() { teardown_project; }
 @test "index add flattens newlines so a row never spans lines" {
   dk_index_add 2026-09-10 $'第一行\n第二行' chore working —
   grep -q '^| 2026-09-10 | 第一行 第二行 | chore | working | — |$' "$DK_ROOT/tasks/INDEX.md"
-  ! grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
+  refute_grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
 }
 
 # tripwire：printf 與 awk -v 都不把 & 當元字元，所以這條在今天不可能失敗 —— 它守的是
@@ -149,11 +149,11 @@ R
   dk_env_set DK_NEWKEY "a b"; grep -q '^DK_NEWKEY="a b"$' "$d/.task.env"
   dk_env_set DK_WAVE ""; grep -q '^DK_WAVE=""$' "$d/.task.env"
   dk_task_env; [ -z "$DK_WAVE" ]; [ "$DK_NEWKEY" = "a b" ]
-  run dk_env_set DK_X 'a"b'; [ "$status" -eq 1 ]; ! grep -q '^DK_X=' "$d/.task.env"
+  run dk_env_set DK_X 'a"b'; [ "$status" -eq 1 ]; refute_grep -q '^DK_X=' "$d/.task.env"
 }
 @test "dk_legacy_task detects a task folder without DK_BASE" {
   run dk_legacy_task; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
-  d=$(fixture_task login x); ! dk_legacy_task
+  d=$(fixture_task login x); refute dk_legacy_task
   sed -i '/^DK_BASE=/d' "$d/.task.env"; dk_legacy_task
 }
 @test "task.env template carries the new keys" {

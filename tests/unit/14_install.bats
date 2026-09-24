@@ -35,7 +35,7 @@ teardown() { teardown_project; }
 }
 @test "install skips CLAUDE.md line when it symlinks AGENTS.md" {
   echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; .dkbo/install.sh >/dev/null
-  ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
+  refute_grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
 }
 @test "README carries the one-shot install and update commands" {
   for needle in '.dkbo/install.sh' 'git add -A' '/dkbo-init' 'HERDR_ENV' 'herdr --version' 'dk-whoami' 'rsync' '--exclude=tasks' '--branch' 'dk-version'; do

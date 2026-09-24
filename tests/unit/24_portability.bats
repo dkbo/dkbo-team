@@ -19,7 +19,7 @@ bash4_hits() {
 
 @test "the three READMEs state the real dependency floors, not bash 5" {
   for f in README.md README.en.md .dkbo/README.md; do
-    ! grep -q 'bash 5' "$REPO_ROOT/$f" || { echo "$f still claims bash 5"; false; }
+    refute_grep -q 'bash 5' "$REPO_ROOT/$f" || { echo "$f still claims bash 5"; false; }
     grep -q 'bash 3.2' "$REPO_ROOT/$f" || { echo "$f does not state bash 3.2"; false; }
   done
   grep -q 'flock' "$REPO_ROOT/README.md"
