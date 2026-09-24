@@ -66,3 +66,4 @@
 2026-09-24T10:09 commit 5476c6c wave 2
 2026-09-24T10:09 ruling: [自主] 波 2 Minor 3 條不修、不記 BACKLOG — 前提實測：(( ! x ))／f() { ! …; } 在 tests 0 處（reviewer grep），碰到改寫即可且守門不留例外；{{FOO} 形狀 reviewer 直接呼叫 fixture_env_check 驗過回 1 並印 FOO；混合佔位符 rc 仍 1、setup 照紅，只少訊息 — 若錯代價：將來寫到 (( ! x )) 被 35 擋一次要改寫
 2026-09-24T14:22 gate3 approved
+2026-09-24T14:22 task-close merged d887626

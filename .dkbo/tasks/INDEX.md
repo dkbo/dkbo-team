@@ -6,5 +6,5 @@
 | 2026-09-20 | 多 repo workspace | task | done | merged b99690e |
 | 2026-09-22 | 任務改開 tab | task | done | merged 0a50f1f |
 | 2026-09-23 | 營運回饋修補（panova headermerge） | task | done | merged ccb5668 |
-| 2026-09-24 | 測試可信度 | task | running | — |
+| 2026-09-24 | 測試可信度 | task | done | merged d887626 |
 | 2026-09-24 | BACKLOG A–C 清理 | task | running | — |
