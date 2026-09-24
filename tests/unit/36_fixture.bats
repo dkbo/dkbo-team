@@ -12,6 +12,8 @@ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
   d=$(fixture_task login 使用者登入)
   [ "$(env_keys "$d/.task.env")" = "$(env_keys "$DK_ROOT/templates/task.env")" ]
   refute_grep -q '{{' "$d/.task.env"
+  # .task.env 會被 source：DK_*= 之外多出的雜行（例如 source common.sh 時印到 stdout 的字）也要擋
+  refute_grep -vE '^(DK_[A-Z_]*=|[[:space:]]*#|[[:space:]]*$)' "$d/.task.env"
 }
 
 @test "fixture 給的值：DK_SHORT 到 DK_BASE，LEADER_PANE 刻意空" {
@@ -34,6 +36,22 @@ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
   fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
   [ "$rc" -ne 0 ]
   grep -q 'PROBE' "$PROJECT/err"
+}
+
+@test "模板裡半截的佔位符 {{PROBE2：fixture_task 回非零，stderr 點名 PROBE2" {
+  echo 'DK_PROBE2="{{PROBE2"' >> "$DK_ROOT/templates/task.env"
+  local rc=0
+  fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
+  [ "$rc" -ne 0 ]
+  grep -q 'PROBE2' "$PROJECT/err"
+}
+
+@test "抽不出名字的 {{：fixture_task 回非零，stderr 印出那一行" {
+  echo 'DK_PROBE3="{{}"' >> "$DK_ROOT/templates/task.env"
+  local rc=0
+  fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
+  [ "$rc" -ne 0 ]
+  grep -qF 'DK_PROBE3="{{}"' "$PROJECT/err"
 }
 
 @test "setup 沒 source common.sh 時，fixture 的 .task.env 照樣非空、有 DK_SHORT=" {

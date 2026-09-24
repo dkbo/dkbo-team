@@ -119,14 +119,19 @@ fixture_task() { # $1=short $2=display —— setup_multirepo 跑過的話，照
   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
   echo "$d"
 }
-# fixture_task 的自檢：套完仍殘留 {{…}}，或少了模板裡的任一 DK_* 鍵，就把名字印到 stderr 並回 1。
+# fixture_task 的自檢：套完仍含 {{（{{FOO}、{{FOO 這種半截的也算），或少了模板裡的任一 DK_* 鍵，
+# 就印到 stderr 並回 1：能抽出佔位符名字的印名字，抽不出的印整行。
 # fixture 多半跑在 d=$(…) 裡，那裡沒有 set -e —— 不自己回非零，壞掉的 .task.env 會一路綠下去。
 fixture_env_check() { # TEMPLATE ENV_FILE
-  local k miss="" left
+  local k miss="" left="" line names
   for k in $(sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"); do
     grep -q "^$k=" "$2" || miss="$miss $k"
   done
-  left=$(grep -o '{{[^}]*}}' "$2" | tr -d '{}' | tr '\n' ' ' || true)
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    names=$(printf '%s\n' "$line" | grep -oE '[{][{][A-Za-z_][A-Za-z0-9_]*' | sed 's/^{{//' | tr '\n' ' ' || true)
+    left="$left${names:-$line }"
+  done <<< "$(grep '{{' "$2" || true)"
   [ -z "$miss" ] || echo "fixture_task: $2 缺鍵:$miss" >&2
   [ -z "$left" ] || echo "fixture_task: $2 殘留佔位符: $left" >&2
   [ -z "$miss$left" ]
