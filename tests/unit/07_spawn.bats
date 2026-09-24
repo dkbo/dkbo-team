@@ -273,3 +273,26 @@ down_claude() { # 讓 claude 在專案層熔斷到未來（epoch 現在+3600）
   start=$(grep '^agent start login-backend' "$HERDR_STUB_LOG")
   [[ "$start" != *"--name"* ]]
 }
+
+# 另一個行程拿著 .blocked/panes.lock（預設兩秒）；dk-spawn 若也拿同一把鎖就得等它放掉
+hold_panes_lock() {
+  mkdir -p "$1/.blocked"
+  ( flock 9; : > "$1/.blocked/held"; sleep "${2:-2}" ) 9>"$1/.blocked/panes.lock" >/dev/null 2>&1 3>&- &
+  for _ in $(seq 1 50); do [ -e "$1/.blocked/held" ] && break; sleep 0.1; done
+}
+@test "整枝評議 Minor②：spawn 的 append 與 --resume 刪舊列都拿 .blocked/panes.lock" {
+  hold_panes_lock "$d"
+  t0=$(date +%s); run dk-spawn backend; t1=$(date +%s)
+  [ "$status" -eq 0 ]; [ "$((t1 - t0))" -ge 1 ]
+  grep -q '^login-backend ' "$d/.panes"; [ ! -e "$d/.panes.lock" ]
+  # --resume 光量耗時分不出來：最後的 append 本身就會等鎖。改看持鎖期間舊列還在不在 ——
+  # 刪舊列若沒拿鎖，pane close 之後就立刻被 grep -v 掉了（reviewer 波 2 Minor 1）
+  sed -i 's/^login-backend [^ ]* /login-backend wC:p9 /' "$d/.panes"; old=wC:p9   # stub 會再發 wC:p2，舊列要分得出來
+  rm "$d/.blocked/held"; hold_panes_lock "$d" 3
+  dk-spawn backend --resume >/dev/null 2>&1 3>&- & pid=$!
+  sleep 1
+  grep -q "^login-backend $old " "$d/.panes"
+  wait "$pid"
+  [ "$(grep -c '^login-backend ' "$d/.panes")" -eq 1 ]
+  refute_grep -q "^login-backend $old " "$d/.panes"; grep -q "^pane close $old$" "$HERDR_STUB_LOG"
+}

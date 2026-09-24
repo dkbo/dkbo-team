@@ -48,7 +48,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   # worktree 與分支（原本在 05_task_new，0.10.0 起是 --run 的事）
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
   [ "$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD)" = dk/login ]
-  # 任務根 tab：開在任務所屬的 workspace（DK_WORKSPACE），label 是分支名
+  # 任務根 tab：開在人當下所在的 workspace（HERDR_WORKSPACE_ID，這裡與 DK_WORKSPACE 同為 wB），label 是分支名
   grep -q "^tab create --workspace wB --cwd $PROJECT --label dk/login --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1\$" "$HERDR_STUB_LOG"
   refute_grep '^workspace create' "$HERDR_STUB_LOG"
   refute_grep '^workspace get' "$HERDR_STUB_LOG"
@@ -81,12 +81,14 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   grep -q -- "--workspace wX " "$HERDR_STUB_LOG"
 }
 
-@test "--run: DK_WORKSPACE 原本非空就不被 HERDR_WORKSPACE_ID 改寫（Important 1 反面）" {
+@test "--run: DK_WORKSPACE 原本非空時以當下的 HERDR_WORKSPACE_ID 為準並回寫（Important 1 反面；bklog AC11 語意反轉）" {
+  # 0.16.0 起 tab 開在人叫 /dkbo-run 當下所在的 workspace（人拍板的語意反轉，ruling 2026-09-24T14:52）：
+  # 原本這條守的是「非空就不被改寫」，現在守的是它的反面
   mk   # HERDR_WORKSPACE_ID=wB 建立時已落盤 DK_WORKSPACE="wB"
   HERDR_WORKSPACE_ID="wZ" run dk-leader login --run; [ "$status" -eq 0 ]
-  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
-  grep -q -- "--workspace wB " "$HERDR_STUB_LOG"
-  refute_grep -- "--workspace wZ " "$HERDR_STUB_LOG"
+  grep -q '^DK_WORKSPACE="wZ"$' "$d/.task.env"
+  grep -q -- "--workspace wZ " "$HERDR_STUB_LOG"
+  refute_grep -- "--workspace wB " "$HERDR_STUB_LOG"
 }
 
 @test "--run: DK_WORKSPACE 與 HERDR_WORKSPACE_ID 都是空的就拒絕並說明要在 herdr 內跑（AC1）" {
@@ -351,4 +353,29 @@ S
   run dk-leader login --run; [ "$status" -eq 0 ]
   refute_grep '^tab create' "$HERDR_STUB_LOG"
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+}
+
+# ── bklog AC11：--run 的 tab 開在人當下所在的 workspace ───────────────────────
+@test "bklog AC11: HERDR_WORKSPACE_ID 與 DK_WORKSPACE 不同 → tab 開在當下的、回寫 DK_WORKSPACE 並記 process" {
+  mk   # 建立時落盤 DK_WORKSPACE="wB"；人後來換到 wZ 叫 /dkbo-run
+  HERDR_WORKSPACE_ID="wZ" run dk-leader login --run; [ "$status" -eq 0 ]
+  grep -q -- "^tab create --workspace wZ " "$HERDR_STUB_LOG"
+  refute_grep -- "--workspace wB " "$HERDR_STUB_LOG"
+  grep -q '^DK_WORKSPACE="wZ"$' "$d/.task.env"
+  grep -qF ' workspace wB → wZ（--run 開在當下所在的 workspace）' "$d/process.md"
+  [[ "$output" == *"workspace wB → wZ"* ]]
+}
+@test "bklog AC11: HERDR_WORKSPACE_ID 空時退回 DK_WORKSPACE，不記 workspace 行" {
+  mk
+  HERDR_WORKSPACE_ID="" run dk-leader login --run; [ "$status" -eq 0 ]
+  grep -q -- "^tab create --workspace wB " "$HERDR_STUB_LOG"
+  grep -q '^DK_WORKSPACE="wB"$' "$d/.task.env"
+  refute_grep -F ' workspace wB → ' "$d/process.md"
+}
+@test "bklog AC11: 兩者相同時不回寫也不記 process" {
+  mk
+  run dk-leader login --run; [ "$status" -eq 0 ]   # setup 的 HERDR_WORKSPACE_ID=wB
+  grep -q -- "^tab create --workspace wB " "$HERDR_STUB_LOG"
+  refute_grep -F '（--run 開在當下所在的 workspace）' "$d/process.md"
+  refute_grep -qF '→' <<< "$output"
 }

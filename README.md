@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.15.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.16.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -33,7 +33,7 @@
 
 1. 你叫 `/dkbo-plan`，對它說「開任務 login，顯示名『使用者登入』，需求是…」。
 2. 領導寫 `brief.md`：目標、驗收標準、檔案所有權、共用契約、波次表（每列一位成員，標 S/M/L 難度）。`dk-brief-check` 過了才進入審查。接著 `dk-brief-review` 派 2 到 3 個不同 kind 讀需求原文與 brief，領導裁定並改完 brief，才把三份（需求原文、brief、裁定摘要）給你確認。這是**關卡①**。
-3. 你叫 `/dkbo-run`：`dk-leader <short> --run` 這一刻才把任務「實體化」——依 `DK_REPOS`（多 repo 專案，見 [.dkbo/README.md](.dkbo/README.md)）各切一個 worktree、在任務所屬的 workspace（`.task.env` 的 `DK_WORKSPACE`，計畫時記下；空時退回 `HERDR_WORKSPACE_ID`）開一個 label `dk/<short>` 的新 tab，並在它的根 pane 起執行領導交棒，你的 session 空出來可以開下一個任務。每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔（多 repo 時所有權與 `touched` 帶 `<名>:` 前綴），做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
+3. 你叫 `/dkbo-run`：`dk-leader <short> --run` 這一刻才把任務「實體化」——依 `DK_REPOS`（多 repo 專案，見 [.dkbo/README.md](.dkbo/README.md)）各切一個 worktree、在你叫 `/dkbo-run` 當下所在的 workspace（`HERDR_WORKSPACE_ID`；空時退回 `.task.env` 的 `DK_WORKSPACE`，兩者不同時回寫它）開一個 label `dk/<short>` 的新 tab，並在它的根 pane 起執行領導交棒，你的 session 空出來可以開下一個任務。每一波：`dk-wave-open` 切出每位成員的 brief 切片，`dk-spawn` 開 pane 並下第一段提示。員工只能改自己所有權內的檔（多 repo 時所有權與 `touched` 帶 `<名>:` 前綴），做完寫 state 與 report，`dk-msg leader "[DONE] …"`。
 4. dev DONE 後領導 `dk-review-pack` 打包差異、`dk-review` 派 reviewer；reviewer 與 qa 並行。有 Important 就轉 BUG 給 dev，同一個 bug 修一次沒好就升報。
 5. 員工碰到選擇題、要動別人的檔、上下文吃緊，一律 `[ESCALATE]`。領導能依 brief 判的就下 `[DECISION]` 並記 ruling；brief 判不了的也由領導自己裁定（記成 `ruling: [自主] …`），**`/dkbo-run` 開跑後不停下來問你**，你睡覺時任務照常跑完。修不好的問題照熔斷器 park 或用最小改法繞過，不讓整個任務卡住。
 6. qa DONE 且審查裁定完成，`dk-wave-close`：四道閘 —— 裁定行、每位 dev 的 `## 測試`、`DK_TEST_CMD`、真實 diff 的越界比對 —— 缺一不放行，然後關 pane 並在 worktree 內 commit（`-m` 可指定訊息）。
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.15.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.16.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
@@ -85,17 +85,17 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-task-new` / `dk-brief-check` | 只建任務目錄（不切 worktree，`/dkbo-run` 交棒時才實體化）；brief 的機械檢查 |
 | `dk-brief-review` | 開工前派 1 到 3 位 reviewer 審 brief 與需求原文（AI 閘，關卡①前的第二道） |
 | `dk-wave-open N` / `dk-spawn <角色>` | 開一波、切成員切片（`--refresh` 依當下 brief 重產第 N 波所有成員的切片、重算逾時）；開員工 pane 並下提示 |
-| `dk-kind [status]` / `dk-kind up <k>` | 列出專案層熔斷的 kind 與恢復時間；解除一個 kind 的熔斷 |
+| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <文字>]` | 列出專案層熔斷的 kind 與恢復時間；解除一個 kind 的熔斷；從其他來源確認額度耗盡時手動登記（沒給 `--until` 就猜現在＋5 小時） |
 | `dk-msg <對象> "[類型] 內文"` | 等對方閒置再送訊息，記進 messages.log |
 | `dk-review-pack N` / `dk-review` | 打包差異；派 1 到 3 位 reviewer |
 | `dk-wave-close` | 四道閘後關 pane，並在 worktree 內 commit 這一波 |
 | `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息，含任務／本波已進行時長與每位員工等了幾分鐘） |
 | `dk-timeline` | 只讀 process.md 算整張時間表（任務、計畫、每波的 dev 與審查、結案），結案時由 `dk-task-close` 附進 report.md |
-| `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done |
+| `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done；任務 tab 不自動關（最後一行印 `herdr tab close <id>`，看完 report 自己關） |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
 | `dk-chore-tidy` | 雜務檔歸位到日期資料夾、`messages.log` 歸檔（沒有雜務在跑時） |
-| `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
-| `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；`--run` 實體化任務（依 `DK_REPOS` 切 worktree、在任務所屬的 workspace（`.task.env` 的 `DK_WORKSPACE`，計畫時記下）開任務 tab）並交棒給該 tab 根 pane 的執行領導；印版本 |
+| `dk-watch` | 背景守望：員工卡審批推 `[BLOCKED]`，reviewer 逾時推 `[TIMEOUT]` 並熔斷該 kind（仍在工作的只提醒、不熔斷），dev／qa 閒置太久沒交也推 `[TIMEOUT]`（不熔斷）。`--ensure` 幂等重啟（spawn／wave-open／resume 都會呼叫），`--chores` 是雜務那一側的守望 |
+| `dk-leader` / `dk-version` | 開第二位領導（kind 取 `DK_LEADER_KIND`，檔位取該 kind 的 L）；`--run` 實體化任務（依 `DK_REPOS` 切 worktree、在你叫 `/dkbo-run` 當下所在的 workspace 開任務 tab）並交棒給該 tab 根 pane 的執行領導；印版本 |
 
 ## 目錄
 

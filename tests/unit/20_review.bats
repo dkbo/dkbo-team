@@ -15,7 +15,8 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 @test "wave table kinds: beat settings; --kinds beats both; cap is 3" {
   open_wave 2
   run dk-review; [ "$status" -eq 0 ]; [[ "$output" == *"login-reviewer-a(claude) login-reviewer-b(codex)" ]]
-  : > "$HERDR_STUB_LOG"; run dk-review --kinds "agy" 2; [ "$status" -eq 0 ]; [[ "$output" == "review 2: login-reviewer-a(agy)" ]]; grep -q -- '--kind agy' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"; run dk-review --kinds "agy" 2; [ "$status" -eq 0 ]; [[ "$output" == "review 2: login-reviewer-a(claude) login-reviewer-b(codex) login-reviewer-c(agy)" ]]; grep -q -- '--kind agy' "$HERDR_STUB_LOG"
+  [ "$(grep ' review 2 spawned ' "$d/process.md" | tail -1 | sed 's/^[^ ]* //')" = "review 2 spawned login-reviewer-a(claude) login-reviewer-b(codex) login-reviewer-c(agy)" ]   # AC4：同波補派拿下一個別名、名單累加
   : > "$HERDR_STUB_LOG"; run dk-review --kinds "claude codex agy claude" --tier L; [ "$status" -eq 0 ]
   [ "$(grep -c '^agent start login-reviewer-' "$HERDR_STUB_LOG")" -eq 3 ]; grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
 }
@@ -77,4 +78,37 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
   run dk-review --task; [ "$status" -eq 0 ]
   grep -q '變數命名不一致' "$d/briefs/reviewer-a.md"
+}
+
+# --- 0.16.0 AC4（#26）：同一個 label 補派 reviewer ---------------------------------
+# 原本第二次 dk-review 會從 a 重新取名：dk-spawn 在已有的 login-reviewer-a 身上再開一個，
+# 而新的 spawned 行只列這一次的名單，dk-wave-close 只讀最後一行，第一位從此沒人收。
+@test "AC4: 同一波補派 → 別名跳過已派的、spawned 行累加、第一位的 pane 不被關" {
+  open_wave 1
+  run dk-review --kinds claude; [ "$status" -eq 0 ]; [ "$output" = "review 1: login-reviewer-a(claude)" ]
+  : > "$HERDR_STUB_LOG"
+  run dk-review --kinds agy; [ "$status" -eq 0 ]
+  [ "$output" = "review 1: login-reviewer-a(claude) login-reviewer-b(agy)" ]
+  grep -q '^agent start login-reviewer-b --kind agy ' "$HERDR_STUB_LOG"
+  refute_grep '^agent start login-reviewer-a ' "$HERDR_STUB_LOG"
+  refute_grep '^pane close' "$HERDR_STUB_LOG"
+  [ "$(grep ' review 1 spawned ' "$d/process.md" | tail -1 | sed 's/^[^ ]* //')" = "review 1 spawned login-reviewer-a(claude) login-reviewer-b(agy)" ]
+  [ -f "$d/briefs/reviewer-b.md" ]
+}
+@test "AC4: 別名池擴到 a–f；不同 label（別的波）各算各的" {
+  open_wave 1
+  dk-review --kinds "claude codex agy" >/dev/null
+  run dk-review --kinds "claude codex agy"; [ "$status" -eq 0 ]
+  [[ "$output" == *"login-reviewer-d(claude) login-reviewer-e(codex) login-reviewer-f(agy)" ]]
+  run dk-review --kinds "claude codex"; [ "$status" -eq 1 ]; [[ "$output" == *"別名"* ]]
+  mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
+  run dk-review --task --kinds claude; [ "$status" -eq 0 ]; [ "$output" = "review task: login-reviewer-a(claude)" ]
+}
+@test "bklog Minor①: 別名用完的提示寫明關 pane 不會把別名還回來、只留 skipped 的出路" {
+  open_wave 1
+  dk-review --kinds "claude codex agy" >/dev/null; dk-review --kinds "claude codex agy" >/dev/null
+  run dk-review --kinds claude; [ "$status" -eq 1 ]
+  [[ "$output" == *"關 pane 不會把別名還回來"* ]]
+  [[ "$output" == *'dk-process "review 1 skipped: <理由>"'* ]]
+  refute_grep -q 'dk-wave-close --agent' <<< "$output"
 }

@@ -66,3 +66,32 @@ T
   grep -q '<名>:' "$DK_ROOT/templates/brief.md"
   grep -q 'DK_REPOS' "$DK_ROOT/templates/brief.md"
 }
+
+@test "AC12: 員工首段提示的 state 行數規則是「touched 清單以外 ≤20 行」" {
+  . "$DK_ROOT/lib/prompt.sh"
+  out=$(dk_first_prompt login-backend backend "$d" "$d/state/backend.md" 0 "$d/briefs/backend.md" "$d/state/backend.report.md")
+  [[ "$out" == *"你的 state 檔是 $d/state/backend.md（touched 清單以外 ≤20 行，每完成一個子步驟就覆寫）"* ]]
+}
+
+@test "bklog AC9: dk_brief_md_rows 跳脫感知地挑列、拼回 markdown 列" {
+  rows=$(printf '%s\n' '1|實作|backend|a \| b|M|過|預設' '1|實作|qa|x|S|過|' '2|實作|backend|y|S|過|')
+  # 按欄位值挑列：\| 不算分隔，所以第 5 欄仍是難度
+  [ "$(printf '%s\n' "$rows" | dk_brief_md_rows 7 1 1 3 backend)" = '| 1 | 實作 | backend | a \| b | M | 過 | 預設 |' ]
+  [ "$(printf '%s\n' "$rows" | dk_brief_md_rows 7 5 M)" = '| 1 | 實作 | backend | a \| b | M | 過 | 預設 |' ]
+  # 只取前 N 欄（所有權表的獨佔資源欄不進切片）
+  [ "$(printf '%s\n' 'backend|src/**|a\|b|db' | dk_brief_md_rows 3 1 backend)" = '| backend | src/** | a\|b |' ]
+  [ -z "$(printf '%s\n' "$rows" | dk_brief_md_rows 7 1 9)" ]
+}
+@test "bklog AC9: 做什麼欄的 \| 不讓 wave_members 的難度錯位" {
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M |#| 1 | 實作 | backend | a\\|b | M |#' "$b"
+  [ "$(dk_brief_wave_members "$b" 1 | tr '\n' ' ')" = "backend(M) qa(S) " ]
+  [ "$(dk_brief_wave_review "$b" 1)" = "預設" ]
+}
+
+@test "bklog AC10: templates/brief.md 的共用契約說明句講得出 <成員>@波<N>" {
+  dk_brief_section "$DK_ROOT/templates/brief.md" "## 共用契約" | grep -q '^（一列一個契約。.*`<成員>@波<N>`'
+}
+@test "bklog Minor②: dk_brief_ncols 印欄數（\| 不算分隔），再附上指定欄的值" {
+  [ "$(printf '%s\n' 'a|b\|c|d' | dk_brief_ncols)" = 3 ]
+  [ "$(printf '%s\n' 'a|b\|c|d' 'x|y' | dk_brief_ncols 1 2)" = "$(printf '3\ta\tb\\|c\n2\tx\ty')" ]
+}

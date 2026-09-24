@@ -302,3 +302,41 @@ multirepo_close() {
   grep -qE ' commit [0-9a-f]{7} wave 1 repo api$' "$d/process.md"
   refute_grep ' repo main$' "$d/process.md"
 }
+
+@test "AC12: state 行數不計 touched 清單項——24 項＋其他 10 行不警告" {
+  { printf 'status: done\nwave: 1\ncurrent: x\ntouched:\n'
+    for i in $(seq 1 24); do printf '  - src/api/f%s.ts\n' "$i"; done
+    for i in $(seq 1 6); do printf 'notes: line %s\n' "$i"; done; } > "$d/state/backend.md"
+  [ "$(grep -vc '^  - ' "$d/state/backend.md")" -eq 10 ]   # 前提：清單以外剛好 10 行
+  run dk-wave-close --force; [ "$status" -eq 0 ]
+  refute_grep -q 'state too long' <<< "$output"
+}
+@test "AC12: touched 以外 21 行照樣警告（清單以外的 '  - ' 行照算）" {
+  { printf 'status: done\nwave: 1\ntouched:\n  - src/api/login.ts\ntodo:\n'
+    for i in $(seq 1 3); do printf '  - todo %s\n' "$i"; done
+    for i in $(seq 1 14); do printf 'notes: line %s\n' "$i"; done; } > "$d/state/backend.md"
+  [ "$(grep -vc '^  - src/' "$d/state/backend.md")" -eq 21 ]   # 前提：touched 清單以外 21 行
+  run dk-wave-close --force; [ "$status" -eq 0 ]
+  [[ "$output" == *"dk-wave-close: state too long: $d/state/backend.md"* ]]
+}
+
+hold_panes_lock() {
+  mkdir -p "$1/.blocked"
+  ( flock 9; : > "$1/.blocked/held"; sleep 2 ) 9>"$1/.blocked/panes.lock" >/dev/null 2>&1 3>&- &
+  for _ in $(seq 1 50); do [ -e "$1/.blocked/held" ] && break; sleep 0.1; done
+}
+@test "整枝評議 Minor②：--agent 改寫 .panes 前拿 .blocked/panes.lock" {
+  hold_panes_lock "$d"
+  t0=$(date +%s); run dk-wave-close --agent login-qa; t1=$(date +%s)
+  [ "$status" -eq 0 ]; [ "$((t1 - t0))" -ge 1 ]
+  refute_grep -q '^login-qa ' "$d/.panes"; [ ! -e "$d/.panes.lock" ]
+}
+@test "整枝評議 Minor③：裁定行的別名要詞界比對，note:／if: 不算交代了 e／f" {
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 spawned login-reviewer-a(claude) login-reviewer-e(codex) login-reviewer-f(agy)" >> "$d/process.md"
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok note: 見 report if: 無" >> "$d/process.md"
+  run dk-wave-close; [ "$status" -eq 1 ]
+  [[ "$output" == *"reviewer e"* ]]; [[ "$output" == *"reviewer f"* ]]
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok e: ok f: skipped (limit) note: 見 report" >> "$d/process.md"
+  run dk-wave-close; [ "$status" -eq 0 ]
+}

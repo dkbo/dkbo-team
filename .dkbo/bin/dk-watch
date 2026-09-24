@@ -218,6 +218,51 @@ dev_delivered() { # AGENT SNAME — 這一波真的交了嗎
   : > "$latch"
 }
 
+# 0.16.0 AC2（#10）：dev 與 qa 閒置未交。它們不在 reviewer 逾時的名單上，idle 卻沒交就只剩整波
+# 逾時一個出口。門檻刻意沿用 DK_REVIEW_TIMEOUT_MIN：這裡只算 idle／done 的時間，工作中的不算。
+# 只提醒、永不熔斷 kind —— 閒著不是額度問題。標記 .idle 存當時的 .panes 第 3 欄，同一個 epoch
+# 只推一次；被重新指派（epoch 變了）自動重新武裝，不必 dk-msg 來清。
+# 計時起點：dev＝最後一次送達指派的 epoch；qa＝max(它的 epoch, 本波聚合的 at=)，還沒聚合不計時
+# ——qa 與 dev 同時開工，等 dev 的 [DONE] 是它的正常閒置。畫面已說話（.blocked／.limit 標記在）的
+# 不重複吵：領導已經收過 [BLOCKED]／[LIMIT]。
+idle_check() { # NOW LIST
+  local now="$1" list="$2" agent epoch group st start at sf rd m mins
+  while read -r agent _pane epoch group _; do
+    [[ "${epoch:-}" =~ ^[0-9]+$ ]] || continue
+    case "${group:-}" in
+      dev) ;;
+      review) [[ "$agent" == *-reviewer-* || "$agent" == *-reviewer ]] && continue ;;
+      *) continue ;;
+    esac
+    st=$(agent_status "$agent" "$list")
+    [ "$st" = idle ] || [ "$st" = "done" ] || continue
+    [ -f "$dir/.blocked/$agent" ] || [ -f "$dir/.blocked/$agent.limit" ] && continue
+    sf="$dir/state/${agent#"$DK_SHORT"-}.md"
+    if [ "$group" = dev ]; then
+      dev_delivered "$agent" "${agent#"$DK_SHORT"-}" && continue
+      start="$epoch"
+    else
+      rd="$dir/.blocked/$agent.redispatch"   # 與 reviewer 逾時同一個判準
+      if [ -f "$sf" ] && grep -q '^status: done' "$sf" \
+         && { [ ! -f "$rd" ] || [ "$(cksum < "$sf")" != "$(cat "$rd")" ]; }; then continue; fi
+      at=$(sed -n 's/^at=//p' "$dir/.blocked/wave-$DK_WAVE.devdone" 2>/dev/null | head -1 || true)   # 還沒聚合就沒這個檔
+      [[ "$at" =~ ^[0-9]+$ ]] || continue
+      start="$epoch"; [ "$at" -gt "$start" ] && start="$at"
+    fi
+    [ $((now - start)) -gt $((DK_REVIEW_TIMEOUT_MIN * 60)) ] || continue
+    m="$dir/.blocked/$agent.idle"
+    if [ "$(head -1 "$m" 2>/dev/null)" = "$epoch" ]; then
+      grep -q '^delivered$' "$m" && continue
+      mins=$(sed -n 's/^min=//p' "$m" | head -1)   # 重試沿用第一次的分鐘數，訊息才一致
+    else
+      mins=$(( (now - start) / 60 ))
+      dk_process "idle $agent ${mins}min"; printf '%s\nmin=%s\n' "$epoch" "$mins" > "$m"
+    fi
+    if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" \
+         "[TIMEOUT] from dk-watch: $agent 閒置 $mins 分鐘未交（state 不是這一輪的 done）"; then echo delivered >> "$m"; fi
+  done < "$dir/.panes"
+}
+
 tick() {
   [ -f "$dir/.panes" ] || exit 0
   local now list; now=$(date +%s); list=$(dk_h_soft agent list) || return 0
@@ -244,17 +289,27 @@ tick() {
       if [ -f "$sf" ] && grep -q '^status: done' "$sf" \
          && { [ ! -f "$rd" ] || [ "$(cksum < "$sf")" != "$(cat "$rd")" ]; }; then continue; fi
       [ $((now - epoch)) -gt $((DK_REVIEW_TIMEOUT_MIN * 60)) ] || continue
+      # 0.16.0 AC1（#16）：herdr 明說 working 就不是掛了，是在寫長報告 —— 熔斷它會把還能用的 kind
+      # 也關掉。只提醒一次（標記存這一輪的 epoch，重新指派自動重新武裝），
+      # 等它不再 working 且仍未交，下一 tick 才落到下面既有的熔斷。status 拿不到照既有行為。
+      if [ "$(agent_status "$agent" "$list")" = working ]; then
+        wm="$dir/.blocked/$agent.working"
+        if [ "$(head -1 "$wm" 2>/dev/null)" != "$epoch" ]; then
+          dk_process "timeout $agent working (no kind down)"; echo "$epoch" > "$wm"
+        fi
+        grep -q '^delivered$' "$wm" && continue
+        if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" "[TIMEOUT] from dk-watch: $agent 逾時但仍在工作（未熔斷）"; then echo delivered >> "$wm"; fi
+        continue
+      fi
       kind=$(agent_kind "$agent")
       tag=""
-      # agent_status 前提（AC2）：working 就不看畫面，畫面上的字是它的工作內容
-      if [ "$(agent_status "$agent" "$list")" != working ]; then
-        txt=$(pane_text "$agent")
-        # 它不是掛了，是在等人按一下 —— 主迴圈的 assess 已經送過 [BLOCKED]，這裡只要不熔斷
-        screen_hits "$txt" "$(dk_kind_re "$kind" block)" && continue
-        # 標記走該 kind 自己的額度式子，不另寫一條。原本那條裸 `quota` 會把 agy 的啟動橫幅
-        # `bal@host (Antigravity Starter Quota)` 標成疑似撞額度，領導會去換 kind 而不是去看它卡在哪。
-        screen_hits "$txt" "$(dk_kind_re "$kind" quota)" && tag=" (quota?)"
-      fi
+      # 走到這裡 agent_status 已不是 working（AC1 那段先攔了），畫面上的字才算證據
+      txt=$(pane_text "$agent")
+      # 它不是掛了，是在等人按一下 —— 主迴圈的 assess 已經送過 [BLOCKED]，這裡只要不熔斷
+      screen_hits "$txt" "$(dk_kind_re "$kind" block)" && continue
+      # 標記走該 kind 自己的額度式子，不另寫一條。原本那條裸 `quota` 會把 agy 的啟動橫幅
+      # `bal@host (Antigravity Starter Quota)` 標成疑似撞額度，領導會去換 kind 而不是去看它卡在哪。
+      screen_hits "$txt" "$(dk_kind_re "$kind" quota)" && tag=" (quota?)"
       herdr notification show "dkbo: $agent timeout" --body "reviewer 逾時${tag}，該 kind 已熔斷" --sound request >/dev/null 2>&1 </dev/null || true
       # 熔斷與事件紀錄不等領導：這是任務狀態的改變，領導收不收得到訊息都一樣成立
       if [ -n "$kind" ] && [[ " ${DK_KIND_DOWN:-} " != *" $kind "* ]]; then
@@ -282,13 +337,16 @@ tick() {
     if [ "$cnt" -gt 0 ] && [ "$all" = 1 ]; then
       m="$dir/.blocked/wave-$DK_WAVE.devdone"
       if ! { [ -f "$m" ] && grep -q '^delivered$' "$m"; }; then
-        if [ ! -f "$m" ]; then dk_process "dev-done wave $DK_WAVE ($cnt: $devs)"; echo notified > "$m"; fi
+        # at= 是 qa 閒置計時的起點（AC2）；不用 mtime，delivered 行的追加會改掉它
+        if [ ! -f "$m" ]; then dk_process "dev-done wave $DK_WAVE ($cnt: $devs)"; printf 'notified\nat=%s\n' "$now" > "$m"; fi
         if notify_leader "$(dk_leader_name)" "${DK_LEADER_PANE:-${DK_ROOT_PANE:-}}" \
              "[DONE] from dk-watch: wave $DK_WAVE dev 全員完成（$cnt 位：$devs）→ dk-review-pack $DK_WAVE"; then
           echo delivered >> "$m"; fi
       fi
     fi
   fi
+
+  [ -z "${DK_WAVE:-}" ] || idle_check "$now" "$list"
 
   # 整波逾時：員工沒 blocked、reviewer 也沒逾時，但這一波就是卡著不動的情況
   if [ -n "${DK_WAVE:-}" ] && [[ "${DK_WAVE_TIMEOUT_MIN:-0}" =~ ^[0-9]+$ ]] && [ "${DK_WAVE_TIMEOUT_MIN:-0}" -gt 0 ] \

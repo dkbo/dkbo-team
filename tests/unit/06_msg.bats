@@ -69,7 +69,7 @@ teardown() { teardown_project; }
   # 實跑中三筆 [TASK] 就這樣全滅，reviewer-b 整場沒收到工作還被記成「codex down」。
   d="$DK_ROOT/tasks/$(date +%F)-login"
   printf 'login-reviewer-a wB:pT 0 review 1 2\n' > "$d/.panes"
-  HERDR_STUB_MISSING="reviewer-a" run dk-msg reviewer-a "[TASK] 對 AC1–AC8 逐條"
+  DK_MSG_BG=1 HERDR_STUB_MISSING="reviewer-a" run dk-msg reviewer-a "[TASK] 對 AC1–AC8 逐條"
   [ "$status" -eq 0 ]
   grep -q '^agent prompt login-reviewer-a \[TASK\] from leader-login: 對 AC1–AC8 逐條$' "$HERDR_STUB_LOG"
   grep -Eq '^[0-9T:-]+ leader-login -> login-reviewer-a \[TASK\] ' "$d/messages.log"
@@ -189,7 +189,7 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
 
 @test "[TASK] 送達後重設該列的 epoch，其餘欄位與其餘列一字不改" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
-  run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 複看第二輪"
   [ "$status" -eq 0 ]
   now=$(date +%s); [ "$(epoch_of "$d" login-reviewer-a)" -ge "$((now - 10))" ]
   [ "$(awk '$1=="login-reviewer-a"{print $2, $4, $5, $6}' "$d/.panes")" = "wC:p4 review 1 3" ]
@@ -198,7 +198,7 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
 
 @test "送不到的 [TASK] 不重設 epoch：卡住的員工不能被藏起來" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
-  HERDR_STUB_MISSING="login-reviewer-a wC:p4" DK_MSG_TRIES=2 DK_MSG_RETRY_SEC=0 \
+  DK_MSG_BG=1 HERDR_STUB_MISSING="login-reviewer-a wC:p4" DK_MSG_TRIES=2 DK_MSG_RETRY_SEC=0 \
     run dk-msg login-reviewer-a "[TASK] 複看第二輪"
   [ "$status" -eq 1 ]
   [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
@@ -214,7 +214,7 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
 
 @test "AC16: [BUG] 也開啟新的一輪（領導轉 reviewer Important 給 dev）" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
-  run dk-msg login-reviewer-a "[BUG] 重現方式見 report"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[BUG] 重現方式見 report"
   [ "$status" -eq 0 ]
   now=$(date +%s); [ "$(epoch_of "$d" login-reviewer-a)" -ge "$((now - 10))" ]
   [ -f "$d/.blocked/login-reviewer-a.redispatch" ]
@@ -224,7 +224,7 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
   printf 'status: done\n' > "$d/state/reviewer-a.md"
   mkdir -p "$d/.blocked"; printf 'notified\ndelivered\n' > "$d/.blocked/login-reviewer-a.timeout"
-  run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 複看第二輪"
   [ "$status" -eq 0 ]
   [ ! -f "$d/.blocked/login-reviewer-a.timeout" ]
   [ "$(cat "$d/.blocked/login-reviewer-a.redispatch")" = "$(cksum < "$d/state/reviewer-a.md")" ]
@@ -232,7 +232,7 @@ rv_panes() { printf 'login-reviewer-a wC:p4 100 review 1 3\nlogin-frontend wC:p2
 
 @test "指派時還沒有 state 檔：標記留空，之後出現的 state 就算這一輪寫的" {
   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
-  run dk-msg login-reviewer-a "[TASK] 第一次派工"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 第一次派工"
   [ "$status" -eq 0 ]
   [ -f "$d/.blocked/login-reviewer-a.redispatch" ]
   [ ! -s "$d/.blocked/login-reviewer-a.redispatch" ]
@@ -401,4 +401,156 @@ state_ok() { # DIR — 一份合法的 dev state
   printf 'status: done\n' > "$d/state/qa.md"
   DK_AGENT=login-qa run dk-msg leader "[DONE] 驗收全過"
   [ "$status" -eq 0 ]
+}
+
+# --- AC6（#23、#3）：重派已交付的 dev，聚合要等他這一輪再交一次 ---
+
+wait_log() { # PATTERN FILE — 等背景那一份寫進 log（最多 5 秒）
+  for _ in $(seq 1 50); do grep -q "$1" "$2" 2>/dev/null && return 0; sleep 0.1; done; return 1
+}
+delivered_wave() { # DIR — 兩個 dev 都已交付、波 1 的聚合已推過
+  local now; now=$(date +%s)
+  printf 'login-backend wC:p2 %s dev 1 1\nlogin-frontend wC:p5 %s dev 1 2\nlogin-qa wC:p3 %s review 1 3\n' \
+    "$now" "$now" "$now" > "$1/.panes"
+  sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$1/.task.env"
+  printf 'status: done\n' > "$1/state/backend.md"; printf 'status: done\n' > "$1/state/frontend.md"
+  DK_TASK_DIR="$1" dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"
+}
+
+@test "AC6: 已交付的 dev 被 [TASK] 後不推聚合，改寫 state 為 done 後推一次" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; delivered_wave "$d"
+  [ -f "$d/.blocked/wave-1.backend.done" ]; [ -f "$d/.blocked/wave-1.devdone" ]
+  run dk-msg login-backend "[TASK] 補錯誤碼"
+  [ "$status" -eq 0 ]
+  wait_log 'leader-login -> login-backend \[TASK\]' "$d/messages.log"
+  [ ! -f "$d/.blocked/wave-1.backend.done" ]
+  [ ! -f "$d/.blocked/wave-1.devdone" ]
+  [ -f "$d/.blocked/wave-1.frontend.done" ]   # 沒被重派的夥伴不動
+  [ "$(cat "$d/.blocked/login-backend.spawn")" = "$(cksum < "$d/state/backend.md")" ]
+  DK_TASK_DIR="$d" dk-watch --once
+  refute_grep '全員完成' "$HERDR_STUB_LOG"
+  printf 'status: done\nnotes: 錯誤碼補好了\n' > "$d/state/backend.md"
+  DK_TASK_DIR="$d" dk-watch --once; DK_TASK_DIR="$d" dk-watch --once
+  [ "$(grep -c '全員完成' "$HERDR_STUB_LOG")" -eq 1 ]
+}
+
+@test "AC6: 已交付的 dev 收到的 [TASK] 尾端附「你已交付過」" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; delivered_wave "$d"
+  run dk-msg login-backend "[TASK] 補錯誤碼"
+  [ "$status" -eq 0 ]
+  wait_log 'leader-login -> login-backend \[TASK\]' "$d/messages.log"
+  grep -q '^agent prompt login-backend \[TASK\] from leader-login: 補錯誤碼（你已交付過：做完先改寫 state 再回 \[FIXED\]）$' "$HERDR_STUB_LOG"
+}
+
+@test "AC6: 還沒交付的 dev 與已交付的 qa 都不附尾註" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; delivered_wave "$d"
+  printf 'status: working\n' > "$d/state/frontend.md"; printf 'status: done\n' > "$d/state/qa.md"
+  run dk-msg login-frontend "[BUG] 空密碼未擋"; [ "$status" -eq 0 ]
+  run dk-msg login-qa "[TASK] 再驗一次"; [ "$status" -eq 0 ]
+  wait_log 'leader-login -> login-frontend \[BUG\]' "$d/messages.log"
+  wait_log 'leader-login -> login-qa \[TASK\]' "$d/messages.log"
+  grep -q '^agent prompt login-frontend \[BUG\] from leader-login: 空密碼未擋$' "$HERDR_STUB_LOG"
+  grep -q '^agent prompt login-qa \[TASK\] from leader-login: 再驗一次$' "$HERDR_STUB_LOG"
+  refute_grep '已交付過' "$HERDR_STUB_LOG"
+}
+
+# --- AC5（#14）：領導送給員工的指派型訊息一律背景送，領導不再卡在「等對方閒下來」 ---
+
+gate_herdr() { # 在 PATH 前面墊一層：agent wait 要等 $BATS_TEST_TMPDIR/open 出現才放行（最多 10 秒）
+  mkdir -p "$BATS_TEST_TMPDIR/gate"
+  cat > "$BATS_TEST_TMPDIR/gate/herdr" <<SH
+#!/usr/bin/env bash
+if [ "\$1 \$2" = "agent wait" ]; then
+  echo "\$3" >> "$BATS_TEST_TMPDIR/gate/waits"
+  for _ in \$(seq 1 100); do [ -f "$BATS_TEST_TMPDIR/open" ] && break; sleep 0.1; done
+fi
+exec "$REPO_ROOT/tests/stub/herdr" "\$@"
+SH
+  chmod +x "$BATS_TEST_TMPDIR/gate/herdr"
+  export PATH="$BATS_TEST_TMPDIR/gate:$PATH"
+}
+
+@test "AC5: 領導的 [TASK] 當場返回並印背景提示，送達之後才 redispatch" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"; gate_herdr
+  run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  [ "$output" = "dk-msg: 改在背景等 login-reviewer-a 閒下來再送（結果記在 messages.log），你直接往下做" ]
+  [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
+  [ ! -f "$d/.blocked/login-reviewer-a.redispatch" ]
+  refute_grep -q '^agent prompt' "$HERDR_STUB_LOG"
+  : > "$BATS_TEST_TMPDIR/open"
+  wait_log 'leader-login -> login-reviewer-a \[TASK\] 複看第二輪' "$d/messages.log"
+  grep -q '^agent prompt login-reviewer-a \[TASK\] from leader-login: 複看第二輪$' "$HERDR_STUB_LOG"
+  now=$(date +%s); [ "$(epoch_of "$d" login-reviewer-a)" -ge "$((now - 10))" ]
+  [ -f "$d/.blocked/login-reviewer-a.redispatch" ]
+}
+
+@test "AC5: DECISION／STOP／BUG 也背景送；送給雜務與員工互傳照常前景" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  for t in DECISION STOP BUG; do
+    run dk-msg login-frontend "[$t] x"; [ "$status" -eq 0 ]; [[ "$output" == *"改在背景"* ]]
+  done
+  run dk-msg login-reviewer-a "[ANSWER] 用 users 表"; [ "$status" -eq 0 ]; [[ "$output" != *"背景"* ]]
+  DK_AGENT=login-reviewer-a run dk-msg login-frontend "[QUESTION] x"; [ "$status" -eq 0 ]; [[ "$output" != *"背景"* ]]
+  run dk-msg chore-it-1 "[TASK] 不在 .panes 的對象"; [[ "$output" != *"背景"* ]]
+}
+
+@test "AC5: 背景那一份最終送不到：記 [UNDELIVERED] 與 process undelivered，epoch 不動" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  HERDR_STUB_MISSING="login-reviewer-a wC:p4" DK_MSG_TRIES=2 DK_MSG_RETRY_SEC=0 \
+    run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  wait_log 'leader-login -> login-reviewer-a \[UNDELIVERED\] \[TASK\] 複看第二輪' "$d/messages.log"
+  for _ in $(seq 1 20); do grep -q 'undelivered' "$d/process.md" && break; sleep 0.1; done
+  grep -Eq '^[0-9T:-]+ undelivered login-reviewer-a \[TASK\]$' "$d/process.md"
+  [ "$(epoch_of "$d" login-reviewer-a)" = 100 ]
+  run dk-resume; [[ "$output" == *"undelivered login-reviewer-a [TASK]"* ]]
+}
+
+@test "AC5: 背景那一份預設最多等 30 分鐘（6 次 × 300000 ms），DK_MSG_TRIES 可覆寫" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  HERDR_STUB_MISSING="login-reviewer-a wC:p4" DK_MSG_RETRY_SEC=0 run dk-msg login-reviewer-a "[TASK] x"
+  wait_log 'UNDELIVERED' "$d/messages.log"
+  [ "$(grep -c '^agent wait login-reviewer-a --until idle --until done --timeout 300000$' "$HERDR_STUB_LOG")" -eq 6 ]
+}
+
+@test "AC5: 同一收件者排著多則背景訊息時一次只送一則，照送出順序" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"; gate_herdr
+  run dk-msg login-reviewer-a "[TASK] 第一則"; [ "$status" -eq 0 ]
+  run dk-msg login-reviewer-a "[DECISION] 第二則"; [ "$status" -eq 0 ]
+  run dk-msg login-reviewer-a "[STOP] 第三則"; [ "$status" -eq 0 ]
+  sleep 1
+  [ "$(grep -c '^login-reviewer-a$' "$BATS_TEST_TMPDIR/gate/waits")" -eq 1 ]   # 後兩則在排隊，沒有一起搶
+  : > "$BATS_TEST_TMPDIR/open"
+  wait_log 'login-reviewer-a \[STOP\] 第三則' "$d/messages.log"
+  [ "$(grep '^agent prompt login-reviewer-a' "$HERDR_STUB_LOG" | sed 's/.*: //' | tr '\n' ' ')" = "第一則 第二則 第三則 " ]
+}
+
+@test "AC5 review I1: 佇列檔已存在時，dev→qa 的 [DONE] 背景那一份立刻送（沒排隊就不進佇列）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
+  printf 'status: done\n' > "$d/state/backend.md"
+  mkdir -p "$d/.blocked"; : > "$d/.blocked/msgq-login-qa"   # 領導之前背景送過 qa，佇列檔留著
+  DK_AGENT=login-backend run dk-msg login-qa "[DONE] API 好了，可以驗"
+  [ "$status" -eq 0 ]
+  wait_log 'login-backend -> login-qa \[DONE\]' "$d/messages.log"
+}
+
+@test "AC5 review I1: 最後一位送完離開佇列，自己的 pid 與 .tmp 都不留" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  run dk-msg login-reviewer-a "[TASK] 複看第二輪"; [ "$status" -eq 0 ]
+  wait_log 'leader-login -> login-reviewer-a \[TASK\]' "$d/messages.log"
+  for _ in $(seq 1 20); do [ -s "$d/.blocked/msgq-login-reviewer-a" ] || break; sleep 0.1; done
+  [ ! -s "$d/.blocked/msgq-login-reviewer-a" ]
+  [ ! -e "$d/.blocked/msgq-login-reviewer-a.tmp" ]
+}
+
+@test "整枝評議 Minor①：redispatch 的鎖檔在 .blocked/panes.lock，不在任務目錄根（結案不被 commit 進記憶）" {
+  d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+  DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+  [ "$status" -eq 0 ]
+  [ -f "$d/.blocked/panes.lock" ]
+  [ ! -e "$d/.panes.lock" ]
 }

@@ -403,7 +403,7 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
 
 neutral_screen() { echo '{"result":{"read":{"text":"thinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"; }
 redispatched() { # 領導派了複看，然後過了 25 分鐘
-  dk-msg login-reviewer-b "[TASK] 複看第二輪" >/dev/null
+  DK_MSG_BG=1 dk-msg login-reviewer-b "[TASK] 複看第二輪" >/dev/null
   sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"
 }
 
@@ -588,4 +588,110 @@ wave2_spawned() { # 上一波留下 status: done，波 2 開著，員工剛被 s
   while IFS= read -r hl; do [ "${#hl}" -le 165 ]; done < <(grep '^hit: ' "$d/.blocked/login-frontend.limit")
   msg=$(grep -o '\[LIMIT\] from dk-watch: login-frontend.*' "$HERDR_STUB_LOG" | head -1)
   [ "${#msg}" -le 200 ]
+}
+
+# --- 0.16.0 AC1（#16）：工作中的 reviewer 逾時不熔斷 ------------------------------
+# 逾時的原意是「掛了」；agent_status 明說 working 的 reviewer 是在寫長報告，熔斷它等於
+# 把唯一還能用的 kind 也關掉。只提醒一次，等它不再 working 且仍未交才走既有熔斷。
+
+list_agent() { # AGENT STATUS — 把 agent 加進（或改寫）假 herdr 的 agent list
+  local f="$HERDR_STUB_RESPONSES/agent_list.json"
+  jq --arg n "$1" --arg s "$2" '.result.agents = ([.result.agents[] | select(.name != $n)] + [{"agent":"claude","name":$n,"agent_status":$s,"pane_id":"wC:p9"}])' \
+    "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+}
+working_msg='\[TIMEOUT\] from dk-watch: login-reviewer-b 逾時但仍在工作（未熔斷）'
+
+@test "AC1: working 的 reviewer 逾時只提醒一次，不熔斷任何一層" {
+  neutral_screen; reviewer_row "$old"; list_agent login-reviewer-b working
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c "^agent prompt leader-login $working_msg\$" "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c ' timeout login-reviewer-b working (no kind down)$' "$d/process.md")" -eq 1 ]
+  grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
+  [ ! -f "$DK_ROOT/.sessions/kinds-down" ]
+  refute_grep 'timeout login-reviewer-b.*kind.*down$' "$d/process.md"
+  refute_grep 'notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG"
+}
+@test "AC1: 之後轉 idle 且仍未交，照常走逾時熔斷" {
+  neutral_screen; reviewer_row "$old"; list_agent login-reviewer-b working
+  dk-watch --once
+  list_agent login-reviewer-b idle
+  dk-watch --once
+  grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+  grep -q ' timeout login-reviewer-b → kind codex down$' "$d/process.md"
+  grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+}
+@test "AC1: agent_status 拿不到（不在名單）照既有逾時熔斷" {
+  neutral_screen; reviewer_row "$old"
+  dk-watch --once
+  refute_grep "$working_msg" "$HERDR_STUB_LOG"
+  grep -q ' timeout login-reviewer-b → kind codex down$' "$d/process.md"
+  grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+}
+
+# --- 0.16.0 AC2（#10）：dev／qa 閒置逾時 -------------------------------------------
+# idle／done 卻沒交的 dev 與 qa 原本沒有任何出口：它們不在 reviewer 逾時的名單裡，
+# 整波逾時又要等到 DK_WAVE_TIMEOUT_MIN。只提醒、永不熔斷 kind。
+
+idle_wave() { # backend(dev)、qa(review) 都 idle，pane 時間戳都是 25 分鐘前
+  printf 'login-backend wC:p2 %s dev 1 1\nlogin-qa wC:p3 %s review 1 2\n' "$old" "$old" > "$d/.panes"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+  neutral_screen; list_agent login-backend idle; list_agent login-qa idle
+}
+idle_msg() { echo "^agent prompt leader-login \\[TIMEOUT\\] from dk-watch: $1 閒置 $2 分鐘未交（state 不是這一輪的 done）\$"; }
+
+@test "AC2: dev 閒置超過門檻未交 → 推一次、記 process、不熔斷" {
+  idle_wave
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c "$(idle_msg login-backend 25)" "$HERDR_STUB_LOG")" -eq 1 ]
+  [ "$(grep -c ' idle login-backend 25min$' "$d/process.md")" -eq 1 ]
+  grep -q "^$old\$" "$d/.blocked/login-backend.idle"
+  grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"; [ ! -f "$DK_ROOT/.sessions/kinds-down" ]
+}
+@test "AC2: dev 還沒全員完成時 qa 閒置超過門檻不推" {
+  idle_wave
+  dk-watch --once
+  refute_grep 'login-qa 閒置' "$HERDR_STUB_LOG"
+  [ ! -f "$d/.blocked/login-qa.idle" ]
+}
+@test "AC2: 聚合建立時記 at=，qa 的計時從聚合起算" {
+  idle_wave; printf 'status: done\n' > "$d/state/backend.md"
+  dk-watch --once
+  grep -q '全員完成' "$HERDR_STUB_LOG"
+  grep -q "^at=[0-9][0-9]*\$" "$d/.blocked/wave-1.devdone"
+  refute_grep 'login-qa 閒置' "$HERDR_STUB_LOG"            # 剛聚合，qa 還沒閒置夠久
+  sed -i "s/^at=.*/at=$(( old + 60 ))/" "$d/.blocked/wave-1.devdone"   # 聚合是 24 分鐘前
+  dk-watch --once
+  grep -q "$(idle_msg login-qa 24)" "$HERDR_STUB_LOG"
+  grep -q ' idle login-qa 24min$' "$d/process.md"
+}
+@test "AC2: 同一 epoch 只推一次；重新指派（epoch 變了）自動重新武裝" {
+  idle_wave
+  dk-watch --once; dk-watch --once
+  [ "$(grep -c 'login-backend 閒置' "$HERDR_STUB_LOG")" -eq 1 ]
+  old2=$(( old + 120 ))
+  sed -i "s/^login-backend wC:p2 [0-9]*/login-backend wC:p2 $old2/" "$d/.panes"
+  dk-watch --once
+  [ "$(grep -c 'login-backend 閒置' "$HERDR_STUB_LOG")" -eq 2 ]
+  grep -q "$(idle_msg login-backend 23)" "$HERDR_STUB_LOG"
+  grep -q "^$old2\$" "$d/.blocked/login-backend.idle"
+}
+@test "AC2: working、blocked、已交的 dev 與 reviewer 都不走閒置逾時" {
+  idle_wave; list_agent login-backend working; list_agent login-qa blocked
+  dk-watch --once
+  refute_grep '閒置' "$HERDR_STUB_LOG"
+  list_agent login-backend idle; printf 'status: done\n' > "$d/state/backend.md"
+  dk-watch --once
+  refute_grep 'login-backend 閒置' "$HERDR_STUB_LOG"
+  : > "$d/.panes"; reviewer_row "$old"; list_agent login-reviewer-b idle
+  dk-watch --once
+  refute_grep '閒置' "$HERDR_STUB_LOG"
+}
+@test "AC2: 失敗送不到時下一 tick 重試，process 只記一次" {
+  idle_wave
+  HERDR_STUB_FAIL="agent wait" dk-watch --once
+  refute_grep 'login-backend 閒置' "$HERDR_STUB_LOG"
+  refute_grep '^delivered$' "$d/.blocked/login-backend.idle"
+  dk-watch --once
+  grep -q "$(idle_msg login-backend 25)" "$HERDR_STUB_LOG"
+  [ "$(grep -c ' idle login-backend 25min$' "$d/process.md")" -eq 1 ]
 }
