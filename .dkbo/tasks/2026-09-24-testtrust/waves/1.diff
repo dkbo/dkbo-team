@@ -1,0 +1,1484 @@
+# 測試可信度 — wave 1 since 6aa3eca — 2026-09-24T09:48
+# files changed: 20 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/tasks/BACKLOG.md          |  2 --
+ CHANGELOG.md                    |  3 +-
+ tests/helpers.bash              | 46 ++++++++++++++++---------
+ tests/unit/01_common.bats       | 12 +++----
+ tests/unit/04_docs.bats         |  2 +-
+ tests/unit/06_msg.bats          |  4 +--
+ tests/unit/07_spawn.bats        | 12 +++----
+ tests/unit/08_wave_close.bats   | 16 ++++-----
+ tests/unit/09_watch.bats        | 30 ++++++++---------
+ tests/unit/11_chore.bats        | 32 +++++++++---------
+ tests/unit/12_task_close.bats   | 12 +++----
+ tests/unit/14_install.bats      |  2 +-
+ tests/unit/17_layout.bats       |  4 +--
+ tests/unit/18_wave_open.bats    |  4 +--
+ tests/unit/20_review.bats       |  6 ++--
+ tests/unit/24_portability.bats  |  2 +-
+ tests/unit/25_docs_policy.bats  |  2 +-
+ tests/unit/26_watch_events.bats |  8 ++---
+ tests/unit/35_test_hygiene.bats | 51 ++++++++++++++++++++++++++++
+ tests/unit/36_fixture.bats      | 74 +++++++++++++++++++++++++++++++++++++++++
+ 20 files changed, 231 insertions(+), 93 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/tasks/BACKLOG.md b/.dkbo/tasks/BACKLOG.md
+index d090eac..9a88efa 100644
+--- a/.dkbo/tasks/BACKLOG.md
++++ b/.dkbo/tasks/BACKLOG.md
+@@ -10,21 +10,19 @@
+ | 2026-09-19 | watchtime 波 1 疑慮 | `tests/run.sh` 只 `exec bats`，沒有任何一處跑 shellcheck；每個任務的「shellcheck 零警告」都是員工手動跑的，漏跑沒人吭聲。領導的 PROJECT.md 之前還寫錯說 run.sh 會跑（已改） | 把 shellcheck 併進 `tests/run.sh`（有裝才跑、沒裝印 WARN 不擋），或加一條 bats 測試呼叫它 |
+ | 2026-09-19 | watchtime 波 1 疑慮 | PROTOCOL 的 state ≤20 行與 gate d 要求 `touched` 完整互相衝突：一波動 24 個檔的成員寫不進 20 行 | 把行數上限改成「`touched` 以外 ≤20 行」，或讓 `touched` 允許用 glob 收攏 |
+ | 2026-09-19 | watchtime 整枝審查 | `dk-watch` 只有 reviewer 有逾時路徑（第二個 while 只收 `*-reviewer-*`），qa／dev 卡住或靜默時，在整波 `DK_WAVE_TIMEOUT_MIN` 之前沒有任何出口，領導看到的是「這個人怎麼都不動」而不是「它卡了」。Important 1（done 判定沒比對 .redispatch）之所以在 dev 身上比 reviewer 深，就是因為沒有這條兜底 | 評估給 dev／qa 一條以 `.panes` epoch 為基準的靜默逾時（門檻可比 reviewer 長、不熔斷 kind、只推 `[TIMEOUT]`），或至少讓 `dk-resume` 的「等了 N min」超過門檻時標出來 |
+ | 2026-09-20 | multirepo 結案（2026-09-24 改寫） | 單 repo 的 `dk-leader --run` 交棒已在真 herdr 實跑兩次：2026-09-22 tasktab（主樹仍是 0.10.0，走 `workspace create`）與 2026-09-23 ops（0.11.0 起開 tab，`materialize … tab wB:tJ`）；**多 repo** 的交棒路徑（逐 repo 切 worktree、逐 repo 跑 `DK_SETUP_CMD_<名>`）仍沒在真 herdr 上走過 | 第一個設了 `DK_REPOS` 的專案就是第一次實跑；跑之前先 `dk-resume` 看 `.repos`，交棒失敗時 pane 會留著，`herdr pane read` 看它 |
+ | 2026-09-20 | multirepo 結案（2026-09-24 改寫） | `README.md`／`README.en.md` 指令一覽的 `dk-task-close` 列沒提「任務 tab 不自動關」（0.11.0 起任務開的是 tab 不是 workspace；`dk-task-close` 最後一行會印 `herdr tab close <id>`） | 下次動 README 時補一句 |
+ | 2026-09-20 | multirepo 結案 | `setup.<名>.log`（`DK_SETUP_CMD` 的輸出）落在 `tasks/<t>/` 進任務記憶，一次 `pnpm install` 的輸出就進版控 | 觀察體積；太大就改寫到 `.sessions/` 並加 gitignore，一行的事 |
+ | 2026-09-20 | multirepo 實跑 | `dk-msg` 對 working 中的員工預設只等 5 分鐘（`DK_MSG_WAIT_MS`）就放棄並標 `[UNDELIVERED]`；本任務三則 `[DECISION]`／`[TASK]` 都是這樣送不到，領導得背景重送並拉長等待 | 評估把預設拉到 15 分鐘，或讓 `dk-msg` 在逾時後自己排隊重試而不是放棄；另：dev 送出 ESCALATE 後照協定繼續做別的事，所以「等它閒置」本來就等不到 |
+ | 2026-09-20 | multirepo 實跑 | 無主測試檔升報三次（`30_isolation`、`23_leader_kind` ×2）：改既有腳本行為時，斷言舊行為的測試檔沒被劃進所有權，員工只能 ESCALATE | 給 `dk-brief-check` 加一條 WARN：可改欄列出的 `.dkbo/bin/*`、`.dkbo/lib/*` 若被 `tests/unit/*.bats` 引用（grep 檔名）而該 bats 不在任何人的可改欄，列出來提醒領導 |
+ | 2026-09-22 | tasktab 整枝評議 | `dk-watch` 的 reviewer 逾時路徑只在**決定要不要看畫面貼 `(quota?)` 標籤**時問 `agent_status`，判「要不要熔斷」時完全不問。所以一個 `agent_status=working`、正在正常寫 report 的 reviewer，只要超過 `DK_REVIEW_TIMEOUT_MIN` 就照樣被 `[TIMEOUT]` 並熔斷它的 kind。實測發生：`tasktab-reviewer-a`（claude L 檔，讀整枝 `task.diff`）在 22:50 被判逾時，當下 state 是 `status: working / current: 寫 report`、notes 已列出 Important 4 條，herdr 回報 working、usage 5h:40%。因為 codex 與 agy 先前已熔斷，這一下讓**三個 kind 全倒**，領導得手動解熔斷才能繼續 | 逾時熔斷比照額度偵測加同一道 `agent_status != working` 前提（AC2 那條註解已經寫了這個道理，只套在畫面檢查上、沒套在熔斷上）；或至少 working 時只推 `[TIMEOUT]` 提醒領導、不寫 `DK_KIND_DOWN`。另：L 檔整枝評議讀 task.diff 本來就會超過 20 分鐘，`DK_REVIEW_TIMEOUT_MIN` 對 `--tier L` 應該有獨立（較長）的門檻 |
+ | 2026-09-22 | tasktab 整枝評議 Important 4 | `DK_WORKSPACE` 是 `dk-task-new`（＝計畫那一刻）寫死的 `HERDR_WORKSPACE_ID`，`dk-leader --run` 不刷新它。人在 workspace A 計畫、幾天後從 workspace B 叫 `/dkbo-run`，任務 tab 會開在 A，人眼前的 B 什麼都不會出現。0.11.0 的 AC1 逐字指定 `--workspace "$DK_WORKSPACE"`，所以本任務只改文案不改行為 | 決定語意：`--run` 時 `HERDR_WORKSPACE_ID` 與 `.task.env` 的 `DK_WORKSPACE` 不同，tab 該開在哪？目前沒有任何一份文件回答。若答案是「開在人當下所在的」，`dk-leader` 要改成以 `HERDR_WORKSPACE_ID` 優先並回寫 `DK_WORKSPACE` |
+-| 2026-09-22 | tasktab 整枝評議 Minor（2026-09-24 複查改寫） | `tests/unit/` 有 **74 處** `! cmd` 形式的否定斷言，不是原記的三處。bats 在 `set -e` 下跑，而 bash 的 `set -e` 忽略 `!` 開頭的指令，所以它不是測試的最後一條時，失敗也不會讓測試變紅 —— 逐條掃過有 **50 處**不是測試的最後一條、**根本沒在驗**（bats 1.14.0 實測：`! true; true` 綠；13 個檔，最多的是 `11_chore.bats` 13 處、`09_watch.bats` 8 處、`08_wave_close.bats` 7 處，例如 `09_watch.bats:230` 的「不該推 TIMEOUT」）。違反「否定斷言一律用 `refute_grep`」的全域約束 | 高：全部換成 `refute_grep`（`tests/helpers.bash:172`），非 grep 的 `! cmd` 改 `run cmd; [ "$status" -ne 0 ]`；再給 `tests/run.sh` 加一條掃描式 meta 測試擋住新增。與 fixture 漂移那條併成一個「測試可信度」任務 |
+-| 2026-09-22 | tasktab 波 2 ESCALATE | `tests/helpers.bash` 的 `fixture_task()` 自己手寫一份 `.task.env` heredoc，而不是套用 `.dkbo/templates/task.env`，於是兩者持續漂移：fixture 目前缺 `DK_TASK_TAB` 與 `DK_LEADER_PANE` 兩個鍵。任何「改既有那一行」的測試寫法（`sed -i 's/^DK_TASK_TAB=.*/…/'`）都會靜默變成空操作，測試看起來在驗東西其實沒有。實測：0.11.0 波 2 一條 Minor 清理就因此把 AC14 弄紅，且誤導成「helpers.bash 無人擁有」的升報 | 讓 `fixture_task()` 改由 `templates/task.env` 套模板產出（跟 `dk-task-new` 走同一條路），fixture 只覆寫需要的欄位；或至少補一條測試斷言 fixture 的 `.task.env` 鍵集合與模板一致。動它會碰到全部 547 條測試，要獨立一個任務做 |
+ | 2026-09-23 | ops 波 1 ESCALATE | 員工 pane 的 `DK_ROOT` 指向主樹 `.dkbo`；S 檔員工拿 `$DK_ROOT/…` 當編輯路徑，把 10 個檔全寫進主樹，自己在 worktree 看不到就誤報「worktree 被 reset」。只有「改的正是 `.dkbo/`」的任務（dkbo 原始碼倉 dogfood）會中 | 切片範本在「## 倉庫」段加一句「編輯一律用上面的 worktree 路徑；`$DK_ROOT` 只拿來跑 bin」；或 dk-wave-close 前檢查主樹是否出現本波成員所有權內的改動 |
+ | 2026-09-23 | ops 波 4 人旁觀 | 員工在**共用 worktree** 用 `git stash push -- <檔>` 暫退修法取紅，stash 期間同波夥伴並跑 `tests/run.sh` 讀到舊碼而假紅（34_kind_down:58 兩次，被當成 flaky）；stash 堆疊還跨 worktree 與主樹共用，裸 `git stash pop` 可能 pop 到別人的 | PROTOCOL 的 report 段與 `templates/report-employee.md` 寫明取紅一律 cp 到獨立目錄（`git archive <base>` 或複製 worktree），不在共用 worktree 動 stash／checkout |
+ | 2026-09-23 | ops 整枝評議第三輪 Minor | codex 在重置時間是同一天時可能只印 `try again at 3:15 PM`（不帶日期），目前會落 guess＝現在＋5h；未實測 | 下次 codex 撞額度時收一份真樣本；若屬實，`dk_kind_parse_codex_reset` 補「只有時分」的分支（今天，已過則明天） |
+ | 2026-09-23 | ops 整枝評議第一輪疑慮 | dev 交付 latch（`.blocked/wave-N.<sname>.done`）在 `[TASK]` 重派時不重設，任何「dev 交付後又被派重做」都不會再推聚合，領導只能靠 dev 回 `[FIXED]` 才醒；0.12.0 已把這個做法寫進 run/SKILL.md，但仍是靠人記得 | 評估讓 dk-msg 在領導對已交付 dev 送 `[TASK]`／`[BUG]` 時清該成員 latch 並刪 devdone（與 AC17 的 spawn 規則對稱） |
+ | 2026-09-23 | ops 整枝評議 | 領導記 Minor 時寫成 `minor task: …`，不合 `DK_MINOR_RE`（只認 `minor: ` 或 `minor <數字>: `），dk-process 照收不警告，整枝評議的累積 Minor 表會靜默漏掉 | `dk-process` 對以 `minor` 開頭但不合 `DK_MINOR_RE` 的行印警告；或把正規式放寬成 `minor( [^:]+)?: ` |
+ | 2026-09-24 | testtrust 計畫審查 | 專案層熔斷（`.sessions/kinds-down`）只有一個寫入者：`dk-watch` 在某個 pane **當場**撞額度時寫。從其他來源確認的耗盡（CLI 狀態列、前一個任務的 ruling、人告知）沒有任何路徑寫進去 —— ops 07:53 的 ruling 已寫明「codex 要到 Oct 11 才恢復」，但 0.12.0 做出 kinds-down 後沒人補登，testtrust 的計畫審查照樣派了 codex 與 agy、各白燒一個 pane 才重新撞出來。讀取端（`dk_review_kinds` 跳過、`dk-spawn --kind` 拒絕）早就在，缺的只是寫入端 | 高：`dk-kind down <k> [--until <YYYY-MM-DDTHH:MM>] [--note <證據>]` 經 `dk_kinds_down_set` 寫一列（給 `--until` 標 exact，沒給走 +5h guess），process 記 `kind <k> down (leader)`；LEADER.md 的裁定段或 plan／run SKILL 補一句「任何來源確認某 kind 額度耗盡，當下 `dk-kind down`，不能只寫在 ruling 裡」，並在派 reviewer 前先 `dk-kind` |
+ | 2026-09-24 | testtrust 計畫審查 | `dk-brief-review`（與 `dk-review`）沒辦法只補派一位失敗的 reviewer：別名由 `dk_review_aliases` 依 kind 數從 p1 起配，`--kinds codex` 重跑會命名成 p1，而 `dk-spawn` 會先關掉同名舊 pane，等於殺掉正在跑的 claude p1。實際繞法是手動 `dk-spawn reviewer p2 --isolated --kind codex --tier L` 再手補一行完整的 `brief-review spawned …`（`--gate1` 只讀最後一行） | 加 `--alias <pN>`（或自動跳過 `.panes` 裡已在的別名），並讓補派把 spawned 行累加成完整名單 |
+ 
+ 已修好的條目在修掉它的同一個 commit 裡整列刪掉，不留「已修」標記；表頭固定佔前兩行（`dk-resume` 讀 `head -n 2`），說明只能寫在表格之後。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 459b840..a296da6 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,21 +2,22 @@
+ 
+ ## 0.15.0 — 2026-09-23
+ 
+ - feat(run)!: `/dkbo-run` 開跑後不停下來等人（取消關卡②）。`skills/run/SKILL.md` 新增「不停車」段：選擇題、規格缺口、reviewer 意見矛盾、修法取捨、要超過某個上限，一律由領導自己裁定——選若錯代價最小、最容易回退的那個，記 `ruling: [自主] <決定> — <原因> — <若錯代價>`，不用 AskUserQuestion。只剩四種會停：關卡③（合併）、不可逆或破壞性的操作、影響 worktree 以外的動作、brief 壞到每一條路都只能猜（最後一種寫進遺留段、停在關卡③）。依據：panova autofold 在執行中途問人的 4 題，人 4 題都選推薦項，每題等 1–13 分；人在睡覺時一題就停一整晚。規則參考 superpowers 6.4.1 `subagent-driven-development` 的「Rulings, not stalls」。人自己打字插話仍然照做。
+ - feat(run): 新增「熔斷器」段取代三處升關卡②（同一 bug 換過腦袋仍沒好、wave-close 測試連兩次失敗、整枝評議的修復輪用完）：停止派人，逐條判——reviewer 判錯或有爭議就 park、真的但後面沒有工作依賴它就 park 並把驗收項標未達成、真的且後面依賴它就選最小改法寫進下一波。整枝評議挑出的 Important 一次全部寫進同一個修復波，修完還有就走熔斷器，不開第二個修復波。
+ - feat(run): 員工 `[BLOCKED]`（卡在權限審批）不再「告知人去按」：reviewer 交給既有的 `[TIMEOUT]`；dev／qa 由領導看畫面、記 ruling、`dk-spawn --resume` 重派並叫它改用不需要審批的做法，卡第二次換 kind，再卡就 park。
+ - feat(run): 視覺變更不再等人看畫面才跑整枝評議；qa 每波在 report 附截圖（必要時錄影）並逐條對應 AC，人在關卡③一起看。人剛好在場時，dev 全員完成那一刻告訴他 dev server 網址，追加需求用 `--refresh` 併進本波（headermerge、autofold 的波 2 都是結波後人才看畫面開出來的）。
+ - feat(report): `templates/report.md` 新增「自主裁定（待你複核）」段，列出 `grep -F ' ruling: [自主]' process.md` 的每一條，照順序、一條不漏、附若錯代價；`LEADER.md` 的裁定段、三份 README 的流程說明同步。
+ - fix(msg): dev 送給 qa（`.panes` 的 review 組）的 `[DONE]` 改在背景送——`dk-msg` 當場返回，背景那一份照舊等對方閒下來、重試、記 log。前景等忙碌中的 qa 會把 dev 的 pane 卡住：panova 實測 autofold 22／13 分、gamemore 30 分、headermerge 12 分，而 qa 本來就看 dev 的 state 開工。dev 送 dev 的 `[DONE]` 照常前景送。`roles/qa.md` 補「已在測就不必因晚到的 `[DONE]` 重跑」。
+ - feat(spawn): 員工與雜務員工啟動時帶 CLI session 名（claude 的 `--name <任務>-<角色>`，同領導的 `dk/<short>`），pane 上看得出是哪位角色；codex、agy 沒有對應旗標，不帶。
+-- 測試：642 bats（+4；`06_msg` 背景送與 dev→dev 前景送、`07_spawn` session 名、`25_docs_policy` 不停車與背景送兩條）；`04_docs` 的 run SKILL.md 行數上限 50 → 60（多了兩段）；shellcheck 零警告。
++- test: 否定斷言改成在 bats 下有效的寫法——`tests/` 的 76 處（74 行）`! cmd` 全數換成 `refute_grep`（grep 類，含 `cmd | refute_grep` 管線）或新增的 `refute <cmd>`（`tests/helpers.bash`），其中 48 處原本失效：bats 在 `set -e` 下跑，而 `!` 開頭的述句豁免 `set -e`，不是測試最後一條時命中了也照樣綠。轉換後全數照舊通過，沒有被遮住的真失敗。新增 `35_test_hygiene.bats` 守門：掃 `git ls-files` 列出的全部 `tests/*.bats` 與 `helpers.bash`，出現 `!` 開頭的述句就紅並列出 `檔:行`，掃描器對植入樣本兩向自我驗證。`fixture_task()` 的 `.task.env` 改由 `templates/task.env` 經 `dk_render` 套出（在子 shell source `common.sh`，跟 `dk-task-new` 走同一條路），補回漂移掉的 `DK_TASK_TAB`、`DK_LEADER_PANE`、`DK_NO_WORKTREE`；套完殘留 `{{…}}` 或缺模板鍵就把名字印到 stderr 並回非零讓 setup 紅（先前七個 setup 沒 source `common.sh` 的檔拿到空 `.task.env` 照樣全綠）。`setup_project()` 不再把主樹 gitignore 的 `.sessions/`（`kinds-down`、pane 綁定、`*.watch.pid`）帶進夾具——開發機上一筆未過期的 `kinds-down` 曾讓 `10_resume` 兩條紅。只動 `tests/`，安裝包不含它，升級拿不到差異，所以不升版。
++- 測試：654 bats（+16；`06_msg` 背景送與 dev→dev 前景送、`07_spawn` session 名、`25_docs_policy` 不停車與背景送兩條；測試可信度 +12：`35_test_hygiene` 5 條（掃描、掃描集合、兩向自我驗證、列出檔:行）、`36_fixture` 7 條（鍵集合與順序、各鍵的值、殘留佔位符回非零、不靠呼叫端 source、不留變數與函式、`.sessions/` 只剩 `.gitkeep` 兩條））；`04_docs` 的 run SKILL.md 行數上限 50 → 60（多了兩段）；shellcheck 零警告。
+ - 升級：`roles/` 不會跟著升（rsync `--ignore-existing`），`qa.md` 的截圖要求與 frontend／backend 的說明要手動對照本版改；不改也能用——背景送在 `dk-msg` 那一側生效。沒有新鍵、新依賴、新 skill。
+ 
+ ## 0.14.0 — 2026-09-23
+ 
+ - feat(review)!: `DK_REVIEW_TIER` 出廠值由 `M` 改成 `L`（`settings.env`、`templates/seed/settings.seed.env`、`dk_settings` 缺鍵時的預設三處一致）。依據是 18 個已合併任務的 process.md：teamflow 的波審查用 M，6 個任務的整枝評議（L）**全數**再挑出 Important；panova 的波審查用 L，12 個任務只有 2 個。最直接的是同一份 diff 的對照——tasktab 與 ops 第一次整枝評議時分支上只有波 1，`task.diff` 就是波 1 的 diff：tasktab 的 M 判「Important 0、Minor 0」，20 分鐘後 L 挑出 4 條；ops 的 M 判 1 條，L 再多 2 條。波審查漏掉的問題拖到整枝評議，就要多開一整個修復波（ops、tasktab 的修復循環各約 2 小時，佔任務總時長五成以上）。0.4.0 預設 M 的理由是「密度先於天花板」，但第二個 kind 實跑幾乎全程熔斷，密度實際為 0。兩個專案的程式類型不同（bash 對 Vue），檔位不是唯一變因。`/dkbo-init` 的問法改成預設 L、人要省額度才降 M。
+ - docs(run): `skills/run/SKILL.md` 結案段補兩條，讓同一份 diff 不被審兩次——單波任務的 L 檔波審查即整枝評議，不再跑 `dk-review --task`（記 `review task skipped: 單波…`）；整枝評議挑出 Important 開的修復波，審查用 `--tier L`，這一輪就算下一輪整枝評議，Important 0 即進關卡③，只有修復動到先前各波沒碰過的檔或跨成員共用契約時才重跑整枝評議。
+ - docs(plan): 計畫審查達 `DK_REVIEW_MIN` 且意見已採納就送關卡①，不等晚到的 reviewer——它與人讀 brief 並行，人拍板前回來就併入並告訴人改了什麼，沒回來就關掉、補一行 `skipped (關卡①時未回)` 的 verdict 再 `--gate1`（`--gate1` 的兩道閘看最後一行 verdict 與 pane 是否關淨，不用改程式）。tasktab 為一位最後逾時的 agy 多等了 18 分鐘；逾時不寫專案層熔斷，所以下個任務還會再派、再等。
+ - docs(protocol): 員工做的過程只跑相關測試檔，完整測試只在送 `[DONE]`／`[FIXED]` 前跑一次——wave-close 本來就再跑一次當閘；員工 report 記的全套次數一波最多 4 次，teamflow 一次 2 分 10 秒，且同波共用 worktree 會互相拖慢。
+ - 測試：638 bats（+4）；`20_review.bats` 出廠檔位改驗 `opus/high`、降 M 改驗 `opus/medium`；`23_leader_kind.bats` 缺鍵預設改驗 L；`25_docs_policy.bats` +4（兩條結案規則、三處出廠值一致、關卡①不等晚到的 reviewer、完整測試只跑一次）；shellcheck 零警告。
+ - 升級：**既有專案的 `settings.env` 不會跟著改**（升級的 rsync 排除它）。要採用就手改 `DK_REVIEW_TIER="L"`；已經是 L 的不用動。沒有新鍵、新依賴、新 skill。
+diff --git a/tests/helpers.bash b/tests/helpers.bash
+index 2edab46..cad9a62 100644
+--- a/tests/helpers.bash
++++ b/tests/helpers.bash
+@@ -5,20 +5,23 @@ setup_project() {
+   # 繼承來的 DK_* 一律洗掉，再設 harness 自己要的那兩個。
+   # common.sh 幾乎每個變數都寫成 ${DK_X:-<預設>}，繼承值優先 —— 只覆寫 DK_ROOT 不夠：
+   # DK_PROJECT_ROOT 會留著指向呼叫者的 repo，而 dk-task-new 是 git -C "$DK_PROJECT_ROOT"
+   # worktree add。2026-09-19 領導在自己 session 跑 gate c，就這樣在真 repo 建了 7 個
+   # worktree 與 8 個分支；員工手動跑全綠，因為員工的 shell 沒 source 過 common.sh。
+   # 逐一列舉會隨新變數再度過時，所以整片清 —— 回歸測試在 tests/unit/30_isolation.bats。
+   local v
+   for v in ${!DK_@}; do unset "$v"; done
+   PROJECT="$(mktemp -d)"
+   cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
++  # .sessions/ 是主樹的執行期狀態（gitignore，只追蹤 .gitkeep）。原樣帶進來的話，開發機上一筆
++  # 未過期的 kinds-down 就讓 10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
++  find "$PROJECT/.dkbo/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
+   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
+   # 源碼倉自己的 settings.env 是 dogfood 任務在用的（DK_TEST_CMD=tests/run.sh 給 gate c），
+   # fixture 不能原樣繼承：gate c 會在假 worktree 裡跑一個不存在的指令，每條「閘全過」的
+   # wave-close 測試都紅。要測 gate c 的測試自己往 settings.env append 一行蓋掉即可。
+   sed -i 's/^DK_TEST_CMD=.*/DK_TEST_CMD=""/' "$PROJECT/.dkbo/settings.env"
+   git -C "$PROJECT" init -q
+   git -C "$PROJECT" config user.name t; git -C "$PROJECT" config user.email t@t
+   git -C "$PROJECT" commit -q --allow-empty -m init
+   git -C "$PROJECT" branch -M main
+   HERDR_STUB_LOG="$PROJECT/.herdr-calls.log"; : > "$HERDR_STUB_LOG"
+@@ -86,49 +89,55 @@ chore_files() { ls "$DK_ROOT/tasks/_chores/"*/*.md "$DK_ROOT/tasks/_chores/"*.md
+ fixture_task() { # $1=short $2=display —— setup_multirepo 跑過的話，照 DK_REPOS 逐 repo 切 worktree
+   local d="$DK_ROOT/tasks/$(date +%Y-%m-%d)-$1"
+   mkdir -p "$d/state"
+   # 多 repo 的主 repo worktree 在 .worktrees/<short>/main（決策⑥）。fixture_task 跑在
+   # 命令替換的子 shell 裡，所以這個覆寫只影響它自己寫出去的 .task.env 與 .repos —— 呼叫端的
+   # $WORKTREE_PATH 不會跟著變，要拿多 repo 的 worktree 路徑請用 dk_repo_field "$d" <名> wt。
+   [ -n "${MULTIREPO:-}" ] && WORKTREE_PATH="$PROJECT/.worktrees/$1/main"
+   sed -e "s#{{DISPLAY}}#$2#g; s#{{SHORT}}#$1#g; s#{{BRANCH}}#dk/$1#g; s#{{WORKTREE}}#$WORKTREE_PATH#g; s#{{SOURCE}}#test#g" \
+     "$DK_ROOT/templates/brief.md" > "$d/brief.md"
+   : > "$d/process.md"; : > "$d/messages.log"; : > "$d/.panes"
+-  cat > "$d/.task.env" <<E
+-DK_SHORT="$1"
+-DK_DISPLAY="$2"
+-DK_BRANCH="dk/$1"
+-DK_WORKTREE="$WORKTREE_PATH"
+-DK_WORKSPACE="wB"
+-DK_ROOT_PANE="wB:p1"
+-DK_BASE="$(git -C "$PROJECT" rev-parse HEAD)"
+-DK_WATCH_PID=""
+-DK_EVENTS_PID=""
+-DK_WAVE=""
+-DK_WAVE_STARTED=""
+-DK_KIND_DOWN=""
+-DK_TABS=""
+-E
++  # .task.env 跟 dk-task-new 走同一條路：套 templates/task.env、用 common.sh 的 dk_render。
++  # 手寫 heredoc 的舊版跟模板漂移過（缺 DK_TASK_TAB 與 DK_LEADER_PANE，改那一行的 sed 靜默
++  # 變成空操作）。子 shell 裡 source：呼叫端多半沒載 common.sh，也不能被它塞進函式與變數。
++  # LEADER_PANE 刻意給空字串 —— 舊版根本沒有這個鍵，照 dk-task-new 填根 pane 會改掉既有測試的語意。
++  ( . "$DK_ROOT/lib/common.sh"
++    dk_render "$DK_ROOT/templates/task.env" "SHORT=$1" "DISPLAY=$2" "BRANCH=dk/$1" \
++      "WORKTREE=$WORKTREE_PATH" "WORKSPACE=wB" "TASK_TAB=" "ROOT_PANE=wB:p1" "LEADER_PANE=" \
++      "BASE=$(git -C "$PROJECT" rev-parse HEAD)" "NO_WORKTREE=" ) > "$d/.task.env" || return 1
++  fixture_env_check "$DK_ROOT/templates/task.env" "$d/.task.env" || return 1
+   # .repos 在真實流程裡是 dk-leader --run 寫的；fixture 直接落一份，單 repo 模式也有（一列，
+   # 名字固定 main），這樣每個讀 .repos 的呼叫端只有一條路。
+-  local n p wt
++  local e n p wt
+   : > "$d/.repos"
+   for e in $(fixture_repos); do
+     n=${e%%=*}; p=${e#*=}
+     wt="$WORKTREE_PATH"; [ -n "${MULTIREPO:-}" ] && wt="$PROJECT/.worktrees/$1/$n"
+     rm -rf "$wt"; mkdir -p "$(dirname "$wt")"
+     git -C "$p" worktree add -q -b "dk/$1" "$wt" main >/dev/null 2>&1
+     printf '%s %s %s %s\n' "$n" "$p" "$wt" "$(git -C "$p" rev-parse HEAD)" >> "$d/.repos"
+   done
+   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
+   echo "$d"
+ }
++# fixture_task 的自檢：套完仍殘留 {{…}}，或少了模板裡的任一 DK_* 鍵，就把名字印到 stderr 並回 1。
++# fixture 多半跑在 d=$(…) 裡，那裡沒有 set -e —— 不自己回非零，壞掉的 .task.env 會一路綠下去。
++fixture_env_check() { # TEMPLATE ENV_FILE
++  local k miss="" left
++  for k in $(sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"); do
++    grep -q "^$k=" "$2" || miss="$miss $k"
++  done
++  left=$(grep -o '{{[^}]*}}' "$2" | tr -d '{}' | tr '\n' ' ' || true)
++  [ -z "$miss" ] || echo "fixture_task: $2 缺鍵:$miss" >&2
++  [ -z "$left" ] || echo "fixture_task: $2 殘留佔位符: $left" >&2
++  [ -z "$miss$left" ]
++}
+ # fixture 用的 <名>=<repo 根> 清單（單 repo 一項）。路徑不含空白，所以可以用空白分隔的字串傳。
+ fixture_repos() {
+   if [ -n "${MULTIREPO:-}" ]; then echo "main=$PROJECT api=$REPO_API shared=$REPO_SHARED"
+   else echo "main=$PROJECT"; fi
+ }
+ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
+   cat > "$1/brief.md" <<'B'
+ # 使用者登入
+ 來源：test
+ 分支：dk/login   worktree：/tmp/x
+@@ -165,10 +174,15 @@ bash 3.2+；不得使用 bash 4 語法
+ | 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |
+ B
+ }
+ 
+ # bats 跑在 set -e 下，而 POSIX 規定 `! cmd` 這種形式要豁免 set -e —— 所以
+ # `! grep -q x file` 這樣寫的否定斷言永遠不會讓測試變紅，命中了也照樣 ok。
+ # 用一個普通函式回非零，set -e 才抓得到。
+ refute_grep() { # 用法同 grep；命中即失敗
+   if grep -q "$@"; then echo "refute_grep: 不該命中卻命中了: $*" >&2; return 1; fi
+ }
++# 非 grep 的否定斷言用這個：`! cmd` 同樣豁免 set -e。指令成功就把指令印到 stderr 並回 1。
++# 不改用 run 再查 $status：run 會覆寫呼叫端的 $status 與 $output。
++refute() { # CMD [ARGS…]；指令成功即失敗
++  if "$@"; then echo "refute: 不該成功卻成功了: $*" >&2; return 1; fi
++}
+diff --git a/tests/unit/01_common.bats b/tests/unit/01_common.bats
+index 28571dc..78d31bb 100644
+--- a/tests/unit/01_common.bats
++++ b/tests/unit/01_common.bats
+@@ -3,26 +3,26 @@ setup() { setup_project; . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/frontmatter
+ teardown() { teardown_project; }
+ 
+ @test "dk_slug makes herdr-safe names" {
+   [ "$(dk_slug 'Login/Page Cart')" = "login-page-cart" ]
+   [ "$(dk_slug '123abc')" = "abc" ]
+   [ "$(dk_slug "$(printf 'a%.0s' {1..40})")" = "$(printf 'a%.0s' {1..32})" ]
+ }
+ 
+ @test "dk_ver_ge compares versions numerically, without sort -V" {
+   dk_ver_ge 0.10.0 0.9.0        # the trap: lexically "0.10.0" < "0.9.0"
+-  ! dk_ver_ge 0.9.0 0.10.0
++  refute dk_ver_ge 0.9.0 0.10.0
+   dk_ver_ge 0.9.0 0.9.0
+   dk_ver_ge 1.0 0.9.9
+-  ! dk_ver_ge 0.8.9 0.9.0
++  refute dk_ver_ge 0.8.9 0.9.0
+   dk_ver_ge 0.9 0.9.0           # a missing component counts as 0
+-  ! dk_ver_ge 0.9 0.9.1
++  refute dk_ver_ge 0.9 0.9.1
+   dk_ver_ge 0.9.10 0.9.9
+   dk_ver_ge 1.2.0-rc1 1.2.0     # a suffix is ignored, not treated as older
+   dk_ver_ge 0.09.0 0.9.0        # a leading zero is decimal, not octal
+ }
+ @test "dk_require_herdr passes in silence on the verified herdr series" {
+   run dk_require_herdr; [ "$status" -eq 0 ]; [ -z "$output" ]
+ }
+ @test "dk_require_herdr still dies outside a herdr pane" {
+   HERDR_ENV=0 run dk_require_herdr; [ "$status" -eq 1 ]; [[ "$output" == *HERDR_ENV* ]]
+ }
+@@ -93,21 +93,21 @@ teardown() { teardown_project; }
+   dk_index_add 2026-09-12 使用者登入 task planning —
+   before=$(cat "$DK_ROOT/tasks/INDEX.md")
+   run dk_index_set 使用者登出 done "merged abc123"
+   [ "$status" -eq 1 ]
+   [ "$(cat "$DK_ROOT/tasks/INDEX.md")" = "$before" ]
+ }
+ 
+ @test "index add flattens newlines so a row never spans lines" {
+   dk_index_add 2026-09-10 $'第一行\n第二行' chore working —
+   grep -q '^| 2026-09-10 | 第一行 第二行 | chore | working | — |$' "$DK_ROOT/tasks/INDEX.md"
+-  ! grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
++  refute_grep -q '^第二行' "$DK_ROOT/tasks/INDEX.md"
+ }
+ 
+ # tripwire：printf 與 awk -v 都不把 & 當元字元，所以這條在今天不可能失敗 —— 它守的是
+ # 「有人把 dk_render 改回 sed -i」那一天，& 會突然變成「整個比對到的字串」。刻意留著。
+ @test "dk_render replaces tokens and tolerates sed metacharacters" {
+   printf '# {{DISPLAY}}\nsrc={{SOURCE}}\n' > "$PROJECT/t.md"
+   out=$(dk_render "$PROJECT/t.md" 'DISPLAY=登入 & 註冊 #1' 'SOURCE=a/b\\c')
+   [ "$out" = "$(printf '# 登入 & 註冊 #1\nsrc=%s' 'a/b\\c')" ]
+ }
+ 
+@@ -142,25 +142,25 @@ R
+ @test "shipped settings.env has the five keys, all quoted" {
+   for k in DK_TEST_CMD DK_REVIEW_KINDS DK_REVIEW_MIN DK_REVIEW_TIMEOUT_MIN DK_TAB1_SLOTS; do grep -Eq "^$k=\"[^\"]*\"" "$DK_ROOT/settings.env"; done
+   dk_settings; [ "$DK_REVIEW_KINDS" = claude ]
+ }
+ @test "dk_env_set rewrites or appends a .task.env key" {
+   d=$(fixture_task login x)
+   dk_env_set DK_WAVE 2; grep -q '^DK_WAVE="2"$' "$d/.task.env"; [ "$(grep -c '^DK_WAVE=' "$d/.task.env")" -eq 1 ]
+   dk_env_set DK_NEWKEY "a b"; grep -q '^DK_NEWKEY="a b"$' "$d/.task.env"
+   dk_env_set DK_WAVE ""; grep -q '^DK_WAVE=""$' "$d/.task.env"
+   dk_task_env; [ -z "$DK_WAVE" ]; [ "$DK_NEWKEY" = "a b" ]
+-  run dk_env_set DK_X 'a"b'; [ "$status" -eq 1 ]; ! grep -q '^DK_X=' "$d/.task.env"
++  run dk_env_set DK_X 'a"b'; [ "$status" -eq 1 ]; refute_grep -q '^DK_X=' "$d/.task.env"
+ }
+ @test "dk_legacy_task detects a task folder without DK_BASE" {
+   run dk_legacy_task; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
+-  d=$(fixture_task login x); ! dk_legacy_task
++  d=$(fixture_task login x); refute dk_legacy_task
+   sed -i '/^DK_BASE=/d' "$d/.task.env"; dk_legacy_task
+ }
+ @test "task.env template carries the new keys" {
+   for k in DK_BASE DK_WAVE DK_KIND_DOWN DK_TABS; do grep -q "^$k=" "$DK_ROOT/templates/task.env"; done
+ }
+ @test "dk_minor_lines/dk_minor_count 是 dk-review 與 dk-task-close 共用的同一套 pattern" {
+   # Minor 5：兩支腳本各養一份正規表示式，漏冒號的 process 行一邊算一邊不算，
+   # 領導看到的 minor 數跟 reviewer 切片實際帶的內容對不上。抽進 lib/ 共用一份。
+   d=$(fixture_task login x)
+   cat > "$d/process.md" <<'P'
+diff --git a/tests/unit/04_docs.bats b/tests/unit/04_docs.bats
+index af762f4..ce48827 100644
+--- a/tests/unit/04_docs.bats
++++ b/tests/unit/04_docs.bats
+@@ -53,21 +53,21 @@ teardown() { teardown_project; }
+   # run 篇教領導把 reviewer 的 Important 轉成 [BUG] 給 dev、等 dev 的 [FIXED]，
+   # 但 PROTOCOL 的類型表只寫「員工→員工」，於是 dev 照自己的規範回了 [DONE]
+   # （RESULTS-2026-09-11 ⑩）
+   grep -qE 'dev .?\[FIXED\]' "$DK_ROOT/skills/run/SKILL.md"
+   grep -qE '^\| FIXED \|[^|]*領導' "$DK_ROOT/PROTOCOL.md"
+ }
+ 
+ @test "ENTRY.md tells a plain session it is NOT the leader" {
+   # 這次改版的核心：入口只認身分、不再把人帶進領導規範。
+   # 最可能的回歸是有人為了方便又把 leader 分支接回 LEADER.md。
+-  ! grep -q 'LEADER\.md' "$DK_ROOT/ENTRY.md"
++  refute_grep -q 'LEADER\.md' "$DK_ROOT/ENTRY.md"
+   for w in dkbo-brain dkbo-plan dkbo-run dk-whoami dk-resume; do
+     grep -q -- "$w" "$DK_ROOT/ENTRY.md"
+   done
+   grep -q '你不是領導' "$DK_ROOT/ENTRY.md"
+   grep -q '不要自己去讀規範檔' "$DK_ROOT/ENTRY.md"
+   # employee 分支不准動
+   grep -q 'roles/<角色>.md' "$DK_ROOT/ENTRY.md"
+   grep -q 'PROTOCOL.md' "$DK_ROOT/ENTRY.md"
+ }
+ 
+diff --git a/tests/unit/06_msg.bats b/tests/unit/06_msg.bats
+index 7bf1bba..8bf4818 100644
+--- a/tests/unit/06_msg.bats
++++ b/tests/unit/06_msg.bats
+@@ -14,21 +14,21 @@ teardown() { teardown_project; }
+   grep -q '^agent prompt leader-login ' "$HERDR_STUB_LOG"
+   run dk-msg login-qa "[DECISION] 用現有 users 表"
+   grep -q 'leader-login -> login-qa \[DECISION\]' "$DK_ROOT/tasks/$(date +%F)-login/messages.log"
+ }
+ @test "refuses >200 chars, unknown type, isolated peer" {
+   long=$(printf 'x%.0s' {1..201})
+   DK_AGENT=login-qa run dk-msg login-frontend "[BUG] $long"; [ "$status" -eq 2 ]
+   DK_AGENT=login-qa run dk-msg login-frontend "[HELLO] hi"; [ "$status" -eq 2 ]
+   DK_AGENT=login-qa DK_ISOLATED=1 run dk-msg login-frontend "[BUG] x"; [ "$status" -eq 2 ]
+   DK_AGENT=login-qa DK_ISOLATED=1 run dk-msg leader "[DONE] x"; [ "$status" -eq 0 ]
+-  ! grep -q '^agent prompt login-frontend' "$HERDR_STUB_LOG"
++  refute_grep -q '^agent prompt login-frontend' "$HERDR_STUB_LOG"
+ }
+ @test "undelivered when wait fails" {
+   HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa DK_MSG_RETRY_SEC=0 run dk-msg login-frontend "[BUG] x"
+   [ "$status" -eq 1 ]
+   grep -q 'login-qa -> login-frontend \[UNDELIVERED\] \[BUG\] x' "$DK_ROOT/tasks/$(date +%F)-login/messages.log"
+ }
+ @test "ack writes marker" {
+   dk-msg --ack
+   grep -Eq '^[0-9T:-]+ leader-login \[ACK\]$' "$DK_ROOT/tasks/$(date +%F)-login/messages.log"
+ }
+@@ -44,21 +44,21 @@ teardown() { teardown_project; }
+   [ "$status" -eq 0 ]
+   grep -q '^agent wait wB:p1 --until idle --until done --timeout 300000$' "$HERDR_STUB_LOG"
+   grep -q '^agent prompt wB:p1 \[DONE\] from chore-it-1: 5 處文件已改，未 commit$' "$HERDR_STUB_LOG"
+   grep -Eq '^[0-9T:-]+ chore-it-1 -> wB:p1 \[DONE\] 5 處文件已改，未 commit$' "$DK_ROOT/tasks/_chores/messages.log"
+ }
+ @test "chore worker may only message the leader" {
+   rm -f "$DK_ROOT/.sessions/"*
+   DK_AGENT=chore-it-1 DK_ROLE=it DK_CHORE_FILE="$DK_ROOT/tasks/_chores/x.md" DK_LEADER=wB:p1 \
+     run dk-msg login-frontend "[QUESTION] x"
+   [ "$status" -eq 2 ]
+-  ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
++  refute_grep -q '^agent prompt' "$HERDR_STUB_LOG"
+ }
+ 
+ @test "dk-msg retries a message that does not land before giving up" {
+   # e2e 實測：codex reviewer 的 [DONE] 一次就被判定失敗、整筆遺失，領導從不知道它交過報告
+   # （RESULTS-2026-09-11 ⑦）。送不到要重試幾次才認輸。
+   HERDR_STUB_FAIL="agent wait" DK_MSG_TRIES=3 DK_MSG_RETRY_SEC=0 run dk-msg login-qa "[DONE] x"
+   [ "$status" -eq 1 ]
+   [ "$(grep -c '^agent wait login-qa ' "$HERDR_STUB_LOG")" -eq 3 ]
+   [ "$(grep -c 'UNDELIVERED' "$DK_ROOT/tasks/$(date +%F)-login/messages.log")" -eq 1 ]
+ }
+diff --git a/tests/unit/07_spawn.bats b/tests/unit/07_spawn.bats
+index 2418c70..1c723b7 100644
+--- a/tests/unit/07_spawn.bats
++++ b/tests/unit/07_spawn.bats
+@@ -40,31 +40,31 @@ teardown() { teardown_project; }
+   grep -Eq '^login-pm wC:p2 [0-9]+ dev 0 0$' "$d/.panes"
+ }
+ @test "spawn records prompt failure but keeps the pane entry" {
+   HERDR_STUB_FAIL="agent prompt" run dk-spawn qa
+   [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+   grep -q '^login-qa wC:p2 ' "$d/.panes"; grep -q 'spawn login-qa (claude M) prompt-failed' "$d/process.md"
+ }
+ @test "spawn validates agent name before touching herdr" {
+   run dk-spawn frontend 'Big Cart!'
+   [ "$status" -eq 1 ]
+-  ! grep -q '^pane split' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+ }
+ @test "spawn keeps the pane when agent start fails, so the startup prompt survives" {
+   # e2e 實測：codex 卡在「Update available!」升級提示而 agent start 失敗，
+   # 舊行為把 pane 關掉連證據一起銷毀，現場查不出原因（RESULTS-2026-09-11 ⑧）
+   HERDR_STUB_FAIL="agent start" run dk-spawn qa
+   [ "$status" -eq 1 ]
+-  ! grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"
+   [[ "$output" == *"wC:p2"* ]] && [[ "$output" == *"pane read"* ]]
+   grep -q 'spawn login-qa failed: pane wC:p2 kept' "$d/process.md"
+-  ! grep -q '^login-qa ' "$d/.panes"
++  refute_grep -q '^login-qa ' "$d/.panes"
+ }
+ @test "spawn --resume closes and dedupes the old pane entry" {
+   echo "login-qa wC:p9" >> "$d/.panes"
+   run dk-spawn qa --resume
+   [ "$status" -eq 0 ]
+   grep -q '^pane close wC:p9$' "$HERDR_STUB_LOG"
+   [ "$(grep -c '^login-qa ' "$d/.panes")" -eq 1 ]
+   grep -q '^login-qa wC:p2 ' "$d/.panes"
+ }
+ @test "first prompt points at the member slice when it exists" {
+@@ -82,33 +82,33 @@ teardown() { teardown_project; }
+ @test "--split overrides only the direction" {
+   echo "login-backend wC:p2 0 dev 1 1" > "$d/.panes"
+   dk-spawn qa --split right >/dev/null
+   grep -q -- '--pane wC:p2 --direction right --ratio 0.500' "$HERDR_STUB_LOG"; grep -Eq '^login-qa wC:p2 [0-9]+ review 1 2$' "$d/.panes"
+ }
+ @test "fifth employee opens tab 2 as its root pane and records DK_TABS" {
+   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
+   run dk-spawn qa; [ "$status" -eq 0 ]; [ "$output" = "login-qa wB:p10" ]
+   tc=$(grep '^tab create' "$HERDR_STUB_LOG")
+   [[ "$tc" == "tab create --workspace wB --cwd $WORKTREE_PATH --label login-2 --no-focus --env DK_ROOT=$DK_ROOT --env DK_TASK_DIR=$d --env DK_ROLE=qa --env DK_AGENT=login-qa"* ]]
+-  ! grep -q '^pane split' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+   grep -q '^agent start login-qa --kind claude --pane wB:p10 ' "$HERDR_STUB_LOG"
+   grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
+   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; grep -q 'tab 2 wB:t2 opened' "$d/process.md"
+ }
+ @test "tab create failure dies before starting an agent" {
+   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
+-  HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; ! grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
++  HERDR_STUB_FAIL="tab create" run dk-spawn qa; [ "$status" -eq 1 ]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
+ }
+ @test "agent start failure on a new tab keeps the tab so the startup prompt survives" {
+   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\n' > "$d/.panes"
+   HERDR_STUB_FAIL="agent start" run dk-spawn qa; [ "$status" -eq 1 ]
+-  ! grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  refute_grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(wc -l < "$d/.panes")" -eq 4 ]
+   grep -q 'spawn login-qa failed: pane .* kept for diagnosis' "$d/process.md"
+ }
+ @test "--resume of an overflow tab's only occupant closes the stale tab and keeps one DK_TABS entry" {
+   printf 'a wC:p2 0 dev 1 1\nb wC:p3 0 dev 1 2\nc wC:p4 0 dev 1 3\nd wC:p5 0 dev 1 4\nlogin-qa wB:p10 0 review 2 1\n' > "$d/.panes"
+   sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t9"/' "$d/.task.env"
+   run dk-spawn qa --resume; [ "$status" -eq 0 ]
+   grep -q '^pane close wB:p10$' "$HERDR_STUB_LOG"; grep -q '^tab close wB:t9$' "$HERDR_STUB_LOG"; grep -q '^tab create ' "$HERDR_STUB_LOG"
+   grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"; [ "$(grep -c '^2=' <<< "$(sed -n 's/^DK_TABS="\(.*\)"$/\1/p' "$d/.task.env" | tr ' ' '\n')")" -eq 1 ]
+   grep -q 'tab 2 wB:t9 closed (recreated)' "$d/process.md"; grep -Eq '^login-qa wB:p10 [0-9]+ review 2 1$' "$d/.panes"
+diff --git a/tests/unit/08_wave_close.bats b/tests/unit/08_wave_close.bats
+index ede1f22..a49a6bf 100644
+--- a/tests/unit/08_wave_close.bats
++++ b/tests/unit/08_wave_close.bats
+@@ -13,39 +13,39 @@ setup() {
+ teardown() { teardown_project; }
+ 
+ @test "all gates pass: panes closed, DK_WAVE cleared, tests skipped without DK_TEST_CMD" {
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"closed 2"* ]]
+   grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"
+   [ ! -s "$d/.panes" ]; grep -q '^DK_WAVE=""$' "$d/.task.env"
+   grep -q ' wave-close 1 tests skipped (no DK_TEST_CMD) 2 agents closed$' "$d/process.md"
+ }
+ @test "gate 0: a state not done refuses unless --force" {
+   sed -i 's/^status: done/status: working/' "$d/state/qa.md"
+-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   run dk-wave-close --force; [ "$status" -eq 0 ]
+ }
+ @test "gate a: needs a review verdict or a recorded skip" {
+   sed -i '/review 1 verdict/d' "$d/process.md"
+-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"review 1 verdict"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"review 1 verdict"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   echo "2026-09-10T10:00 review 1 skipped: 純文件波" >> "$d/process.md"; run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ @test "gate b: every dev needs a report with content under ## 測試; review-group members do not" {
+   rm "$d/state/backend.report.md"; run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"no report"*"backend.report.md"* ]]
+   printf '# r\n## 測試\n（必填）\n\n## 自我審查\nok\n' > "$d/state/backend.report.md"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"的 '## 測試' 缺證據"* ]]
+   printf '# r\n## 測試\n### 紅\n$ bats\nFAIL 12\n### 綠\n$ bats\n12 ok\n' > "$d/state/backend.report.md"
+   run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ @test "gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail" {
+   echo 'DK_TEST_CMD="cat tests/marker.txt"' >> "$DK_ROOT/settings.env"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"tests failed (cat tests/marker.txt)"* ]]; [[ "$output" == *"No such file"* ]]
+-  ! grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
++  refute_grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
+   mkdir -p "$WORKTREE_PATH/tests"; echo ok > "$WORKTREE_PATH/tests/marker.txt"   # under qa's ownership, or gate d refuses it
+   run dk-wave-close; [ "$status" -eq 0 ]; grep -q ' wave-close 1 tests ok (cat tests/marker.txt) 2 agents closed$' "$d/process.md"
+ }
+ @test "gate c: --force closes despite failing tests and says so" {
+   echo 'DK_TEST_CMD="echo boom; exit 1"' >> "$DK_ROOT/settings.env"
+   run dk-wave-close --force; [ "$status" -eq 0 ]; [[ "$output" == *"boom"* ]]; grep -q 'tests failed (echo boom; exit 1, forced) 2 agents closed' "$d/process.md"
+ }
+ @test "no open wave refuses" {
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"; run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"no wave open"* ]]
+ }
+@@ -55,32 +55,32 @@ teardown() { teardown_project; }
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"legacy"* ]]; grep -q 'wave-close: 2 agents closed' "$d/process.md"
+   [[ "$output" != *"unowned"* ]]; [[ "$output" != *"committed"* ]]; [ "$(wt log -1 --pretty=%s)" = init ]
+ }
+ @test "long state is still reported" {
+   for i in $(seq 1 25); do echo "notes: line $i" >> "$d/state/qa.md"; done
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"state too long"* ]]
+ }
+ @test "越界閘: a real change nobody in the wave owns refuses unless --force" {
+   mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"unowned change: src/web/x.ts"* ]]
+-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   run dk-wave-close --force; [ "$status" -eq 0 ]; grep -q 'violation unowned: src/web/x.ts' "$d/process.md"
+ }
+ @test "越界閘: an owned change nobody reported warns but still closes" {
+   mkdir -p "$WORKTREE_PATH/src/api"; echo x > "$WORKTREE_PATH/src/api/other.ts"
+   run dk-wave-close; [ "$status" -eq 0 ]
+   [[ "$output" == *"unreported change: src/api/other.ts (owner backend)"* ]]
+   grep -q 'unreported src/api/other.ts' "$d/process.md"
+ }
+ @test "越界閘: a touched path that never really changed is no longer a violation" {
+   printf 'status: done\ntouched:\n  - src/web/x.ts\n' > "$d/state/backend.md"
+-  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" != *"violation"* ]]; ! grep -q 'violation' "$d/process.md"
++  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" != *"violation"* ]]; refute_grep -q 'violation' "$d/process.md"
+ }
+ @test "越界閘: a wave with no recorded base skips the diff gate with a warning" {
+   sed -i '/ wave-open 1 base /d' "$d/process.md"
+   mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"no recorded base"* ]]
+ }
+ @test "越界閘: a wave member with no state file still gets the normal refusal" {
+   rm "$d/state/qa.md"
+   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]
+ }
+@@ -104,36 +104,36 @@ teardown() { teardown_project; }
+   run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" == *"nothing to commit"* ]]
+   [ "$(wt log -1 --pretty=%s)" = init ]
+ }
+ @test "an emptied overflow tab is closed after the wave" {
+   echo 'login-reviewer-a wB:p10 0 review 2 1' >> "$d/.panes"; printf 'status: done\n' > "$d/state/reviewer-a.md"
+   sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t2"/' "$d/.task.env"
+   run dk-wave-close; [ "$status" -eq 0 ]; grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; grep -q '^DK_TABS=""$' "$d/.task.env"
+ }
+ @test "--agent closes one pane, drops its row, re-balances its tab" {
+   run dk-wave-close --agent login-qa; [ "$status" -eq 0 ]; [ "$output" = "closed login-qa" ]
+-  grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"; ! grep -q '^login-qa ' "$d/.panes"; grep -q '^login-backend ' "$d/.panes"
++  grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"; refute_grep -q '^login-qa ' "$d/.panes"; grep -q '^login-backend ' "$d/.panes"
+   grep -q 'pane-close login-qa' "$d/process.md"; grep -q '^pane layout --pane wB:p1$' "$HERDR_STUB_LOG"
+   run dk-wave-close --agent nobody; [ "$status" -eq 1 ]
+ }
+ @test "ownership matches member names exactly" {
+   . "$DK_ROOT/lib/ownership.sh"
+   printf '| qa-a | docs/** | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$d/brief.md"
+-  dk_owned "$d/brief.md" qa tests/x.ts; ! dk_owned "$d/brief.md" qa docs/x.md; dk_owned "$d/brief.md" qa-a docs/x.md
++  dk_owned "$d/brief.md" qa tests/x.ts; refute dk_owned "$d/brief.md" qa docs/x.md; dk_owned "$d/brief.md" qa-a docs/x.md
+ }
+ 
+ @test "verdict must account for every reviewer that was spawned" {
+   # e2e 實測：兩位 reviewer 派出去，領導只對 a 裁定就放行，codex 那位的意見整筆蒸發
+   # 而流程看起來完全正常（RESULTS-2026-09-11 ⑧）
+   echo "2026-09-11T10:00 review 1 spawned login-reviewer-a(claude) login-reviewer-b(codex)" >> "$d/process.md"
+   run dk-wave-close                      # setup 已寫了 "review 1 verdict a: ok"，缺 b
+-  [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
+   run dk-wave-close; [ "$status" -eq 0 ]
+ }
+ 
+ @test "gate b: 缺 ### 紅 或 ### 綠 都不放行，不適用可以過" {
+   # 錯誤訊息同時提到兩個小節名，所以不能拿訊息裡有沒有「### 紅」來分辨是哪一邊缺 ——
+   # 斷言改成「這份 report 被擋下來了」，並用 refute_grep 確認沒有其他 gate 一起叫。
+   printf '# backend 報告\n## 測試\n### 綠\n3 passed\n' > "$d/state/backend.report.md"
+   run dk-wave-close; [ "$status" -eq 1 ]
+   [[ "$output" == *"state/backend.report.md 的 '## 測試' 缺"* ]]
+diff --git a/tests/unit/09_watch.bats b/tests/unit/09_watch.bats
+index 45bd85b..846a529 100644
+--- a/tests/unit/09_watch.bats
++++ b/tests/unit/09_watch.bats
+@@ -1,18 +1,18 @@
+ load ../helpers
+ setup() { setup_project; d=$(fixture_task login 使用者登入); printf 'login-frontend wC:p2\nlogin-qa wC:p3\n' > "$d/.panes"; export DK_TASK_DIR="$d"; }
+ teardown() { teardown_project; }
+ 
+ @test "first sighting records marker, no notify" {
+   run dk-watch --once; [ "$status" -eq 0 ]
+   [ -f "$d/.blocked/login-qa" ]; [ ! -f "$d/.blocked/login-frontend" ]
+-  ! grep -q '^notification show' "$HERDR_STUB_LOG"
++  refute_grep -q '^notification show' "$HERDR_STUB_LOG"
+ }
+ @test "blocked past threshold notifies once" {
+   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+   dk-watch --once; dk-watch --once
+   [ "$(grep -c '^notification show dkbo: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+   grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+   grep -q 'blocked login-qa' "$d/process.md"
+ }
+ @test "[BLOCKED] 的 pane 退路優先讀 DK_LEADER_PANE" {
+   echo 'DK_LEADER_PANE="wC:p1"' >> "$d/.task.env"
+@@ -156,36 +156,36 @@ chore_rec() { # $1=agent [$2=leader] — 一個執行記錄檔，不跑 dk-chore
+     echo "leader=${2:-}"
+   } > "$DK_ROOT/.sessions/chores/$1"
+ }
+ blocked_chore() { sed -i 's/login-qa/chore-frontend-1/' "$HERDR_STUB_RESPONSES/agent_list.json"; }
+ cmark="$DK_ROOT/.sessions/chores.blocked"
+ 
+ @test "--chores: first sighting records a marker, no notify" {
+   blocked_chore; chore_rec chore-frontend-1 leader-login
+   run dk-watch --chores --once; [ "$status" -eq 0 ]
+   [ -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
+-  ! grep -q '^notification show' "$HERDR_STUB_LOG"
++  refute_grep -q '^notification show' "$HERDR_STUB_LOG"
+ }
+ @test "--chores: blocked past the threshold notifies the chore's own leader once" {
+   blocked_chore; chore_rec chore-frontend-1 leader-login
+   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+   dk-watch --chores --once; dk-watch --chores --once
+   [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
+   grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log"
+ }
+ @test "--chores: 記錄檔的 leader 是空的時仍發桌面通知，且不誤標 delivered" {
+   blocked_chore; chore_rec chore-frontend-1
+   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+   run dk-watch --chores --once; [ "$status" -eq 0 ]
+   grep -q '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG"
+-  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
++  refute_grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+ }
+ @test "--chores: 沒有記錄檔時守望直接退出" {
+   blocked_chore
+   run dk-watch --chores --once; [ "$status" -eq 0 ]
+   [ ! -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
+ }
+ @test "--chores: 員工重寫 chore 檔不影響守望名單" {
+   blocked_chore; chore_rec chore-frontend-1 leader-login
+   echo '# 我的報告' > "$DK_ROOT/tasks/_chores/2026-09-10-chore-frontend-1.md"   # 員工整份重寫
+   run dk-watch --chores --once; [ "$status" -eq 0 ]
+@@ -220,24 +220,24 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
+   grep -q ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md"; grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+   [ -f "$d/.blocked/login-reviewer-b.timeout" ]
+ }
+ @test "no quota words → no (quota?) tag; kinds accumulate without duplicates" {
+   echo '{"result":{"read":{"text":"thinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"
+   sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="agy"/' "$d/.task.env"; reviewer_row "$old"
+   dk-watch --once
+   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"; grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
+ }
+ @test "fresh reviewers, done reviewers, qa and legacy rows never time out" {
+-  reviewer_row "$(date +%s)"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
++  reviewer_row "$(date +%s)"; dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+   sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+-  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+-  printf 'login-qa wC:p3 %s review 1 2\nlogin-frontend wC:p2\n' "$old" > "$d/.panes"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
++  dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
++  printf 'login-qa wC:p3 %s review 1 2\nlogin-frontend wC:p2\n' "$old" > "$d/.panes"; dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+ }
+ @test "a shorter DK_REVIEW_TIMEOUT_MIN is honoured" {
+   echo 'DK_REVIEW_TIMEOUT_MIN="1"' >> "$DK_ROOT/settings.env"; reviewer_row "$(( $(date +%s) - 120 ))"
+   dk-watch --once; grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+ }
+ @test "a reviewer spawned without an alias times out too" {
+   printf 'login-reviewer wC:p4 %s review 1 3\n' "$old" >> "$d/.panes"; echo "2026-09-10T10:00 spawn login-reviewer (claude M) isolated" >> "$d/process.md"
+   dk-watch --once; grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer 逾時' "$HERDR_STUB_LOG"
+ }
+ 
+@@ -248,59 +248,59 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
+   dk-watch --once
+   grep -q '^agent wait leader-login --until idle --until done --timeout 5000$' "$HERDR_STUB_LOG"
+ }
+ 
+ @test "blocked: an undelivered prompt retries next tick without repeating the desktop notification" {
+   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   [ "$(grep -c '^notification show dkbo: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c ' blocked login-qa$' "$d/process.md")" -eq 1 ]
+-  ! grep -q '^delivered$' "$d/.blocked/login-qa"
++  refute_grep -q '^delivered$' "$d/.blocked/login-qa"
+   dk-watch --once                      # 領導終於閒下來
+   grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+   grep -q '^delivered$' "$d/.blocked/login-qa"
+ }
+ 
+ @test "timeout: the kind goes down and is logged once even when the prompt never lands" {
+   quota_screen; reviewer_row "$old"
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
+   [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
+-  ! grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
++  refute_grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   [ "$(grep -c '^notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
+   dk-watch --once
+   [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG")" -eq 1 ]
+   grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+ }
+ 
+ @test "--chores: an undelivered prompt retries and only logs the message once it lands" {
+   blocked_chore; chore_rec chore-frontend-1 leader-login
+   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+   HERDR_STUB_FAIL="agent wait" dk-watch --chores --once
+-  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+-  ! grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log" 2>/dev/null
++  refute_grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
++  refute_grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log" 2>/dev/null
+   dk-watch --chores --once
+   [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log")" -eq 1 ]
+   grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+ }
+ 
+ @test "整波逾時：超過 DK_WAVE_TIMEOUT_MIN 推一次 [TIMEOUT] wave 給領導" {
+   echo 'DK_WAVE_TIMEOUT_MIN="30"' >> "$DK_ROOT/settings.env"
+   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+   sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"/" "$d/.task.env" 2>/dev/null || \
+     echo "DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"" >> "$d/.task.env"
+-  dk-watch --once; ! grep -q 'TIMEOUT. from dk-watch: wave' "$HERDR_STUB_LOG"   # 才過 1 分鐘
++  dk-watch --once; refute_grep -q 'TIMEOUT. from dk-watch: wave' "$HERDR_STUB_LOG"   # 才過 1 分鐘
+   sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 2000 ))\"/" "$d/.task.env"
+   dk-watch --once; dk-watch --once
+   [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: wave 1 ' "$HERDR_STUB_LOG")" -eq 1 ]
+   grep -q 'timeout wave 1' "$d/process.md"
+ }
+ 
+ @test "herdr agent list 失敗時留下痕跡，而不是讓守望靜靜變成 no-op" {
+   # 0.1.5 的 CHANGELOG 自己點名過：herdr 呼叫的失敗是刻意吞掉的，換版時的表現不是報錯，
+   # 而是 dk-watch 永遠偵測不到 blocked —— 整套安全網變成 no-op 而看起來一切正常
+   HERDR_STUB_FAIL="agent list" run dk-watch --once
+@@ -324,21 +324,21 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
+ }
+ @test "reviewer timeout falls back to the leader pane id too" {
+   quota_screen; reviewer_row "$old"
+   HERDR_STUB_MISSING="leader-login" dk-watch --once
+   grep -q '^agent prompt wB:p1 \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時 (quota?)$' "$HERDR_STUB_LOG"
+   grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+ }
+ @test "still leaves no delivered mark when the pane id is unreachable too" {
+   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
+   HERDR_STUB_MISSING="leader-login wB:p1" dk-watch --once
+-  ! grep -q '^delivered$' "$d/.blocked/login-qa"
++  refute_grep -q '^delivered$' "$d/.blocked/login-qa"
+ }
+ 
+ # --- dev 波聚合：全員完成才推一則，取代員工逐筆的 [DONE] ---
+ 
+ dev_wave() {   # 兩個 dev、一個 qa，波 1 開著；全員 idle、畫面乾淨
+   local now; now=$(date +%s)
+   printf 'login-backend wC:p2 %s dev 1 1\nlogin-frontend wC:p5 %s dev 1 2\nlogin-qa wC:p3 %s review 1 3\n' \
+     "$now" "$now" "$now" > "$d/.panes"
+   sed -i 's/"blocked"/"idle"/' "$HERDR_STUB_RESPONSES/agent_list.json"
+   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+@@ -402,39 +402,39 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
+ # 三個出口（熔斷、桌面通知、送領導的 [TIMEOUT]）全程空轉。
+ 
+ neutral_screen() { echo '{"result":{"read":{"text":"thinking..."}}}' > "$HERDR_STUB_RESPONSES/agent_read.json"; }
+ redispatched() { # 領導派了複看，然後過了 25 分鐘
+   dk-msg login-reviewer-b "[TASK] 複看第二輪" >/dev/null
+   sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"
+ }
+ 
+ @test "被重新指派後，上一輪留下的 status: done 不再擋住逾時" {
+   neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+-  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"     # 首輪交了，這時吵它才是錯的
++  dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"     # 首輪交了，這時吵它才是錯的
+   redispatched
+   dk-watch --once
+   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+   grep -q ' timeout login-reviewer-b → kind codex down$' "$d/process.md"
+ }
+ 
+ @test "複看真的交了（state 被重寫）就不報逾時" {
+   neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+   redispatched
+   printf 'status: done\nnotes: 第二輪也看完了\n' > "$d/state/reviewer-b.md"
+   dk-watch --once
+-  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
++  refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+ }
+ 
+ @test "沒被重新指派過的 reviewer：首輪的 done 照樣擋住逾時" {
+   neutral_screen; reviewer_row "$old"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+   dk-watch --once
+-  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
++  refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+ }
+ 
+ @test "上一輪的 .timeout 已 delivered，複看再卡住仍會重新報一次" {
+   neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
+   mkdir -p "$d/.blocked"; printf 'notified\ntag=\ndelivered\n' > "$d/.blocked/login-reviewer-b.timeout"
+   redispatched
+   dk-watch --once
+   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
+ }
+ 
+diff --git a/tests/unit/11_chore.bats b/tests/unit/11_chore.bats
+index a6991b8..251a2b6 100644
+--- a/tests/unit/11_chore.bats
++++ b/tests/unit/11_chore.bats
+@@ -9,27 +9,27 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
+ @test "chore without code splits from current pane in project root" {
+   run dk-chore frontend "翻譯 docs/README.md 成英文" --tier S
+   [ "$status" -eq 0 ]
+   f=$(chore_files); grep -q '^交代：翻譯 docs/README.md 成英文$' "$f"
+   grep -q '^成員：chore-frontend-1 (claude / S)$' "$f"
+   grep -q '^branch=-$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
+   split=$(grep '^pane split' "$HERDR_STUB_LOG"); [[ "$split" == *"--current --direction right --cwd $PROJECT --no-focus"* ]]
+   [[ "$split" == *"--env DK_CHORE_FILE=$f"* ]]; [[ "$split" == *"--env DK_CHORE_CODE=0"* ]]
+   grep -q '^agent start chore-frontend-1 --kind claude --pane wC:p2 -- --model opus --effort low' "$HERDR_STUB_LOG"
+   grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
+-  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
++  refute_grep -q '^worktree create' "$HERDR_STUB_LOG"
+ }
+ @test "chore --code makes a native git worktree branch and numbers agents" {
+   dk-chore frontend "first" >/dev/null
+   run dk-chore frontend "修登入頁 Safari 版面" --code
+   [ "$status" -eq 0 ]
+-  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
++  refute_grep -q '^worktree create' "$HERDR_STUB_LOG"
+   wt="$PROJECT/.worktrees/chore-safari"
+   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+   [ "$(git -C "$wt" rev-parse --abbrev-ref HEAD)" = chore/safari ]
+   split=$(grep '^pane split' "$HERDR_STUB_LOG" | tail -1); [[ "$split" == *"--current --direction right --cwd $wt --no-focus"* ]]
+   grep -q '^agent start chore-frontend-2 ' "$HERDR_STUB_LOG"
+   rec="$DK_ROOT/.sessions/chores/chore-frontend-2"
+   grep -q '^branch=chore/safari$' "$rec"; grep -q '^workspace=-$' "$rec"; grep -q '^pane=wC:p2$' "$rec"
+ }
+ @test "chore --code honours DK_WORKTREE_DIR and refuses a live duplicate slug" {
+   DK_WORKTREE_DIR="$PROJECT/wt" run dk-chore frontend "fix" --code; [ "$status" -eq 0 ]
+@@ -47,55 +47,55 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
+   run dk-chore frontend "second" --code
+   [ "$status" -eq 0 ]
+   [ -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]   # 還在跑的那件沒被動到
+   [ -e "$DK_ROOT/.sessions/chores/chore-frontend-2" ]   # 新的一件跳過 1
+   [ "$(grep -c '^pane split' "$HERDR_STUB_LOG")" -eq 2 ]
+ }
+ @test "chore-close without code: closes pane, marks index done" {
+   dk-chore frontend "翻譯 README" >/dev/null
+   done_msg chore-frontend-1 "docs/README.en.md"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+-  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
++  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"
+   grep -q '| 翻譯 README | chore | done | docs/README.en.md |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "chore-close --code: merges branch, removes worktree, deletes branch" {
+   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
+   echo x > "$wt/x.txt"; git -C "$wt" add x.txt; git -C "$wt" -c user.name=t -c user.email=t@t commit -q -m fix
+   done_msg chore-frontend-1 "fix done"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+   [ -f "$PROJECT/x.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'chore: fix'
+-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
+-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+-  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
++  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
++  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $wt"
++  refute git -C "$PROJECT" rev-parse --verify -q chore/fix
+   grep -Eq '\| fix \| chore \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "chore-close --code refuses when the worktree has uncommitted changes" {
+   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"; echo dirty > "$wt/y.txt"
+   done_msg chore-frontend-1 "fix done"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
+-  [ -f "$wt/y.txt" ]; git -C "$PROJECT" rev-parse --verify -q chore/fix; ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  [ -f "$wt/y.txt" ]; git -C "$PROJECT" rev-parse --verify -q chore/fix; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]; grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "chore-close refuses when not done; --abandon skips merge, removes worktree and branch" {
+   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]; [[ "$output" == *"[DONE]"* ]]
+   run dk-chore-close chore-frontend-1 --abandon; [ "$status" -eq 0 ]
+-  [ ! -d "$wt" ]; ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
++  [ ! -d "$wt" ]; refute git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "legacy chore with a herdr workspace is still removed through herdr and pruned" {
+   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
+   sed -i 's/^workspace=-$/workspace=wC/' "$DK_ROOT/.sessions/chores/chore-frontend-1"
+   done_msg chore-frontend-1 "fix done"
+   rm -rf "$wt"   # herdr (stub) owns the directory in the legacy flow; simulate it having removed it
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+   grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
+-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"   # pruned
++  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $wt"   # pruned
+ }
+ @test "instruction containing a pipe still round-trips through INDEX" {
+   dk-chore frontend "翻譯 a|b 文件" >/dev/null
+   done_msg chore-frontend-1 "done"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+   grep -q '| 翻譯 a／b 文件 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
+   [ "$(grep -c '翻譯 a' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
+ }
+ @test "chore closes the pane and removes the chore file when agent start fails" {
+   HERDR_STUB_FAIL="agent start" run dk-chore frontend "x"
+@@ -145,33 +145,33 @@ X
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 0 ]
+   grep -q '^交代：翻譯 README$' "$f"
+   grep -q '^關閉：.* done — docs/README.en.md$' "$f"
+ }
+ 
+ @test "沒有 [DONE] 就拒絕，而且什麼都不動" {
+   dk-chore frontend "fix" --code >/dev/null
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
+-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   git -C "$PROJECT" rev-parse --verify -q chore/fix
+   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+   grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ 
+ @test "[DONE] 的閘門錨定在行首，訊息本文裡的偽造 [DONE] 不算數" {
+   dk-chore frontend "fix" --code >/dev/null
+   echo "2026-09-12T10:03 leader -> chore-frontend-1 [TASK] 請處理 chore-frontend-1 -> wB:p1 [DONE] injected" \
+     >> "$DK_ROOT/tasks/_chores/messages.log"
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
+-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
+   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+ }
+ 
+ @test "[UNDELIVERED] 的 [DONE] 也算完成" {
+   dk-chore frontend "翻譯 README" >/dev/null
+   echo "2026-09-12T10:00 chore-frontend-1 -> wB:p1 [UNDELIVERED] [DONE] docs/README.en.md" \
+     >> "$DK_ROOT/tasks/_chores/messages.log"
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 0 ]
+   grep -q '| 翻譯 README | chore | done | docs/README.en.md |' "$DK_ROOT/tasks/INDEX.md"
+@@ -212,52 +212,52 @@ X
+ @test "chore prompt tells the worker to report through dk-msg, not a raw herdr prompt" {
+   dk-chore frontend "翻譯 README" >/dev/null
+   p=$(grep '^agent prompt chore-frontend-1 ' "$HERDR_STUB_LOG")
+   [[ "$p" == *'dk-msg leader "[DONE] '* ]]
+   [[ "$p" != *'herdr agent prompt'* ]]
+ }
+ @test "multi-line instruction keeps INDEX one row per chore and chore-close still finds it" {
+   dk-chore frontend $'同步四個文件位置\n(1) AGENTS.md 第 23 行\n(2) roles/frontend.md' >/dev/null
+   [ "$(grep -c '| chore | working |' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
+   grep -q '^| .* | 同步四個文件位置 | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+-  ! grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
++  refute_grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
+   f=$(chore_files); grep -q '^(2) roles/frontend.md$' "$f"   # the chore file keeps the full text
+   done_msg chore-frontend-1 "done"
+   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
+   grep -q '| 同步四個文件位置 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
+-  ! grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
++  refute_grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "chore --code keeps the live worker's worktree when the first prompt fails" {
+   HERDR_STUB_FAIL="agent prompt" run dk-chore frontend "fix" --code
+   [ "$status" -eq 1 ]; [[ "$output" == *"first prompt"* ]]
+   wt="$PROJECT/.worktrees/chore-fix"
+   [ -d "$wt" ]                                   # 員工已經站在裡面：rollback 不准再刪
+   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
+   git -C "$PROJECT" rev-parse --verify -q chore/fix
+-  ! grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
++  refute_grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
+   grep -q '^branch=chore/fix$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
+   grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "chore's first prompt waits for the worker to start, not for its whole first turn" {
+   dk-chore frontend "fix" --code >/dev/null
+   p=$(grep '^agent prompt chore-frontend-1 ' "$HERDR_STUB_LOG")
+   [[ "$p" == *"--wait --until working"* ]]
+ }
+ 
+ @test "chore 寫下執行記錄檔，且 instr 只有交代首行" {
+   dk-chore frontend $'同步四個文件位置\n(1) AGENTS.md 第 23 行' --code >/dev/null
+   rec="$DK_ROOT/.sessions/chores/chore-frontend-1"
+   [ -f "$rec" ]
+   f=$(chore_files)
+   grep -q "^file=$f$" "$rec"          # 完整路徑，不是「在那個目錄下就算過」
+   grep -q '^instr=同步四個文件位置$' "$rec"
+-  ! grep -q 'AGENTS.md' "$rec"
++  refute_grep -q 'AGENTS.md' "$rec"
+   grep -q '^branch=chore/' "$rec"
+   grep -q '^workspace=-$' "$rec"
+   grep -q '^pane=wC:p2$' "$rec"
+   grep -q '^leader=wB:p1$' "$rec"
+ }
+ 
+ @test "chore 非 --code 時記錄檔的 branch 是字面的 -" {
+   dk-chore frontend "翻譯 README" >/dev/null
+   grep -q '^branch=-$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
+ }
+@@ -280,21 +280,21 @@ X
+   run dk-chore-close "Chore-Frontend-1"
+   [ "$status" -eq 1 ]; [[ "$output" == *"agent name"* ]]
+ }
+ 
+ @test "記錄檔寫不進去時 rollback 連雜務檔與記錄檔一起清掉" {
+   mkdir -p "$DK_ROOT/.sessions/chores"; chmod 555 "$DK_ROOT/.sessions/chores"
+   run dk-chore frontend "fix" --code
+   chmod 755 "$DK_ROOT/.sessions/chores"
+   [ "$status" -ne 0 ]
+   [ ! -d "$PROJECT/.worktrees/chore-fix" ]
+-  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
++  refute git -C "$PROJECT" rev-parse --verify -q chore/fix
+   [ -z "$(chore_files)" ]
+   [ ! -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+ }
+ 
+ @test "chore 編號回收：關掉的號下一件會拿回去" {
+   # 全域遞增只增不減，是因為編號從「_chores 的檔案數」來。真正的需求只有「同時在跑的不撞」，
+   # 而 .sessions/chores/<agent> 存在 ⟺ 它還在跑 —— 那才是編號該問的地方。
+   dk-chore frontend "a" >/dev/null
+   dk-chore qa "b" >/dev/null
+   [ -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
+diff --git a/tests/unit/12_task_close.bats b/tests/unit/12_task_close.bats
+index 4ef6b2e..534e765 100644
+--- a/tests/unit/12_task_close.bats
++++ b/tests/unit/12_task_close.bats
+@@ -10,71 +10,71 @@ teardown() { teardown_project; }
+ 
+ @test "refuses without report or with live panes" {
+   run dk-task-close; [ "$status" -eq 1 ]; [[ "$output" == *"report.md"* ]]
+   echo '# r' > "$d/report.md"; echo 'x wC:p9' > "$d/.panes"
+   run dk-task-close; [ "$status" -eq 1 ]; [[ "$output" == *"dk-wave-close"* ]]
+ }
+ @test "merges, removes worktree, clears binding and index" {
+   echo '# r' > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+   [ -f "$PROJECT/f.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'task login: 使用者登入'
+-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$WORKTREE_PATH" ]
+-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
++  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$WORKTREE_PATH" ]
++  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $WORKTREE_PATH"
+   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
+   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+   grep -Eq '\| 使用者登入 \| task \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
+   grep -q 'task-close merged' "$d/process.md"
+ }
+ @test "conflict aborts with exit 3 and keeps binding" {
+   echo '# r' > "$d/report.md"; echo other > "$PROJECT/f.txt"
+   git -C "$PROJECT" add f.txt; git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q -m clash
+   run dk-task-close; [ "$status" -eq 3 ]
+   [ -f "$DK_ROOT/.sessions/wB:p1" ]; grep -q 'merge-conflict' "$d/process.md"
+   git -C "$PROJECT" diff --quiet   # merge aborted cleanly
+ }
+ @test "abandon writes report, deletes branch, marks index" {
+   run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
+   grep -q '需求改了' "$d/report.md"; grep -q 'abandoned' "$d/report.md"
+   [ ! -d "$WORKTREE_PATH" ]
+-  ! git -C "$PROJECT" rev-parse --verify -q dk/login
++  refute git -C "$PROJECT" rev-parse --verify -q dk/login
+   grep -q '| abandoned | 需求改了 |' "$DK_ROOT/tasks/INDEX.md"
+ }
+ @test "in-tree task (no worktree) closes without merge" {
+   echo '# r' > "$d/report.md"
+   sed -i "s|^DK_WORKTREE=.*|DK_WORKTREE=\"$PROJECT\"|; s|^DK_WORKSPACE=.*|DK_WORKSPACE=\"\"|" "$d/.task.env"
+   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == closed* ]]
+-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
++  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"
+   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
+   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
+   grep -Eq '\| 使用者登入 \| task \| done \| in-tree [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
+   grep -q 'task-close in-tree' "$d/process.md"
+   git -C "$PROJECT" rev-parse --verify -q dk/login   # branch untouched
+ }
+ @test "task-close closes overflow tabs listed in DK_TABS" {
+   echo '# r' > "$d/report.md"; sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t2 3=wB:t3"/' "$d/.task.env"
+   run dk-task-close; [ "$status" -eq 0 ]; grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; grep -q '^tab close wB:t3$' "$HERDR_STUB_LOG"
+ }
+ @test "legacy task (no DK_BASE) falls back to herdr worktree remove with a warning" {
+   echo '# r' > "$d/report.md"; sed -i '/^DK_BASE=/d; s/^DK_WORKSPACE=.*/DK_WORKSPACE="wC"/' "$d/.task.env"
+   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == *"legacy"* ]]; grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
+ }
+ @test "task-close deletes the merged task branch" {
+   echo '# r' > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+-  ! git -C "$PROJECT" rev-parse --verify -q dk/login
++  refute git -C "$PROJECT" rev-parse --verify -q dk/login
+ }
+ @test "task-close refuses when the worktree has uncommitted changes" {
+   echo '# r' > "$d/report.md"; echo dirty > "$WORKTREE_PATH/g.txt"
+   run dk-task-close; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
+   [ -d "$WORKTREE_PATH" ]; [ -f "$WORKTREE_PATH/g.txt" ]   # nothing discarded
+   git -C "$PROJECT" rev-parse --verify -q dk/login; [ -f "$DK_ROOT/.sessions/wB:p1" ]
+-  ! git -C "$PROJECT" log --oneline -1 | grep -q 'task login'
++  git -C "$PROJECT" log --oneline -1 | refute_grep -q 'task login'
+ }
+ 
+ @test "task-close commits the task's memory in the main tree" {
+   # e2e 實測：結案後整個 .dkbo/tasks/<t>/ 仍是 untracked，README 與 decisions.md 都聲稱
+   # 記憶「進 git」但沒有任何一步做（RESULTS-2026-09-11 ⑨）
+   : > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+   t="$DK_ROOT/tasks/$(date +%F)-login"
+   [ -z "$(git -C "$PROJECT" status --porcelain -- "$t" "$DK_ROOT/tasks/INDEX.md")" ]   # 任務目錄與 INDEX 都已進 git
+   git -C "$PROJECT" log -1 --name-only --format=%s | grep -q "memory"
+diff --git a/tests/unit/14_install.bats b/tests/unit/14_install.bats
+index 568c7e9..f0009c7 100644
+--- a/tests/unit/14_install.bats
++++ b/tests/unit/14_install.bats
+@@ -28,21 +28,21 @@ teardown() { teardown_project; }
+   [ "$status" -ne 0 ]; [[ "$output" == *"older than"* ]]; [ ! -e .claude/skills/dkbo-init ]
+   HERDR_ENV=0 run .dkbo/install.sh; [ "$status" -eq 0 ]   # installing from a plain shell stays allowed
+ }
+ @test "install appends to an existing CLAUDE.md and AGENTS.md" {
+   echo '# my project' > CLAUDE.md; echo '# agents rules' > AGENTS.md; .dkbo/install.sh >/dev/null
+   head -1 CLAUDE.md | grep -q '# my project'; grep -q '^@AGENTS.md$' CLAUDE.md
+   head -1 AGENTS.md | grep -q '# agents rules'; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
+ }
+ @test "install skips CLAUDE.md line when it symlinks AGENTS.md" {
+   echo '# agents rules' > AGENTS.md; ln -s AGENTS.md CLAUDE.md; .dkbo/install.sh >/dev/null
+-  ! grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
++  refute_grep -q '^@AGENTS.md$' AGENTS.md; grep -q '^讀 .dkbo/ENTRY.md' AGENTS.md
+ }
+ @test "README carries the one-shot install and update commands" {
+   for needle in '.dkbo/install.sh' 'git add -A' '/dkbo-init' 'HERDR_ENV' 'herdr --version' 'dk-whoami' 'rsync' '--exclude=tasks' '--branch' 'dk-version'; do
+     grep -qF -- "$needle" .dkbo/README.md || { echo "missing: $needle"; return 1; }
+   done
+   [ -f "$REPO_ROOT/README.md" ]; grep -q '.dkbo/README.md' "$REPO_ROOT/README.md"
+ }
+ @test "skills have agent-skills frontmatter" {
+   for s in init add-role brain plan run; do
+     head -1 ".dkbo/skills/$s/SKILL.md" | grep -q '^---$'
+diff --git a/tests/unit/17_layout.bats b/tests/unit/17_layout.bats
+index dd63e34..e29b106 100644
+--- a/tests/unit/17_layout.bats
++++ b/tests/unit/17_layout.bats
+@@ -42,17 +42,17 @@ expect() { [ "$(dk_layout_slot dev "$p")" = "$1" ] || { echo "got: $(dk_layout_s
+   grep -q '^pane layout --pane wB:p1$' "$HERDR_STUB_LOG"
+   grep -q '^pane resize --pane wB:p2 --direction right --amount -0.050$' "$HERDR_STUB_LOG"
+   grep -q '^pane resize --pane wB:p4 --direction left --amount 0.050$' "$HERDR_STUB_LOG"
+   [ "$(grep -c '^pane resize' "$HERDR_STUB_LOG")" -eq 2 ]
+ }
+ @test "dk_layout_even: an emptied tab ≥2 is closed and dropped from DK_TABS" {
+   d=$(fixture_task login x); export DK_TASK_DIR="$d"; sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t2 3=wB:t3"/' "$d/.task.env"; dk_task_env
+   printf 'a wB:p2 0 dev 1 1\nz wB:p20 0 review 3 1\n' > "$d/.panes"
+   dk_layout_even 2
+   grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"; grep -q '^DK_TABS="3=wB:t3"$' "$d/.task.env"; grep -q 'tab 2 wB:t2 closed' "$d/process.md"
+-  ! grep -q '^pane layout' "$HERDR_STUB_LOG"
++  refute_grep -q '^pane layout' "$HERDR_STUB_LOG"
+ }
+ @test "dk_layout_even: herdr failure is swallowed; legacy rows are ignored" {
+   d=$(fixture_task login x); export DK_TASK_DIR="$d"; dk_task_env
+   printf 'a wB:p2\nb wB:p3 0 dev 1 2\n' > "$d/.panes"
+-  HERDR_STUB_FAIL="pane layout" dk_layout_even 1; ! grep -q '^pane resize' "$HERDR_STUB_LOG"
++  HERDR_STUB_FAIL="pane layout" dk_layout_even 1; refute_grep -q '^pane resize' "$HERDR_STUB_LOG"
+ }
+diff --git a/tests/unit/18_wave_open.bats b/tests/unit/18_wave_open.bats
+index f4c77db..b672eeb 100644
+--- a/tests/unit/18_wave_open.bats
++++ b/tests/unit/18_wave_open.bats
+@@ -3,22 +3,22 @@ load ../helpers
+ setup() { setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"; }
+ teardown() { teardown_project; }
+ 
+ @test "wave-open sets DK_WAVE, records base, renders one slice per member" {
+   run dk-wave-open 1; [ "$status" -eq 0 ]
+   grep -q '^DK_WAVE="1"$' "$d/.task.env"
+   sha=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+   grep -q " wave-open 1 base $sha members backend(M) qa(S)$" "$d/process.md"
+   [ -f "$d/briefs/backend.md" ]; [ -f "$d/briefs/qa.md" ]; [ ! -f "$d/briefs/frontend-cart.md" ]
+   grep -q '^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$' "$d/briefs/backend.md"
+-  ! grep -q 'frontend-cart |' "$d/briefs/backend.md"
+-  grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; ! grep -q '^| qa |' "$d/briefs/backend.md"
++  refute_grep -q 'frontend-cart |' "$d/briefs/backend.md"
++  grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; refute_grep -q '^| qa |' "$d/briefs/backend.md"
+   grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^| login API | backend | frontend-cart, qa |' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
+   grep -q "$d/brief.md" "$d/briefs/backend.md"; grep -q '登入 API 與表單' "$d/briefs/qa.md"
+ }
+ @test "refuses a second open, an open with live panes, and a wave without members" {
+   dk-wave-open 1 >/dev/null
+   run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"wave 1 is open"* ]]
+   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
+   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]
+   echo "login-qa wC:p3 0 review 1 1" > "$d/.panes"
+   run dk-wave-open 2; [ "$status" -eq 1 ]; [[ "$output" == *"live panes"* ]]
+diff --git a/tests/unit/20_review.bats b/tests/unit/20_review.bats
+index 6d67438..2fa137c 100644
+--- a/tests/unit/20_review.bats
++++ b/tests/unit/20_review.bats
+@@ -15,21 +15,21 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
+ @test "wave table kinds: beat settings; --kinds beats both; cap is 3" {
+   open_wave 2
+   run dk-review; [ "$status" -eq 0 ]; [[ "$output" == *"login-reviewer-a(claude) login-reviewer-b(codex)" ]]
+   : > "$HERDR_STUB_LOG"; run dk-review --kinds "agy" 2; [ "$status" -eq 0 ]; [[ "$output" == "review 2: login-reviewer-a(agy)" ]]; grep -q -- '--kind agy' "$HERDR_STUB_LOG"
+   : > "$HERDR_STUB_LOG"; run dk-review --kinds "claude codex agy claude" --tier L; [ "$status" -eq 0 ]
+   [ "$(grep -c '^agent start login-reviewer-' "$HERDR_STUB_LOG")" -eq 3 ]; grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
+ }
+ @test "downed kinds are skipped; all down exits 1 with the skip hint" {
+   open_wave 1; sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex"/' "$d/.task.env"
+   run dk-review --kinds "codex claude"; [ "$status" -eq 0 ]; [[ "$output" == *"review 1: login-reviewer-a(claude)" ]]; [[ "$output" == *"codex is down"* ]]
+-  : > "$HERDR_STUB_LOG"; run dk-review --kinds codex; [ "$status" -eq 1 ]; [[ "$output" == *'review 1 skipped: all kinds down'* ]]; ! grep -q '^agent start' "$HERDR_STUB_LOG"
++  : > "$HERDR_STUB_LOG"; run dk-review --kinds codex; [ "$status" -eq 1 ]; [[ "$output" == *'review 1 skipped: all kinds down'* ]]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
+ }
+ @test "--task reviews the whole branch pack" {
+   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
+   run dk-review --task --tier L; [ "$status" -eq 0 ]; [ "$output" = "review task: login-reviewer-a(claude)" ]
+   grep -q ' review task spawned login-reviewer-a(claude)$' "$d/process.md"; grep -q "$d/waves/task.diff" "$d/briefs/reviewer-a.md"; grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
+   rm "$d/waves/task.diff"; run dk-review --task; [ "$status" -eq 1 ]; [[ "$output" == *"dk-review-pack --task"* ]]
+ }
+ @test "refuses without a diff pack, with a skip: column, or a bad tier" {
+   dk-wave-open 1 >/dev/null; run dk-review; [ "$status" -eq 1 ]; [[ "$output" == *"dk-review-pack"* ]]
+   mkdir -p "$d/waves"; echo x > "$d/waves/1.diff"; sed -i 's#| 測試過 | 預設 |#| 測試過 | skip: 純文件 |#' "$d/brief.md"
+@@ -38,41 +38,41 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
+ }
+ @test "a reviewer whose first prompt failed is counted but tagged prompt-failed" {
+   open_wave 1
+   HERDR_STUB_FAIL="agent prompt" run dk-review; [ "$status" -eq 0 ]
+   [[ "$output" == *"review 1: login-reviewer-a(claude,prompt-failed)" ]]; [[ "$output" == *"re-prompt"* ]]
+   grep -q ' review 1 spawned login-reviewer-a(claude,prompt-failed)$' "$d/process.md"
+ }
+ @test "every spawn failing exits 1 without a spawn-failed process line" {
+   open_wave 1
+   HERDR_STUB_FAIL="agent start" run dk-review; [ "$status" -eq 1 ]
+-  [[ "$output" == *"no reviewer spawned (dk-spawn failed for: claude)"* ]]; ! grep -q 'spawn-failed' "$d/process.md"; ! grep -q ' review 1 spawned' "$d/process.md"
++  [[ "$output" == *"no reviewer spawned (dk-spawn failed for: claude)"* ]]; refute_grep -q 'spawn-failed' "$d/process.md"; refute_grep -q ' review 1 spawned' "$d/process.md"
+ }
+ @test "reviewer tier defaults to DK_REVIEW_TIER (ships as L)" {
+   open_wave 1; run dk-review; [ "$status" -eq 0 ]
+   grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort high' "$HERDR_STUB_LOG"
+ }
+ @test "DK_REVIEW_TIER=M lowers reviewers to the M tier without touching roles/reviewer.md" {
+   printf 'DK_REVIEW_TIER="M"\n' >> "$DK_ROOT/settings.env"
+   open_wave 1; run dk-review; [ "$status" -eq 0 ]
+   grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort medium' "$HERDR_STUB_LOG"
+   grep -q '^  L: opus/high$' "$DK_ROOT/roles/reviewer.md"   # 角色檔的 tier 語義沒被動過
+ }
+ @test "--tier still overrides DK_REVIEW_TIER" {
+   printf 'DK_REVIEW_TIER="L"\n' >> "$DK_ROOT/settings.env"
+   open_wave 1; run dk-review --tier M; [ "$status" -eq 0 ]
+   grep -q -- '--model opus --effort medium' "$HERDR_STUB_LOG"
+ }
+ @test "a DK_REVIEW_TIER that is not M or L is refused, naming settings.env" {
+   printf 'DK_REVIEW_TIER="S"\n' >> "$DK_ROOT/settings.env"
+   open_wave 1; run dk-review
+-  [ "$status" -eq 1 ]; [[ "$output" == *"settings.env"* ]]; ! grep -q '^agent start' "$HERDR_STUB_LOG"
++  [ "$status" -eq 1 ]; [[ "$output" == *"settings.env"* ]]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
+ }
+ @test "整枝評議帶累積的 Minor，逐波審查不帶" {
+   open_wave 1
+   echo "2026-09-19T10:00 minor 1: 變數命名不一致 src/a.sh:12" >> "$d/process.md"
+   run dk-review 1; [ "$status" -eq 0 ]
+   grep -q '逐波審查不 triage' "$d/briefs/reviewer-a.md"
+   refute_grep '變數命名不一致' "$d/briefs/reviewer-a.md"
+   dk-wave-close --force >/dev/null 2>&1 || true
+   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
+   run dk-review --task; [ "$status" -eq 0 ]
+diff --git a/tests/unit/24_portability.bats b/tests/unit/24_portability.bats
+index 25d2d61..b04a6dc 100644
+--- a/tests/unit/24_portability.bats
++++ b/tests/unit/24_portability.bats
+@@ -12,16 +12,16 @@ bash4_hits() {
+ @test "no bash 4+ syntax anywhere in .dkbo (and the scan has teeth)" {
+   printf 'declare -A poison\n' > "$DK_ROOT/lib/poison.sh"
+   [ -n "$(bash4_hits "$DK_ROOT")" ] || { echo "scan missed a planted 'declare -A'"; false; }
+   rm "$DK_ROOT/lib/poison.sh"
+   hits=$(bash4_hits "$DK_ROOT")
+   [ -z "$hits" ] || { echo "bash 4+ syntax found:"; echo "$hits"; false; }
+ }
+ 
+ @test "the three READMEs state the real dependency floors, not bash 5" {
+   for f in README.md README.en.md .dkbo/README.md; do
+-    ! grep -q 'bash 5' "$REPO_ROOT/$f" || { echo "$f still claims bash 5"; false; }
++    refute_grep -q 'bash 5' "$REPO_ROOT/$f" || { echo "$f still claims bash 5"; false; }
+     grep -q 'bash 3.2' "$REPO_ROOT/$f" || { echo "$f does not state bash 3.2"; false; }
+   done
+   grep -q 'flock' "$REPO_ROOT/README.md"
+   grep -q 'git ≥ 2.17' "$REPO_ROOT/README.md"
+ }
+diff --git a/tests/unit/25_docs_policy.bats b/tests/unit/25_docs_policy.bats
+index ba3b13e..6436005 100644
+--- a/tests/unit/25_docs_policy.bats
++++ b/tests/unit/25_docs_policy.bats
+@@ -1,20 +1,20 @@
+ load ../helpers
+ setup() { setup_project; }
+ teardown() { teardown_project; }
+ 
+ @test "docs/ is out of version control and nothing tracked links into it" {
+   grep -qE '^docs/$' "$REPO_ROOT/.gitignore" || { echo ".gitignore does not ignore docs/"; false; }
+   [ -z "$(git -C "$REPO_ROOT" ls-files docs)" ] || { echo "docs/ is still tracked"; false; }
+   # CHANGELOG 的歷史條目是當時的事實，不改。
+   for f in README.md README.en.md .dkbo/README.md .dkbo/decisions.md .dkbo/tasks/BACKLOG.md; do
+-    ! grep -q 'docs/design' "$REPO_ROOT/$f" || { echo "$f still points into docs/design"; false; }
++    refute_grep -q 'docs/design' "$REPO_ROOT/$f" || { echo "$f still points into docs/design"; false; }
+   done
+ }
+ 
+ @test "stage docs reach skills by SKILL.md path, not only by slash command" {
+   grep -q '.dkbo/skills/add-role/SKILL.md' "$DK_ROOT/skills/brain/SKILL.md"
+   grep -q '.dkbo/skills/init/SKILL.md' "$DK_ROOT/LEADER.md"
+ }
+ 
+ @test "AC15: 多 repo 的 repo 前綴或交棒在各自對應的文件段落都提到" {
+   grep -q 'DK_REPOS' "$DK_ROOT/LEADER.md"
+diff --git a/tests/unit/26_watch_events.bats b/tests/unit/26_watch_events.bats
+index 57c6956..12b0e0a 100644
+--- a/tests/unit/26_watch_events.bats
++++ b/tests/unit/26_watch_events.bats
+@@ -47,27 +47,27 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
+   screen "You've hit your usage limit"
+   dk-watch --once; dk-watch --once
+   [ "$(grep -c '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c '^notification show dkbo: login-qa limit' "$HERDR_STUB_LOG")" -eq 1 ]
+   [ "$(grep -c ' limit login-qa → kind agy down$' "$d/process.md")" -eq 1 ]
+ }
+ @test "沒送到的 [LIMIT] 下一 tick 重試，熔斷本身不等領導" {
+   screen "rate limit reached"
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
+-  ! grep -q '^delivered$' "$d/.blocked/login-qa.limit"
++  refute_grep -q '^delivered$' "$d/.blocked/login-qa.limit"
+   dk-watch --once; grep -q '^delivered$' "$d/.blocked/login-qa.limit"
+ }
+ @test "額度優先於審批：兩種字樣同時在畫面上時判額度" {
+   screen "Run this command?\nYou've hit your usage limit"
+   dk-watch --once
+-  grep -q '\[LIMIT\]' "$HERDR_STUB_LOG"; ! grep -q '\[BLOCKED\]' "$HERDR_STUB_LOG"
++  grep -q '\[LIMIT\]' "$HERDR_STUB_LOG"; refute_grep -q '\[BLOCKED\]' "$HERDR_STUB_LOG"
+ }
+ 
+ # --- AC13: state 已 status: done 的 agent 不做額度與審批的畫面判定（highfix 第二次誤判）---
+ 
+ @test "AC13: state 已 done 的 agent，畫面含 usage limit 不觸發 LIMIT" {
+   screen "You've hit your usage limit"          # login-qa 這裡的 agent_status 是 idle
+   printf 'status: done\n' > "$d/state/qa.md"
+   dk-watch --once
+   refute_grep '\[LIMIT\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
+   [ ! -f "$d/.blocked/login-qa.limit" ]
+@@ -117,21 +117,21 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
+ }
+ 
+ # --- timeout：卡審批不該被當成 kind 掛了（panova2 誤熔斷 agy） ---
+ 
+ @test "reviewer 逾時但畫面是審批 UI：報 BLOCKED、不熔斷 kind" {
+   printf 'login-reviewer-c wC:p4 %s review 1 3\n' "$(( $(date +%s) - 1500 ))" > "$d/.panes"
+   echo "2026-09-10T10:00 spawn login-reviewer-c (agy L) isolated" >> "$d/process.md"
+   screen 'Requesting permission for:\nRun this command?'
+   dk-watch --once
+   grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"
+-  ! grep -q 'kind agy down' "$d/process.md"
++  refute_grep -q 'kind agy down' "$d/process.md"
+   grep -q '\[BLOCKED\] from dk-watch: login-reviewer-c' "$HERDR_STUB_LOG"
+ }
+ @test "reviewer 逾時且畫面沒話說：維持原本的熔斷" {
+   printf 'login-reviewer-c wC:p4 %s review 1 3\n' "$(( $(date +%s) - 1500 ))" > "$d/.panes"
+   echo "2026-09-10T10:00 spawn login-reviewer-c (agy L) isolated" >> "$d/process.md"
+   screen 'thinking...'
+   dk-watch --once
+   grep -q '^DK_KIND_DOWN="agy"$' "$d/.task.env"
+   grep -q '\[TIMEOUT\] from dk-watch: login-reviewer-c' "$HERDR_STUB_LOG"
+ }
+@@ -239,12 +239,12 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
+ @test "dk-task-close 兩條都收，訂閱器不會變成沒人管的常駐行程" {
+   unset DK_NO_WATCH
+   git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base
+   printf '| 2026-09-10 | 使用者登入 | task | running | — |\n' >> "$DK_ROOT/tasks/INDEX.md"
+   dk-watch --ensure >/dev/null
+   epid=$(sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env")
+   [[ "$epid" =~ ^[0-9]+$ ]]; kill -0 "$epid"
+   : > "$d/.panes"; echo '# r' > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+   for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$epid" 2>/dev/null || break; done
+-  ! kill -0 "$epid" 2>/dev/null
++  refute kill -0 "$epid" 2>/dev/null
+ }
+diff --git a/tests/unit/35_test_hygiene.bats b/tests/unit/35_test_hygiene.bats
+new file mode 100644
+index 0000000..f5cf914
+--- /dev/null
++++ b/tests/unit/35_test_hygiene.bats
+@@ -0,0 +1,51 @@
++load ../helpers
++setup() { SAMPLE="$(mktemp)"; }
++teardown() { rm -f "$SAMPLE"; }
++
++# bats 在 set -e 下跑，而 `! cmd` 豁免 set -e —— 否定斷言不是測試最後一條時，命中了也照樣綠
++# （helpers.bash 的 refute_grep 那段註解）。這一檔掃出所有 `!` 開頭的述句，擋住新增。
++# 算數：行首（去掉縮排），或緊接在 `;`、`&&`、`||`、`then`、`do` 之後的 `! `。
++# 不算：註解行、`[ ! … ]`／`[[ ! … ]]`（`!` 前面是 `[`）、字串裡的 `!`（前面不是上述分隔符）。
++# 本檔的違規樣本一律在執行期用 printf 組出來：字面寫進原始碼的話，(a) 會掃到自己。
++bang_scan() { # FILE... → 每一個違規行印一列 `檔:行: 內容`；沒有違規時什麼都不印
++  grep -nE '^[[:space:]]*!([[:space:]]|$)|(;|&&|\|\||(^|[^[:alnum:]_])(then|do))[[:space:]]+!([[:space:]]|$)' "$@" /dev/null \
++    | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true
++}
++
++@test "tests/ 裡沒有 ! 開頭的否定述句（改用 refute_grep 或 refute）" {
++  local files hits
++  files=$(git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard 'tests/*.bats' tests/helpers.bash)
++  [ -n "$files" ]
++  hits=$(cd "$REPO_ROOT" && bang_scan $files)
++  [ -z "$hits" ] || { echo "無效的否定斷言（bats 的 set -e 抓不到）："; echo "$hits"; false; }
++}
++
++@test "掃描集合包含 35 自己與 helpers.bash（不是硬編的清單）" {
++  local files
++  files=$(git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard 'tests/*.bats' tests/helpers.bash)
++  echo "$files" | grep -qx 'tests/unit/35_test_hygiene.bats'
++  echo "$files" | grep -qx 'tests/helpers.bash'
++}
++
++@test "掃描器判出每一種 ! 述句形狀" {
++  local b='!' line
++  for line in "  $b grep -q x f; true" "true; $b foo" "true && $b foo" "false || $b foo" \
++              "if true; then $b foo; fi" "for i in 1; do $b foo; done"; do
++    printf '%s\n' "$line" > "$SAMPLE"
++    [ -n "$(bang_scan "$SAMPLE")" ] || { echo "漏判：$line"; false; }
++  done
++}
++
++@test "掃描器不誤判 [ ! ]、[[ ! ]]、refute_grep、註解與字串裡的 !" {
++  local b='!' line
++  for line in "[ $b -f x ]" "[[ $b -d y ]]" "refute_grep x f" "  # $b 註解" "echo \"a $b b\""; do
++    printf '%s\n' "$line" > "$SAMPLE"
++    [ -z "$(bang_scan "$SAMPLE")" ] || { echo "誤判：$line"; false; }
++  done
++}
++
++@test "掃描器列出檔:行" {
++  local b='!'
++  printf 'ok\n  %s grep -q x f; true\nok\n' "$b" > "$SAMPLE"
++  [ "$(bang_scan "$SAMPLE" | cut -d: -f1-2)" = "$SAMPLE:2" ]
++}
+diff --git a/tests/unit/36_fixture.bats b/tests/unit/36_fixture.bats
+new file mode 100644
+index 0000000..a747693
+--- /dev/null
++++ b/tests/unit/36_fixture.bats
+@@ -0,0 +1,74 @@
++load ../helpers
++# setup 刻意不 source lib/common.sh：06、09、12、16、20、28、29 都是這樣呼叫 fixture_task 的，
++# fixture 不能靠呼叫端先載過 dk_render。
++setup() { setup_project; }
++teardown() { teardown_project; rm -rf "${FAKE_REPO:-}"; }
++
++env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
++
++# --- AC5：fixture 的 .task.env 由 templates/task.env 套出來，壞了就回非零 -------------
++
++@test "fixture 的 .task.env 鍵集合與順序和模板一致" {
++  d=$(fixture_task login 使用者登入)
++  [ "$(env_keys "$d/.task.env")" = "$(env_keys "$DK_ROOT/templates/task.env")" ]
++  refute_grep -q '{{' "$d/.task.env"
++}
++
++@test "fixture 給的值：DK_SHORT 到 DK_BASE，LEADER_PANE 刻意空" {
++  d=$(fixture_task login 使用者登入)
++  grep -qx 'DK_SHORT="login"' "$d/.task.env"
++  grep -qx 'DK_DISPLAY="使用者登入"' "$d/.task.env"
++  grep -qx 'DK_BRANCH="dk/login"' "$d/.task.env"
++  grep -qx "DK_WORKTREE=\"$WORKTREE_PATH\"" "$d/.task.env"
++  grep -qx 'DK_WORKSPACE="wB"' "$d/.task.env"
++  grep -qx 'DK_ROOT_PANE="wB:p1"' "$d/.task.env"
++  grep -qx "DK_BASE=\"$(git -C "$PROJECT" rev-parse HEAD)\"" "$d/.task.env"
++  grep -qx 'DK_TASK_TAB=""' "$d/.task.env"
++  grep -qx 'DK_LEADER_PANE=""' "$d/.task.env"
++  grep -qx 'DK_NO_WORKTREE=""' "$d/.task.env"
++}
++
++@test "模板多一個 fixture 沒給的佔位符：fixture_task 回非零，stderr 點名 PROBE" {
++  echo 'DK_PROBE="{{PROBE}}"' >> "$DK_ROOT/templates/task.env"
++  local rc=0
++  fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
++  [ "$rc" -ne 0 ]
++  grep -q 'PROBE' "$PROJECT/err"
++}
++
++@test "setup 沒 source common.sh 時，fixture 的 .task.env 照樣非空、有 DK_SHORT=" {
++  refute declare -F dk_render
++  d=$(fixture_task login x)
++  [ -s "$d/.task.env" ]
++  grep -q '^DK_SHORT=' "$d/.task.env"
++}
++
++@test "fixture_task 不在呼叫端 shell 留下新的變數或函式" {
++  local fb="" vb="" fa="" va=""
++  fb=$(declare -F); vb=$(compgen -v)
++  fixture_task login x > /dev/null
++  fa=$(declare -F); va=$(compgen -v)
++  [ -z "$(comm -13 <(echo "$fb" | sort) <(echo "$fa" | sort))" ] || { echo "新增函式："; comm -13 <(echo "$fb" | sort) <(echo "$fa" | sort); false; }
++  [ -z "$(comm -13 <(echo "$vb" | sort) <(echo "$va" | sort))" ] || { echo "新增變數："; comm -13 <(echo "$vb" | sort) <(echo "$va" | sort); false; }
++}
++
++# --- AC9：setup_project 不把主樹的執行期狀態帶進夾具 ---------------------------------
++
++@test "setup_project 之後 .sessions/ 只剩 .gitkeep，不帶主樹的 kinds-down、綁定與 pid" {
++  # worktree 的 .sessions/ 本來就乾淨，所以另造一個「髒的主樹」當 REPO_ROOT 來重現
++  FAKE_REPO=$(mktemp -d)
++  cp -r "$REPO_ROOT/.dkbo" "$FAKE_REPO/.dkbo"
++  mkdir -p "$FAKE_REPO/tests" "$FAKE_REPO/.dkbo/.sessions/chores"
++  cp -r "$REPO_ROOT/tests/stub" "$FAKE_REPO/tests/stub"
++  local s="$FAKE_REPO/.dkbo/.sessions"
++  echo "agy 9999999999 exact 2026-09-24T06:55 t p x" > "$s/kinds-down"
++  : > "$s/kinds-down.lock"; : > "$s/chores/chore-x-1"; echo 2026-09-24-x > "$s/wB:p9"; echo 1 > "$s/chores.watch.pid"
++  teardown_project
++  REPO_ROOT="$FAKE_REPO" setup_project
++  [ "$(ls -A "$DK_ROOT/.sessions")" = ".gitkeep" ] || { ls -A "$DK_ROOT/.sessions"; false; }
++  [ -f "$s/kinds-down" ]   # 來源那一邊（主樹）不動
++}
++
++@test "真的 REPO_ROOT 跑 setup_project：.sessions/ 同樣只剩 .gitkeep" {
++  [ "$(ls -A "$DK_ROOT/.sessions")" = ".gitkeep" ]
++}
+

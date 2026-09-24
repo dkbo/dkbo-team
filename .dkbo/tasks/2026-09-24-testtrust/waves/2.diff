@@ -1,0 +1,221 @@
+# 測試可信度 — wave 2 since b169571 — 2026-09-24T10:04
+# files changed: 5 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/tasks/BACKLOG.md          |  1 +
+ CHANGELOG.md                    |  4 ++--
+ tests/helpers.bash              | 11 ++++++++---
+ tests/unit/35_test_hygiene.bats |  9 ++++++---
+ tests/unit/36_fixture.bats      | 18 ++++++++++++++++++
+ 5 files changed, 35 insertions(+), 8 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/tasks/BACKLOG.md b/.dkbo/tasks/BACKLOG.md
+index 9a88efa..dcf58d2 100644
+--- a/.dkbo/tasks/BACKLOG.md
++++ b/.dkbo/tasks/BACKLOG.md
+@@ -17,12 +17,13 @@
+ | 2026-09-20 | multirepo 實跑 | 無主測試檔升報三次（`30_isolation`、`23_leader_kind` ×2）：改既有腳本行為時，斷言舊行為的測試檔沒被劃進所有權，員工只能 ESCALATE | 給 `dk-brief-check` 加一條 WARN：可改欄列出的 `.dkbo/bin/*`、`.dkbo/lib/*` 若被 `tests/unit/*.bats` 引用（grep 檔名）而該 bats 不在任何人的可改欄，列出來提醒領導 |
+ | 2026-09-22 | tasktab 整枝評議 | `dk-watch` 的 reviewer 逾時路徑只在**決定要不要看畫面貼 `(quota?)` 標籤**時問 `agent_status`，判「要不要熔斷」時完全不問。所以一個 `agent_status=working`、正在正常寫 report 的 reviewer，只要超過 `DK_REVIEW_TIMEOUT_MIN` 就照樣被 `[TIMEOUT]` 並熔斷它的 kind。實測發生：`tasktab-reviewer-a`（claude L 檔，讀整枝 `task.diff`）在 22:50 被判逾時，當下 state 是 `status: working / current: 寫 report`、notes 已列出 Important 4 條，herdr 回報 working、usage 5h:40%。因為 codex 與 agy 先前已熔斷，這一下讓**三個 kind 全倒**，領導得手動解熔斷才能繼續 | 逾時熔斷比照額度偵測加同一道 `agent_status != working` 前提（AC2 那條註解已經寫了這個道理，只套在畫面檢查上、沒套在熔斷上）；或至少 working 時只推 `[TIMEOUT]` 提醒領導、不寫 `DK_KIND_DOWN`。另：L 檔整枝評議讀 task.diff 本來就會超過 20 分鐘，`DK_REVIEW_TIMEOUT_MIN` 對 `--tier L` 應該有獨立（較長）的門檻 |
+ | 2026-09-22 | tasktab 整枝評議 Important 4 | `DK_WORKSPACE` 是 `dk-task-new`（＝計畫那一刻）寫死的 `HERDR_WORKSPACE_ID`，`dk-leader --run` 不刷新它。人在 workspace A 計畫、幾天後從 workspace B 叫 `/dkbo-run`，任務 tab 會開在 A，人眼前的 B 什麼都不會出現。0.11.0 的 AC1 逐字指定 `--workspace "$DK_WORKSPACE"`，所以本任務只改文案不改行為 | 決定語意：`--run` 時 `HERDR_WORKSPACE_ID` 與 `.task.env` 的 `DK_WORKSPACE` 不同，tab 該開在哪？目前沒有任何一份文件回答。若答案是「開在人當下所在的」，`dk-leader` 要改成以 `HERDR_WORKSPACE_ID` 優先並回寫 `DK_WORKSPACE` |
+ | 2026-09-23 | ops 波 1 ESCALATE | 員工 pane 的 `DK_ROOT` 指向主樹 `.dkbo`；S 檔員工拿 `$DK_ROOT/…` 當編輯路徑，把 10 個檔全寫進主樹，自己在 worktree 看不到就誤報「worktree 被 reset」。只有「改的正是 `.dkbo/`」的任務（dkbo 原始碼倉 dogfood）會中 | 切片範本在「## 倉庫」段加一句「編輯一律用上面的 worktree 路徑；`$DK_ROOT` 只拿來跑 bin」；或 dk-wave-close 前檢查主樹是否出現本波成員所有權內的改動 |
+ | 2026-09-23 | ops 波 4 人旁觀 | 員工在**共用 worktree** 用 `git stash push -- <檔>` 暫退修法取紅，stash 期間同波夥伴並跑 `tests/run.sh` 讀到舊碼而假紅（34_kind_down:58 兩次，被當成 flaky）；stash 堆疊還跨 worktree 與主樹共用，裸 `git stash pop` 可能 pop 到別人的 | PROTOCOL 的 report 段與 `templates/report-employee.md` 寫明取紅一律 cp 到獨立目錄（`git archive <base>` 或複製 worktree），不在共用 worktree 動 stash／checkout |
+ | 2026-09-23 | ops 整枝評議第三輪 Minor | codex 在重置時間是同一天時可能只印 `try again at 3:15 PM`（不帶日期），目前會落 guess＝現在＋5h；未實測 | 下次 codex 撞額度時收一份真樣本；若屬實，`dk_kind_parse_codex_reset` 補「只有時分」的分支（今天，已過則明天） |
+ | 2026-09-23 | ops 整枝評議第一輪疑慮 | dev 交付 latch（`.blocked/wave-N.<sname>.done`）在 `[TASK]` 重派時不重設，任何「dev 交付後又被派重做」都不會再推聚合，領導只能靠 dev 回 `[FIXED]` 才醒；0.12.0 已把這個做法寫進 run/SKILL.md，但仍是靠人記得 | 評估讓 dk-msg 在領導對已交付 dev 送 `[TASK]`／`[BUG]` 時清該成員 latch 並刪 devdone（與 AC17 的 spawn 規則對稱） |
+ | 2026-09-23 | ops 整枝評議 | 領導記 Minor 時寫成 `minor task: …`，不合 `DK_MINOR_RE`（只認 `minor: ` 或 `minor <數字>: `），dk-process 照收不警告，整枝評議的累積 Minor 表會靜默漏掉 | `dk-process` 對以 `minor` 開頭但不合 `DK_MINOR_RE` 的行印警告；或把正規式放寬成 `minor( [^:]+)?: ` |
+ | 2026-09-24 | testtrust 計畫審查 | 專案層熔斷（`.sessions/kinds-down`）只有一個寫入者：`dk-watch` 在某個 pane **當場**撞額度時寫。從其他來源確認的耗盡（CLI 狀態列、前一個任務的 ruling、人告知）沒有任何路徑寫進去 —— ops 07:53 的 ruling 已寫明「codex 要到 Oct 11 才恢復」，但 0.12.0 做出 kinds-down 後沒人補登，testtrust 的計畫審查照樣派了 codex 與 agy、各白燒一個 pane 才重新撞出來。讀取端（`dk_review_kinds` 跳過、`dk-spawn --kind` 拒絕）早就在，缺的只是寫入端 | 高：`dk-kind down <k> [--until <YYYY-MM-DDTHH:MM>] [--note <證據>]` 經 `dk_kinds_down_set` 寫一列（給 `--until` 標 exact，沒給走 +5h guess），process 記 `kind <k> down (leader)`；LEADER.md 的裁定段或 plan／run SKILL 補一句「任何來源確認某 kind 額度耗盡，當下 `dk-kind down`，不能只寫在 ruling 裡」，並在派 reviewer 前先 `dk-kind` |
+ | 2026-09-24 | testtrust 計畫審查 | `dk-brief-review`（與 `dk-review`）沒辦法只補派一位失敗的 reviewer：別名由 `dk_review_aliases` 依 kind 數從 p1 起配，`--kinds codex` 重跑會命名成 p1，而 `dk-spawn` 會先關掉同名舊 pane，等於殺掉正在跑的 claude p1。實際繞法是手動 `dk-spawn reviewer p2 --isolated --kind codex --tier L` 再手補一行完整的 `brief-review spawned …`（`--gate1` 只讀最後一行） | 加 `--alias <pN>`（或自動跳過 `.panes` 裡已在的別名），並讓補派把 spawned 行累加成完整名單 |
++| 2026-09-24 | testtrust 波 1 審查（reviewer-a Minor 4） | `setup_project`（`tests/helpers.bash:14` 的 `cp -r "$REPO_ROOT/.dkbo"`）清掉了 `.sessions/`，但仍把主樹**未追蹤**的進行中任務資料夾（含 `.panes`、`.task.env`）與未 commit 的 `tasks/INDEX.md`、`decisions.md` 帶進夾具：任何列舉 `tasks/*/` 或讀 INDEX 的測試，結果取決於領導在主樹跑的那一刻開發機上有哪些任務 | 只複製追蹤中的檔（`git -C "$REPO_ROOT" ls-files .dkbo` 或 `git archive HEAD .dkbo`）能根治，但取捨是：員工在 worktree **未 commit** 的 `.dkbo/` 改動會進不了夾具，測的變成上一個 commit 而不是正在改的碼（`dk-wave-close` 才 commit）；折衷是複製後只清掉 `tasks/` 下未追蹤的任務資料夾、把 INDEX／decisions 還原成追蹤版，並補一條「髒主樹」測試（比照 `36_fixture` 的 `.sessions/` 那條） |
+ 
+ 已修好的條目在修掉它的同一個 commit 裡整列刪掉，不留「已修」標記；表頭固定佔前兩行（`dk-resume` 讀 `head -n 2`），說明只能寫在表格之後。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index a296da6..696eb27 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -2,22 +2,22 @@
+ 
+ ## 0.15.0 — 2026-09-23
+ 
+ - feat(run)!: `/dkbo-run` 開跑後不停下來等人（取消關卡②）。`skills/run/SKILL.md` 新增「不停車」段：選擇題、規格缺口、reviewer 意見矛盾、修法取捨、要超過某個上限，一律由領導自己裁定——選若錯代價最小、最容易回退的那個，記 `ruling: [自主] <決定> — <原因> — <若錯代價>`，不用 AskUserQuestion。只剩四種會停：關卡③（合併）、不可逆或破壞性的操作、影響 worktree 以外的動作、brief 壞到每一條路都只能猜（最後一種寫進遺留段、停在關卡③）。依據：panova autofold 在執行中途問人的 4 題，人 4 題都選推薦項，每題等 1–13 分；人在睡覺時一題就停一整晚。規則參考 superpowers 6.4.1 `subagent-driven-development` 的「Rulings, not stalls」。人自己打字插話仍然照做。
+ - feat(run): 新增「熔斷器」段取代三處升關卡②（同一 bug 換過腦袋仍沒好、wave-close 測試連兩次失敗、整枝評議的修復輪用完）：停止派人，逐條判——reviewer 判錯或有爭議就 park、真的但後面沒有工作依賴它就 park 並把驗收項標未達成、真的且後面依賴它就選最小改法寫進下一波。整枝評議挑出的 Important 一次全部寫進同一個修復波，修完還有就走熔斷器，不開第二個修復波。
+ - feat(run): 員工 `[BLOCKED]`（卡在權限審批）不再「告知人去按」：reviewer 交給既有的 `[TIMEOUT]`；dev／qa 由領導看畫面、記 ruling、`dk-spawn --resume` 重派並叫它改用不需要審批的做法，卡第二次換 kind，再卡就 park。
+ - feat(run): 視覺變更不再等人看畫面才跑整枝評議；qa 每波在 report 附截圖（必要時錄影）並逐條對應 AC，人在關卡③一起看。人剛好在場時，dev 全員完成那一刻告訴他 dev server 網址，追加需求用 `--refresh` 併進本波（headermerge、autofold 的波 2 都是結波後人才看畫面開出來的）。
+ - feat(report): `templates/report.md` 新增「自主裁定（待你複核）」段，列出 `grep -F ' ruling: [自主]' process.md` 的每一條，照順序、一條不漏、附若錯代價；`LEADER.md` 的裁定段、三份 README 的流程說明同步。
+ - fix(msg): dev 送給 qa（`.panes` 的 review 組）的 `[DONE]` 改在背景送——`dk-msg` 當場返回，背景那一份照舊等對方閒下來、重試、記 log。前景等忙碌中的 qa 會把 dev 的 pane 卡住：panova 實測 autofold 22／13 分、gamemore 30 分、headermerge 12 分，而 qa 本來就看 dev 的 state 開工。dev 送 dev 的 `[DONE]` 照常前景送。`roles/qa.md` 補「已在測就不必因晚到的 `[DONE]` 重跑」。
+ - feat(spawn): 員工與雜務員工啟動時帶 CLI session 名（claude 的 `--name <任務>-<角色>`，同領導的 `dk/<short>`），pane 上看得出是哪位角色；codex、agy 沒有對應旗標，不帶。
+-- test: 否定斷言改成在 bats 下有效的寫法——`tests/` 的 76 處（74 行）`! cmd` 全數換成 `refute_grep`（grep 類，含 `cmd | refute_grep` 管線）或新增的 `refute <cmd>`（`tests/helpers.bash`），其中 48 處原本失效：bats 在 `set -e` 下跑，而 `!` 開頭的述句豁免 `set -e`，不是測試最後一條時命中了也照樣綠。轉換後全數照舊通過，沒有被遮住的真失敗。新增 `35_test_hygiene.bats` 守門：掃 `git ls-files` 列出的全部 `tests/*.bats` 與 `helpers.bash`，出現 `!` 開頭的述句就紅並列出 `檔:行`，掃描器對植入樣本兩向自我驗證。`fixture_task()` 的 `.task.env` 改由 `templates/task.env` 經 `dk_render` 套出（在子 shell source `common.sh`，跟 `dk-task-new` 走同一條路），補回漂移掉的 `DK_TASK_TAB`、`DK_LEADER_PANE`、`DK_NO_WORKTREE`；套完殘留 `{{…}}` 或缺模板鍵就把名字印到 stderr 並回非零讓 setup 紅（先前七個 setup 沒 source `common.sh` 的檔拿到空 `.task.env` 照樣全綠）。`setup_project()` 不再把主樹 gitignore 的 `.sessions/`（`kinds-down`、pane 綁定、`*.watch.pid`）帶進夾具——開發機上一筆未過期的 `kinds-down` 曾讓 `10_resume` 兩條紅。只動 `tests/`，安裝包不含它，升級拿不到差異，所以不升版。
+-- 測試：654 bats（+16；`06_msg` 背景送與 dev→dev 前景送、`07_spawn` session 名、`25_docs_policy` 不停車與背景送兩條；測試可信度 +12：`35_test_hygiene` 5 條（掃描、掃描集合、兩向自我驗證、列出檔:行）、`36_fixture` 7 條（鍵集合與順序、各鍵的值、殘留佔位符回非零、不靠呼叫端 source、不留變數與函式、`.sessions/` 只剩 `.gitkeep` 兩條））；`04_docs` 的 run SKILL.md 行數上限 50 → 60（多了兩段）；shellcheck 零警告。
++- test: 否定斷言改成在 bats 下有效的寫法——`tests/` 的 76 處（74 行）`! cmd` 全數換成 `refute_grep`（grep 類，含 `cmd | refute_grep` 管線）或新增的 `refute <cmd>`（`tests/helpers.bash`），其中 48 處原本失效：bats 在 `set -e` 下跑，而 `!` 開頭的述句豁免 `set -e`，不是測試最後一條時命中了也照樣綠。轉換後全數照舊通過，沒有被遮住的真失敗。新增 `35_test_hygiene.bats` 守門：掃 `git ls-files` 列出的全部 `tests/*.bats` 與 `helpers.bash`，出現 `!` 開頭的述句就紅並列出 `檔:行`，掃描器對植入樣本兩向自我驗證。`fixture_task()` 的 `.task.env` 改由 `templates/task.env` 經 `dk_render` 套出（在子 shell source `common.sh`，跟 `dk-task-new` 走同一條路），補回漂移掉的 `DK_TASK_TAB`、`DK_LEADER_PANE`、`DK_NO_WORKTREE`；套完殘留 `{{…}}` 或缺模板鍵就把名字印到 stderr 並回非零讓 setup 紅（先前七個 setup 沒 source `common.sh` 的檔拿到空 `.task.env` 照樣全綠）。`setup_project()` 不再把主樹 gitignore 的 `.sessions/`（`kinds-down`、pane 綁定、`*.watch.pid`）帶進夾具——開發機上一筆未過期的 `kinds-down` 曾讓 `10_resume` 兩條紅。波 1 審查的收尾：掃描器的分隔符與 `!` 之間允許沒有空白（`true;! foo`、`a &&! b`），分隔符補 `|`、`{`、`(`、`else`；自檢只要 `.task.env` 仍含 `{{` 就回非零（`{{FOO}`、`{{FOO` 這種半截的也算，抽不出名字就印整行）；鍵集合測試另擋 `DK_*=` 以外的雜行。只動 `tests/`，安裝包不含它，升級拿不到差異，所以不升版。
++- 測試：656 bats（+18；`06_msg` 背景送與 dev→dev 前景送、`07_spawn` session 名、`25_docs_policy` 不停車與背景送兩條；測試可信度 +14：`35_test_hygiene` 5 條（掃描、掃描集合、兩向自我驗證、列出檔:行）、`36_fixture` 9 條（鍵集合與順序且無雜行、各鍵的值、殘留佔位符回非零、半截佔位符 `{{PROBE2` 回非零、抽不出名字的 `{{` 印整行、不靠呼叫端 source、不留變數與函式、`.sessions/` 只剩 `.gitkeep` 兩條））；`04_docs` 的 run SKILL.md 行數上限 50 → 60（多了兩段）；shellcheck 零警告。
+ - 升級：`roles/` 不會跟著升（rsync `--ignore-existing`），`qa.md` 的截圖要求與 frontend／backend 的說明要手動對照本版改；不改也能用——背景送在 `dk-msg` 那一側生效。沒有新鍵、新依賴、新 skill。
+ 
+ ## 0.14.0 — 2026-09-23
+ 
+ - feat(review)!: `DK_REVIEW_TIER` 出廠值由 `M` 改成 `L`（`settings.env`、`templates/seed/settings.seed.env`、`dk_settings` 缺鍵時的預設三處一致）。依據是 18 個已合併任務的 process.md：teamflow 的波審查用 M，6 個任務的整枝評議（L）**全數**再挑出 Important；panova 的波審查用 L，12 個任務只有 2 個。最直接的是同一份 diff 的對照——tasktab 與 ops 第一次整枝評議時分支上只有波 1，`task.diff` 就是波 1 的 diff：tasktab 的 M 判「Important 0、Minor 0」，20 分鐘後 L 挑出 4 條；ops 的 M 判 1 條，L 再多 2 條。波審查漏掉的問題拖到整枝評議，就要多開一整個修復波（ops、tasktab 的修復循環各約 2 小時，佔任務總時長五成以上）。0.4.0 預設 M 的理由是「密度先於天花板」，但第二個 kind 實跑幾乎全程熔斷，密度實際為 0。兩個專案的程式類型不同（bash 對 Vue），檔位不是唯一變因。`/dkbo-init` 的問法改成預設 L、人要省額度才降 M。
+ - docs(run): `skills/run/SKILL.md` 結案段補兩條，讓同一份 diff 不被審兩次——單波任務的 L 檔波審查即整枝評議，不再跑 `dk-review --task`（記 `review task skipped: 單波…`）；整枝評議挑出 Important 開的修復波，審查用 `--tier L`，這一輪就算下一輪整枝評議，Important 0 即進關卡③，只有修復動到先前各波沒碰過的檔或跨成員共用契約時才重跑整枝評議。
+ - docs(plan): 計畫審查達 `DK_REVIEW_MIN` 且意見已採納就送關卡①，不等晚到的 reviewer——它與人讀 brief 並行，人拍板前回來就併入並告訴人改了什麼，沒回來就關掉、補一行 `skipped (關卡①時未回)` 的 verdict 再 `--gate1`（`--gate1` 的兩道閘看最後一行 verdict 與 pane 是否關淨，不用改程式）。tasktab 為一位最後逾時的 agy 多等了 18 分鐘；逾時不寫專案層熔斷，所以下個任務還會再派、再等。
+ - docs(protocol): 員工做的過程只跑相關測試檔，完整測試只在送 `[DONE]`／`[FIXED]` 前跑一次——wave-close 本來就再跑一次當閘；員工 report 記的全套次數一波最多 4 次，teamflow 一次 2 分 10 秒，且同波共用 worktree 會互相拖慢。
+ - 測試：638 bats（+4）；`20_review.bats` 出廠檔位改驗 `opus/high`、降 M 改驗 `opus/medium`；`23_leader_kind.bats` 缺鍵預設改驗 L；`25_docs_policy.bats` +4（兩條結案規則、三處出廠值一致、關卡①不等晚到的 reviewer、完整測試只跑一次）；shellcheck 零警告。
+ - 升級：**既有專案的 `settings.env` 不會跟著改**（升級的 rsync 排除它）。要採用就手改 `DK_REVIEW_TIER="L"`；已經是 L 的不用動。沒有新鍵、新依賴、新 skill。
+diff --git a/tests/helpers.bash b/tests/helpers.bash
+index cad9a62..ffdf276 100644
+--- a/tests/helpers.bash
++++ b/tests/helpers.bash
+@@ -112,28 +112,33 @@ fixture_task() { # $1=short $2=display —— setup_multirepo 跑過的話，照
+   for e in $(fixture_repos); do
+     n=${e%%=*}; p=${e#*=}
+     wt="$WORKTREE_PATH"; [ -n "${MULTIREPO:-}" ] && wt="$PROJECT/.worktrees/$1/$n"
+     rm -rf "$wt"; mkdir -p "$(dirname "$wt")"
+     git -C "$p" worktree add -q -b "dk/$1" "$wt" main >/dev/null 2>&1
+     printf '%s %s %s %s\n' "$n" "$p" "$wt" "$(git -C "$p" rev-parse HEAD)" >> "$d/.repos"
+   done
+   echo "$(basename "$d")" > "$DK_ROOT/.sessions/$HERDR_PANE_ID"
+   echo "$d"
+ }
+-# fixture_task 的自檢：套完仍殘留 {{…}}，或少了模板裡的任一 DK_* 鍵，就把名字印到 stderr 並回 1。
++# fixture_task 的自檢：套完仍含 {{（{{FOO}、{{FOO 這種半截的也算），或少了模板裡的任一 DK_* 鍵，
++# 就印到 stderr 並回 1：能抽出佔位符名字的印名字，抽不出的印整行。
+ # fixture 多半跑在 d=$(…) 裡，那裡沒有 set -e —— 不自己回非零，壞掉的 .task.env 會一路綠下去。
+ fixture_env_check() { # TEMPLATE ENV_FILE
+-  local k miss="" left
++  local k miss="" left="" line names
+   for k in $(sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"); do
+     grep -q "^$k=" "$2" || miss="$miss $k"
+   done
+-  left=$(grep -o '{{[^}]*}}' "$2" | tr -d '{}' | tr '\n' ' ' || true)
++  while IFS= read -r line; do
++    [ -n "$line" ] || continue
++    names=$(printf '%s\n' "$line" | grep -oE '[{][{][A-Za-z_][A-Za-z0-9_]*' | sed 's/^{{//' | tr '\n' ' ' || true)
++    left="$left${names:-$line }"
++  done <<< "$(grep '{{' "$2" || true)"
+   [ -z "$miss" ] || echo "fixture_task: $2 缺鍵:$miss" >&2
+   [ -z "$left" ] || echo "fixture_task: $2 殘留佔位符: $left" >&2
+   [ -z "$miss$left" ]
+ }
+ # fixture 用的 <名>=<repo 根> 清單（單 repo 一項）。路徑不含空白，所以可以用空白分隔的字串傳。
+ fixture_repos() {
+   if [ -n "${MULTIREPO:-}" ]; then echo "main=$PROJECT api=$REPO_API shared=$REPO_SHARED"
+   else echo "main=$PROJECT"; fi
+ }
+ fixture_brief() { # $1=task dir — a brief that passes dk-brief-check
+diff --git a/tests/unit/35_test_hygiene.bats b/tests/unit/35_test_hygiene.bats
+index f5cf914..2d29713 100644
+--- a/tests/unit/35_test_hygiene.bats
++++ b/tests/unit/35_test_hygiene.bats
+@@ -1,21 +1,22 @@
+ load ../helpers
+ setup() { SAMPLE="$(mktemp)"; }
+ teardown() { rm -f "$SAMPLE"; }
+ 
+ # bats 在 set -e 下跑，而 `! cmd` 豁免 set -e —— 否定斷言不是測試最後一條時，命中了也照樣綠
+ # （helpers.bash 的 refute_grep 那段註解）。這一檔掃出所有 `!` 開頭的述句，擋住新增。
+-# 算數：行首（去掉縮排），或緊接在 `;`、`&&`、`||`、`then`、`do` 之後的 `! `。
++# 算數：行首（去掉縮排），或接在 `;`、`&&`、`||`、`|`、`{`、`(` 之後（中間可以沒有空白），
++# 或接在 `then`、`do`、`else` 之後（關鍵字後面 bash 本來就要空白）的 `! `。
+ # 不算：註解行、`[ ! … ]`／`[[ ! … ]]`（`!` 前面是 `[`）、字串裡的 `!`（前面不是上述分隔符）。
+ # 本檔的違規樣本一律在執行期用 printf 組出來：字面寫進原始碼的話，(a) 會掃到自己。
+ bang_scan() { # FILE... → 每一個違規行印一列 `檔:行: 內容`；沒有違規時什麼都不印
+-  grep -nE '^[[:space:]]*!([[:space:]]|$)|(;|&&|\|\||(^|[^[:alnum:]_])(then|do))[[:space:]]+!([[:space:]]|$)' "$@" /dev/null \
++  grep -nE '^[[:space:]]*!([[:space:]]|$)|(;|&&|\||\{|\()[[:space:]]*!([[:space:]]|$)|(^|[^[:alnum:]_])(then|do|else)[[:space:]]+!([[:space:]]|$)' "$@" /dev/null \
+     | grep -vE '^[^:]*:[0-9]+:[[:space:]]*#' || true
+ }
+ 
+ @test "tests/ 裡沒有 ! 開頭的否定述句（改用 refute_grep 或 refute）" {
+   local files hits
+   files=$(git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard 'tests/*.bats' tests/helpers.bash)
+   [ -n "$files" ]
+   hits=$(cd "$REPO_ROOT" && bang_scan $files)
+   [ -z "$hits" ] || { echo "無效的否定斷言（bats 的 set -e 抓不到）："; echo "$hits"; false; }
+ }
+@@ -23,21 +24,23 @@ bang_scan() { # FILE... → 每一個違規行印一列 `檔:行: 內容`；沒
+ @test "掃描集合包含 35 自己與 helpers.bash（不是硬編的清單）" {
+   local files
+   files=$(git -C "$REPO_ROOT" ls-files --cached --others --exclude-standard 'tests/*.bats' tests/helpers.bash)
+   echo "$files" | grep -qx 'tests/unit/35_test_hygiene.bats'
+   echo "$files" | grep -qx 'tests/helpers.bash'
+ }
+ 
+ @test "掃描器判出每一種 ! 述句形狀" {
+   local b='!' line
+   for line in "  $b grep -q x f; true" "true; $b foo" "true && $b foo" "false || $b foo" \
+-              "if true; then $b foo; fi" "for i in 1; do $b foo; done"; do
++              "if true; then $b foo; fi" "for i in 1; do $b foo; done" \
++              "true;$b foo" "a &&$b b" "a ||$b b" "{ $b foo; }" "($b foo)" "x | $b foo" \
++              "if a; then b; else $b foo; fi"; do
+     printf '%s\n' "$line" > "$SAMPLE"
+     [ -n "$(bang_scan "$SAMPLE")" ] || { echo "漏判：$line"; false; }
+   done
+ }
+ 
+ @test "掃描器不誤判 [ ! ]、[[ ! ]]、refute_grep、註解與字串裡的 !" {
+   local b='!' line
+   for line in "[ $b -f x ]" "[[ $b -d y ]]" "refute_grep x f" "  # $b 註解" "echo \"a $b b\""; do
+     printf '%s\n' "$line" > "$SAMPLE"
+     [ -z "$(bang_scan "$SAMPLE")" ] || { echo "誤判：$line"; false; }
+diff --git a/tests/unit/36_fixture.bats b/tests/unit/36_fixture.bats
+index a747693..e24eb8f 100644
+--- a/tests/unit/36_fixture.bats
++++ b/tests/unit/36_fixture.bats
+@@ -5,20 +5,22 @@ setup() { setup_project; }
+ teardown() { teardown_project; rm -rf "${FAKE_REPO:-}"; }
+ 
+ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
+ 
+ # --- AC5：fixture 的 .task.env 由 templates/task.env 套出來，壞了就回非零 -------------
+ 
+ @test "fixture 的 .task.env 鍵集合與順序和模板一致" {
+   d=$(fixture_task login 使用者登入)
+   [ "$(env_keys "$d/.task.env")" = "$(env_keys "$DK_ROOT/templates/task.env")" ]
+   refute_grep -q '{{' "$d/.task.env"
++  # .task.env 會被 source：DK_*= 之外多出的雜行（例如 source common.sh 時印到 stdout 的字）也要擋
++  refute_grep -vE '^(DK_[A-Z_]*=|[[:space:]]*#|[[:space:]]*$)' "$d/.task.env"
+ }
+ 
+ @test "fixture 給的值：DK_SHORT 到 DK_BASE，LEADER_PANE 刻意空" {
+   d=$(fixture_task login 使用者登入)
+   grep -qx 'DK_SHORT="login"' "$d/.task.env"
+   grep -qx 'DK_DISPLAY="使用者登入"' "$d/.task.env"
+   grep -qx 'DK_BRANCH="dk/login"' "$d/.task.env"
+   grep -qx "DK_WORKTREE=\"$WORKTREE_PATH\"" "$d/.task.env"
+   grep -qx 'DK_WORKSPACE="wB"' "$d/.task.env"
+   grep -qx 'DK_ROOT_PANE="wB:p1"' "$d/.task.env"
+@@ -29,20 +31,36 @@ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
+ }
+ 
+ @test "模板多一個 fixture 沒給的佔位符：fixture_task 回非零，stderr 點名 PROBE" {
+   echo 'DK_PROBE="{{PROBE}}"' >> "$DK_ROOT/templates/task.env"
+   local rc=0
+   fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
+   [ "$rc" -ne 0 ]
+   grep -q 'PROBE' "$PROJECT/err"
+ }
+ 
++@test "模板裡半截的佔位符 {{PROBE2：fixture_task 回非零，stderr 點名 PROBE2" {
++  echo 'DK_PROBE2="{{PROBE2"' >> "$DK_ROOT/templates/task.env"
++  local rc=0
++  fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
++  [ "$rc" -ne 0 ]
++  grep -q 'PROBE2' "$PROJECT/err"
++}
++
++@test "抽不出名字的 {{：fixture_task 回非零，stderr 印出那一行" {
++  echo 'DK_PROBE3="{{}"' >> "$DK_ROOT/templates/task.env"
++  local rc=0
++  fixture_task login x > /dev/null 2> "$PROJECT/err" || rc=$?
++  [ "$rc" -ne 0 ]
++  grep -qF 'DK_PROBE3="{{}"' "$PROJECT/err"
++}
++
+ @test "setup 沒 source common.sh 時，fixture 的 .task.env 照樣非空、有 DK_SHORT=" {
+   refute declare -F dk_render
+   d=$(fixture_task login x)
+   [ -s "$d/.task.env" ]
+   grep -q '^DK_SHORT=' "$d/.task.env"
+ }
+ 
+ @test "fixture_task 不在呼叫端 shell 留下新的變數或函式" {
+   local fb="" vb="" fa="" va=""
+   fb=$(declare -F); vb=$(compgen -v)
+

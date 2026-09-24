@@ -1,0 +1,8 @@
+2026-09-24T06:55 testtrust-reviewer-p1 -> leader-testtrust [DONE] brief-review: 要改 2 處，見 report
+2026-09-24T08:44 leader-testtrust [ACK]
+2026-09-24T08:55 testtrust-backend -> leader-testtrust [DONE] 波1 AC1–AC9 完成：76 處否定斷言轉換（48 原本失效），無被遮住的失敗；35 守門、36 fixture/sessions；全套 654 綠。取紅見 state/backend.report.md
+2026-09-24T09:48 leader-testtrust [ACK]
+2026-09-24T09:54 testtrust-reviewer-a -> leader-testtrust [DONE] review 波 1: Important 0 條，見 report（AC1–AC9 全 ✅，Minor 4 條皆可留）
+2026-09-24T10:03 testtrust-backend -> leader-testtrust [DONE] 波 2 AC10(a)–(e) 完成，全套 656 綠；新規則對既有 tests 0 處，echo "a;! b" 誤判接受，取紅對 b169571，見 state/backend.report.md
+2026-09-24T10:04 leader-testtrust [ACK]
+2026-09-24T10:06 testtrust-reviewer-a -> leader-testtrust [DONE] review 波 2: Important 0 條，見 report（AC10 全 ✅，Minor 3 條皆可留）
