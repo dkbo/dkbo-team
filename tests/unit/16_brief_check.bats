@@ -271,3 +271,20 @@ ac8_repo() {
   grep -q 'dk_brief_ncols' "$DK_ROOT/bin/dk-brief-check"
   refute_grep -q 'print nf' "$DK_ROOT/bin/dk-brief-check"
 }
+
+@test "rest AC6: 「做什麼」欄含 \| 時取波次成員照常（dev 計數與獨佔資源）" {
+  # 回歸守護，不要求取紅：舊碼只取第 1、3 欄，「做什麼」（第 4 欄）的 \| 本來就不影響；
+  # 136／143 行改走跳脫感知切欄只為一致，這條守的是改完成員照樣取得到。
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M |#| 1 | 實作 | backend | 拆 a\\|b | M |#' "$b"
+  sed -i 's#^| 1 | 實作 | qa | 驗 API | S |#| 1 | 實作 | qa | 驗 x\\|y | S |#' "$b"
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db |#' "$b"
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/** | — | db |#' "$b"
+  printf '| backend-b | db/b/** | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$b"
+  printf '| 1 | 實作 | backend-b | 表 c\\|d | S | 過 | |\n' | sed -i '/^| 1 | 實作 | qa/r /dev/stdin' "$b"
+  grep -qF '| 拆 a\|b |' "$b"; grep -qF '| 驗 x\|y |' "$b"; grep -qF '| 表 c\|d |' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]
+  [[ "$output" == *"獨佔資源 db 同時被 backend 與 qa 宣告"* ]] || { echo "$output"; false; }
+  echo 'DK_TAB1_SLOTS="1"' >> "$DK_ROOT/settings.env"
+  run dk-brief-check
+  [[ "$output" == *"WARN 波次表 1: dev 成員 2 位超過 tab 1 的 1 格"* ]] || { echo "$output"; false; }
+}

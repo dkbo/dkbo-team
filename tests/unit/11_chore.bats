@@ -200,6 +200,29 @@ X
   grep -q '| fix | chore | done | merged ' "$DK_ROOT/tasks/INDEX.md"
 }
 
+@test "legacy：沒有記錄檔、雜務檔是新版模板（沒有 branch: 行），關得掉且不碰分支" {
+  dk-chore frontend "fix" >/dev/null
+  # 記錄檔不見了（半途被清掉），雜務檔是現在的 templates/chore.md 寫的：沒有 branch/workspace/pane。
+  # 空的 branch 不是分支名 —— dk-chore-close 要當成「沒分支」，不能拿空字串去 merge 或刪分支。
+  rm -f "$DK_ROOT/.sessions/chores/chore-frontend-1"
+  f=$(chore_files)
+  cat > "$f" <<'X'
+交代：fix
+成員：chore-frontend-1 (claude / M)
+status: done
+touched:
+結果：
+X
+  # 只比分支名稱：close 本來就會在 main 上 commit 一筆 dkbo memory，main 的 sha 一定會動
+  local before; before=$(git -C "$PROJECT" for-each-ref --format='%(refname)' refs/heads)
+  run dk-chore-close chore-frontend-1
+  [ "$status" -eq 0 ] || { echo "$output"; false; }
+  grep -q '| fix | chore | done |' "$DK_ROOT/tasks/INDEX.md"
+  [ "$(git -C "$PROJECT" for-each-ref --format='%(refname)' refs/heads)" = "$before" ]
+  [ -z "$(git -C "$PROJECT" rev-list --merges main)" ]   # 沒有 merge 過任何東西
+  [[ "$output" != *"merge conflict"* ]]
+}
+
 @test "close 在 INDEX 找不到那一列時警告，而不是靜靜成功" {
   dk-chore frontend "翻譯 README" >/dev/null
   done_msg chore-frontend-1 "docs/README.en.md"

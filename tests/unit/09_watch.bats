@@ -695,3 +695,117 @@ idle_msg() { echo "^agent prompt leader-login \\[TIMEOUT\\] from dk-watch: $1 �
   grep -q "$(idle_msg login-backend 25)" "$HERDR_STUB_LOG"
   [ "$(grep -c ' idle login-backend 25min$' "$d/process.md")" -eq 1 ]
 }
+
+# --- AC5（rest）：守望程序靜默死亡 —— setsid、watch.log、遺言與 --ensure 串行化 ---
+wlog() { echo "$DK_ROOT/.sessions/$(basename "$d").watch.log"; }
+ensured_pid() { printf '%s\n' "$1" | sed -n 's/^watch: restarted (pid \([0-9]*\))$/\1/p'; }
+# fork 之後、exec 之前 args 仍是父行程；輪詢 2 秒等它變成 dk-watch 本身，不寫成「啟動後立刻 alive」
+args_end_within() { # PID SUFFIX
+  local i; for i in $(seq 1 20); do ps -p "$1" -o args= 2>/dev/null | grep -q -- "$2\$" && return 0; sleep 0.1; done
+  echo "args_end_within: pid $1 的 args 不是以 '$2' 結尾: $(ps -p "$1" -o args= 2>/dev/null)" >&2; return 1
+}
+wait_line() { # FILE ERE [TENTHS] — 等某一行出現（預設 3 秒）
+  local i; for i in $(seq 1 "${3:-30}"); do grep -Eq -- "$2" "$1" 2>/dev/null && return 0; sleep 0.1; done
+  echo "wait_line: $1 裡等不到 /$2/: $(cat "$1" 2>/dev/null)" >&2; return 1
+}
+kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
+
+@test "AC5: --ensure 印出的 pid 在 2 秒內成為 dk-watch 本身，再 ensure 印 running 同一個 pid" {
+  unset DK_NO_WATCH
+  run dk-watch --ensure; [ "$status" -eq 0 ]
+  pid=$(ensured_pid "$output"); [[ "$pid" =~ ^[0-9]+$ ]]; [ "$pid" = "$(wpid)" ]
+  args_end_within "$pid" 'dk-watch'
+  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"watch: running (pid $pid)"* ]]
+  kill_watchers
+}
+@test "AC5: 背景守望啟動時在 .sessions/<任務>.watch.log 寫 start 行" {
+  unset DK_NO_WATCH
+  run dk-watch --ensure; [ "$status" -eq 0 ]; pid=$(ensured_pid "$output")
+  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
+  kill_watchers
+}
+@test "AC5: TERM 寫 signal 與 exit 兩行後結束" {
+  dk-watch --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
+  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $p\$"
+  kill -TERM "$p"
+  wait_line "$(wlog)" "^[0-9T:-]+ exit poll pid $p rc=[0-9]+\$" 40
+  grep -Eq "^[0-9T:-]+ signal TERM poll pid $p\$" "$(wlog)"
+  for _ in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
+  refute kill -0 "$p" 2>/dev/null
+}
+@test "AC5: HUP 只寫 signal 行，行程照跑（nohup 語意）" {
+  dk-watch --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
+  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $p\$"
+  kill -HUP "$p"
+  wait_line "$(wlog)" "^[0-9T:-]+ signal HUP poll pid $p\$" 40
+  sleep 1.5
+  kill -0 "$p"
+  refute_grep -E "exit poll pid $p " "$(wlog)"
+  kill -TERM "$p" 2>/dev/null || true
+}
+@test "AC5: --ensure 遇到死 pid 先記 watch died 帶該 pid 最後一行，不吃到前綴相同的 pid" {
+  unset DK_NO_WATCH
+  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
+  mkdir -p "$DK_ROOT/.sessions"
+  { echo "2026-09-24T09:00 start poll pid $dead"
+    echo "2026-09-24T09:05 exit poll pid $dead rc=1"
+    echo "2026-09-24T09:06 start poll pid ${dead}7"
+    echo "2026-09-24T09:07 signal TERM poll pid ${dead}7"; } > "$(wlog)"
+  run dk-watch --ensure; [ "$status" -eq 0 ]
+  grep -q "watch died: poll pid $dead last: 2026-09-24T09:05 exit poll pid $dead rc=1\$" "$d/process.md"
+  [ "$(grep -n 'watch died' "$d/process.md" | cut -d: -f1)" -lt "$(grep -n 'watch restarted' "$d/process.md" | cut -d: -f1)" ]
+  kill_watchers
+}
+@test "AC5: watch died 在 log 裡找不到該 pid 就寫 no log；pid 空白不記" {
+  unset DK_NO_WATCH
+  run dk-watch --ensure; [ "$status" -eq 0 ]
+  refute_grep 'watch died' "$d/process.md"
+  kill_watchers
+  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
+  run dk-watch --ensure; [ "$status" -eq 0 ]
+  grep -q "watch died: poll pid $dead last: no log\$" "$d/process.md"
+  kill_watchers
+}
+@test "AC5: 守望已死時並行兩個 --ensure，只起一隻、process 只一行 watch restarted" {
+  unset DK_NO_WATCH
+  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
+  dk-watch --ensure >/dev/null 2>&1 3>&- & a=$!
+  dk-watch --ensure >/dev/null 2>&1 3>&- & b=$!
+  wait "$a"; wait "$b"
+  sleep 0.5
+  n=$(ps -eo args= | grep -c -- "$PROJECT/.dkbo/bin/dk-watch\$" || true)
+  [ "$n" -eq 1 ] || { ps -eo pid=,args= | grep -- "$PROJECT/.dkbo/bin/dk-watch" >&2; false; }
+  [ "$(grep -c 'watch restarted' "$d/process.md")" -eq 1 ]
+  kill_watchers
+}
+@test "AC5: --chores --ensure 起的守望寫 start chores 行進 chores.watch.log" {
+  unset DK_NO_WATCH; chore_rec chore-frontend-1 leader-login
+  run dk-watch --chores --ensure; [ "$status" -eq 0 ]
+  pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid")
+  wait_line "$DK_ROOT/.sessions/chores.watch.log" "^[0-9T:-]+ start chores pid $pid\$"
+  kill_watchers
+}
+@test "AC5: --ensure 起的守望收到 INT 寫 signal 與 exit 行後結束（需要 env --default-signal）" {
+  env --default-signal=INT true 2>/dev/null || skip "env 不支援 --default-signal（非 GNU coreutils ≥8.31）"
+  unset DK_NO_WATCH
+  run dk-watch --ensure; [ "$status" -eq 0 ]; pid=$(ensured_pid "$output")
+  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
+  kill -INT "$pid"
+  wait_line "$(wlog)" "^[0-9T:-]+ exit poll pid $pid rc=[0-9]+\$" 40
+  grep -Eq "^[0-9T:-]+ signal INT poll pid $pid\$" "$(wlog)"
+  kill_watchers
+}
+@test "AC5: 呼叫者是 nohup 起的（dk-msg 背景那一份），叫回的守望收到 HUP 仍記 signal 行、照跑" {
+  command -v setsid >/dev/null 2>&1 || skip "沒有 setsid"
+  env --default-signal=INT true 2>/dev/null || skip "env 不支援 --default-signal"
+  unset DK_NO_WATCH
+  nohup dk-watch --ensure </dev/null >"$PROJECT/ensure.out" 2>&1 3>&-; pid=$(ensured_pid "$(cat "$PROJECT/ensure.out")")
+  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
+  kill -HUP "$pid"
+  wait_line "$(wlog)" "^[0-9T:-]+ signal HUP poll pid $pid\$" 40
+  kill -0 "$pid"
+  kill_watchers
+}

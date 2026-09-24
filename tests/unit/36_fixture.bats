@@ -90,3 +90,65 @@ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
 @test "真的 REPO_ROOT 跑 setup_project：.sessions/ 同樣只剩 .gitkeep" {
   [ "$(ls -A "$DK_ROOT/.sessions")" = ".gitkeep" ]
 }
+
+# --- AC3：夾具不帶進主樹的進行中任務（fixture_copy_dkbo） ------------------------------
+# 造一個「主樹」：.dkbo 整份 commit 進 git，之後才在 tasks/ 底下弄髒（領導正在跑的任務長這樣）
+fake_git_repo() {
+  FAKE_REPO=$(mktemp -d)
+  cp -r "$REPO_ROOT/.dkbo" "$FAKE_REPO/.dkbo"
+  mkdir -p "$FAKE_REPO/tests"; cp -r "$REPO_ROOT/tests/stub" "$FAKE_REPO/tests/stub"
+  echo "# 決策" > "$FAKE_REPO/.dkbo/tasks/decisions.md"
+  git -C "$FAKE_REPO" init -q
+  git -C "$FAKE_REPO" add -A
+  git -C "$FAKE_REPO" -c user.name=t -c user.email=t@t commit -q -m base
+  local live="$FAKE_REPO/.dkbo/tasks/2026-09-24-live"
+  mkdir -p "$live/state"
+  echo 'wB:p9 backend' > "$live/.panes"; echo 'DK_SHORT="live"' > "$live/.task.env"; echo x > "$live/state/backend.md"
+  echo '| live | working |' >> "$FAKE_REPO/.dkbo/tasks/INDEX.md"
+  echo '主樹上領導剛寫的決策' >> "$FAKE_REPO/.dkbo/tasks/decisions.md"
+  rm "$FAKE_REPO/.dkbo/tasks/BACKLOG.md"                                  # 追蹤中但被刪
+  printf '#!/usr/bin/env bash\necho new\n' > "$FAKE_REPO/.dkbo/bin/newtool"   # tasks/ 以外的未追蹤檔
+  echo '未 commit 的規則改動' >> "$FAKE_REPO/.dkbo/PROTOCOL.md"                # tasks/ 以外的追蹤檔改動
+}
+
+@test "髒主樹跑 setup_project：未追蹤任務資料夾不進夾具、tasks/ 追蹤檔還原成 HEAD 版、tasks/ 以外照舊帶" {
+  fake_git_repo
+  teardown_project
+  REPO_ROOT="$FAKE_REPO" setup_project
+  [ ! -e "$DK_ROOT/tasks/2026-09-24-live" ] || { ls -A "$DK_ROOT/tasks/2026-09-24-live"; false; }
+  [ "$(cat "$DK_ROOT/tasks/INDEX.md")" = "$(git -C "$FAKE_REPO" show HEAD:.dkbo/tasks/INDEX.md)" ]
+  [ "$(cat "$DK_ROOT/tasks/decisions.md")" = "# 決策" ]
+  [ "$(cat "$DK_ROOT/tasks/BACKLOG.md")" = "$(git -C "$FAKE_REPO" show HEAD:.dkbo/tasks/BACKLOG.md)" ]
+  [ -x "$DK_ROOT/bin/newtool" ]
+  grep -qx '未 commit 的規則改動' "$DK_ROOT/PROTOCOL.md"
+  # 來源那一邊（主樹）一律不動
+  [ -f "$FAKE_REPO/.dkbo/tasks/2026-09-24-live/.panes" ]
+  grep -q '主樹上領導剛寫的決策' "$FAKE_REPO/.dkbo/tasks/decisions.md"
+  [ ! -e "$FAKE_REPO/.dkbo/tasks/BACKLOG.md" ]
+}
+
+@test "fixture_copy_dkbo：不刷新來源的 index（不搶 .git/index.lock）" {
+  fake_git_repo
+  local before after dest
+  touch -d '2020-01-01' "$FAKE_REPO/.dkbo/tasks/INDEX.md"   # stat 髒掉：會刷新 index 的指令就會改寫它
+  before=$(stat -c "%i %y" "$FAKE_REPO/.git/index")
+  dest=$(mktemp -d)
+  fixture_copy_dkbo "$FAKE_REPO" "$dest/.dkbo"
+  after=$(stat -c "%i %y" "$FAKE_REPO/.git/index")
+  rm -rf "$dest"
+  [ "$before" = "$after" ]
+}
+
+@test "fixture_copy_dkbo：來源不是 git 倉時照樣複製、清 .sessions/、不報錯" {
+  FAKE_REPO=$(mktemp -d)
+  cp -r "$REPO_ROOT/.dkbo" "$FAKE_REPO/.dkbo"
+  mkdir -p "$FAKE_REPO/.dkbo/tasks/2026-09-24-live"; : > "$FAKE_REPO/.dkbo/tasks/2026-09-24-live/.panes"
+  echo 1 > "$FAKE_REPO/.dkbo/.sessions/chores.watch.pid"
+  local dest; dest=$(mktemp -d)
+  run fixture_copy_dkbo "$FAKE_REPO" "$dest/.dkbo"
+  [ "$status" -eq 0 ]; [ -z "$output" ] || { echo "$output"; false; }
+  [ -f "$dest/.dkbo/PROTOCOL.md" ]
+  [ -f "$dest/.dkbo/tasks/2026-09-24-live/.panes" ]   # 不是 git 倉就分不出哪些是追蹤的，整份照帶
+  [ "$(ls -A "$dest/.dkbo/.sessions")" = ".gitkeep" ]
+  rm -rf "$dest"
+}

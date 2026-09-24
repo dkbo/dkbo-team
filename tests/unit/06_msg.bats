@@ -554,3 +554,61 @@ SH
   [ -f "$d/.blocked/panes.lock" ]
   [ ! -e "$d/.panes.lock" ]
 }
+
+# --- AC5（rest）：dk-msg 每個寫 messages.log 的出口都把守望叫回來 ---
+# 事故走的正是 dev 對 leader 的 [DONE]：它只落盤就 exit 0，守望死了沒有任何人發現。
+msg_task() { echo "$DK_ROOT/tasks/$(date +%F)-login"; }
+kill_dead_watch() { # 把 .task.env 的輪詢 pid 換成一個已死的 pid
+  local dead; sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$(msg_task)/.task.env"; echo "$dead"
+}
+watch_pid_now() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$(msg_task)/.task.env"; }
+watch_alive() { local p; p=$(watch_pid_now); [[ "$p" =~ ^[0-9]+$ ]] && ps -p "$p" -o args= | grep -q 'dk-watch$'; }
+kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
+
+@test "AC5: 守望已死時 dev 對 leader 的 [DONE]（只落盤、不送達）把它叫回來" {
+  d=$(msg_task); dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  unset DK_NO_WATCH; dead=$(kill_dead_watch)
+  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"; [ "$status" -eq 0 ]
+  refute_grep '^agent prompt' "$HERDR_STUB_LOG"
+  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
+  grep -q "watch died: poll pid $dead" "$d/process.md"
+  kill_watchers
+}
+@test "AC5: 一般 [QUESTION] 送達路徑也把守望叫回來" {
+  d=$(msg_task)
+  unset DK_NO_WATCH; dead=$(kill_dead_watch)
+  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
+  grep -q '^agent prompt login-frontend \[QUESTION\]' "$HERDR_STUB_LOG"
+  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
+  kill_watchers
+}
+@test "AC5: [UNDELIVERED] 出口也把守望叫回來" {
+  d=$(msg_task)
+  unset DK_NO_WATCH; dead=$(kill_dead_watch)
+  DK_MSG_TRIES=1 HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 在嗎"
+  [ "$status" -eq 1 ]; grep -q '\[UNDELIVERED\]' "$d/messages.log"
+  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
+  kill_watchers
+}
+@test "AC5: DK_NO_WATCH 設了時 dk-msg 不起守望" {
+  d=$(msg_task); dev_panes "$d"
+  echo x > "$d/state/backend.report.md"
+  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
+  dead=$(kill_dead_watch)
+  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"; [ "$status" -eq 0 ]
+  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
+  [ "$(watch_pid_now)" = "$dead" ]
+  refute_grep 'watch died\|watch restarted' "$d/process.md"
+}
+@test "AC5 ⑧: 任務結案後（.panes 已刪）送訊息不叫回守望：process 沒有新的 watch 行、pid 不變" {
+  d=$(msg_task)
+  unset DK_NO_WATCH; dead=$(kill_dead_watch); rm "$d/.panes"
+  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
+  DK_MSG_TRIES=1 HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 在嗎"; [ "$status" -eq 1 ]
+  [ "$(watch_pid_now)" = "$dead" ]
+  refute_grep 'watch' "$d/process.md"
+  refute pgrep -f "$PROJECT/.dkbo/bin/dk-watch"
+}

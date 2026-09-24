@@ -93,3 +93,21 @@ teardown() { teardown_project; }
   run dk_owned "$b" backend 'src/login.ts'; [ "$status" -eq 1 ]        # 沒前綴的路徑不配帶前綴的 glob
   run dk_owned "$b" backend 'api:db/x.sql'; [ "$status" -eq 1 ]
 }
+
+# ── dk_owned：只讀「## 檔案所有權」段，欄內的 \| 不當分隔（rest AC6）─────────────
+@test "rest AC6: 可改欄含 \\| 時兩個 glob 都認得，\\| 還原成字面 |" {
+  b="$d/brief.md"
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/a\\|b/**, src/c/** | src/web/** |#' "$b"
+  grep -qF '| backend | src/a\|b/**, src/c/** |' "$b"
+  run dk_owned "$b" backend 'src/c/x'; [ "$status" -eq 0 ]
+  run dk_owned "$b" backend 'src/a|b/y'; [ "$status" -eq 0 ]
+  run dk_owned "$b" backend 'src/a/y'; [ "$status" -eq 1 ]
+}
+
+@test "rest AC6: 所有權段之前的表格第一格等於成員名也不算（誘餌）" {
+  b="$d/brief.md"
+  sed -i 's#^登入 API 與表單。$#&\n\n| 成員 | 備註 |\n|---|---|\n| backend | bait/** |#' "$b"
+  grep -qx '| backend | bait/\*\* |' "$b"
+  run dk_owned "$b" backend 'bait/x'; [ "$status" -eq 1 ]
+  run dk_owned "$b" backend 'src/api/login.ts'; [ "$status" -eq 0 ]
+}

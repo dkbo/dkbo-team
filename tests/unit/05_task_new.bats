@@ -224,3 +224,20 @@ teardown() { teardown_project; }
   run dk-task-new login x; [ "$status" -eq 0 ]
   [ -d "$DK_ROOT/tasks/$(date +%F)-login" ]
 }
+
+# --- AC5 ⑦（rest 波 1 審查 Important 1）：第一對守望也走 --ensure（setsid、watch.log、鎖） ---
+@test "AC5 ⑦: task-new 起的第一對守望走 --ensure：setsid 的 session 首領、寫 start 行、process 記啟動" {
+  command -v setsid >/dev/null 2>&1 || skip "沒有 setsid"
+  DK_NO_WATCH= run dk-task-new login 使用者登入; [ "$status" -eq 0 ]
+  d="$output"; [ -d "$d" ]
+  wpid=$(sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$wpid" =~ ^[0-9]+$ ]]
+  epid=$(sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$epid" =~ ^[0-9]+$ ]]
+  [ "$(ps -o sid= -p "$wpid" | tr -d ' ')" = "$wpid" ]
+  [ "$(ps -o sid= -p "$epid" | tr -d ' ')" = "$epid" ]
+  grep -q "watch restarted (pid $wpid)" "$d/process.md"
+  grep -q "events started (pid $epid)" "$d/process.md"
+  wl="$DK_ROOT/.sessions/$(basename "$d").watch.log"
+  ok=0; for _ in $(seq 1 30); do grep -Eq "^[0-9T:-]+ start poll pid $wpid\$" "$wl" 2>/dev/null && { ok=1; break; }; sleep 0.1; done
+  [ "$ok" = 1 ] || { cat "$wl" >&2; false; }
+  pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true
+}
