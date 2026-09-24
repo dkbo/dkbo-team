@@ -188,6 +188,15 @@ teardown() { teardown_project; }
   run dk-wave-close; [ "$status" -eq 0 ]
   grep -q '^PATH=' "$out"; grep -q '^HOME=' "$out"
 }
+@test "gate c: 測試指令拿到的環境裡也沒有任何 HERDR_*（單 repo）" {
+  # 繼承的 HERDR_PANE_ID 等會讓專案測試以為自己在領導的 pane 裡，打到真 herdr。
+  # HERDR_ENV、HERDR_PANE_ID 由 helpers export（後者是 dk-wave-close 找任務用的，不能改值）
+  export HERDR_SOCKET_PATH=/tmp/leader.sock; [ -n "$HERDR_PANE_ID" ]; [ -n "$HERDR_ENV" ]
+  out="$PROJECT/gatec-herdr.txt"
+  echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  refute_grep '^HERDR_' "$out"; refute_grep '^DK_' "$out"; grep -q '^PATH=' "$out"
+}
 @test "AC6: 關波印本波耗時並記進 process" {
   H=$(date +%H); MM=$(date +%M); T=$(date +%Y-%m-%d)
   base=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
@@ -256,6 +265,18 @@ multirepo_close() {
   grep -q 'main ok' "$d/process.md"
   grep -q 'api ok (true)' "$d/process.md"
   grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
+}
+
+@test "gate c: 多 repo 的測試指令也拿不到 HERDR_* 與 DK_*" {
+  multirepo_close
+  # HERDR_ENV、HERDR_PANE_ID 由 helpers export（後者是 dk-wave-close 找任務用的，不能改值）
+  export HERDR_SOCKET_PATH=/tmp/leader.sock; [ -n "$HERDR_PANE_ID" ]; [ -n "$HERDR_ENV" ]
+  mkdir -p "$main_wt/src/api"; echo m > "$main_wt/src/api/login.ts"
+  out="$PROJECT/gatec-herdr-multi.txt"
+  echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  grep -q 'main ok' "$d/process.md"
+  refute_grep '^HERDR_' "$out"; refute_grep '^DK_' "$out"; grep -q '^PATH=' "$out"
 }
 
 @test "AC11: 本波沒變更的 repo 不跑它的測試" {

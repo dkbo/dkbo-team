@@ -133,14 +133,14 @@ done <<< "$(printf '%s\n' "$waves" | dk_brief_ncols 1 3)"
 for w in $(printf '%s\n' "$waves" | cut -d'|' -f1 | grep -E '^[0-9]+$' | sort -un); do
   [ -n "$(dk_brief_wave_review "$brief" "$w")" ] || fail "波次表 $w" "審查欄未填（預設 / skip: <理由> / kinds: …）"
   devs=0
-  for m in $(printf '%s\n' "$waves" | awk -F'|' -v n="$w" '$1==n{print $3}'); do
+  for m in $(printf '%s\n' "$waves" | awk -v n="$w" "$DK__BRIEF_SPLIT"'c[1]==n{print c[3]}'); do
     [ "$(dk_member_group "$m" 2>/dev/null || true)" = dev ] && devs=$((devs+1))
   done
   [ "$devs" -le "$DK_TAB1_SLOTS" ] || warn "波次表 $w" "dev 成員 $devs 位超過 tab 1 的 $DK_TAB1_SLOTS 格，建議拆波"
   # 同一波不得有兩位成員宣告同一個獨佔資源：worktree 隔離檔案，但兩位 dev 仍會對同一個
   # dev DB 跑 migration、搶同一個 port、重啟同一組 docker。
   claimed=""
-  for m in $(printf '%s\n' "$waves" | awk -F'|' -v n="$w" '$1==n{print $3}'); do
+  for m in $(printf '%s\n' "$waves" | awk -v n="$w" "$DK__BRIEF_SPLIT"'c[1]==n{print c[3]}'); do
     # 同 line 27 的理由改成 while read：獨佔資源是自由文字（db、port:3000、docker…），
     # 可以含 * 與 ?，未加引號的 $(…) 會拿 cwd 的檔名把它換掉。上面兩層迴圈跑的是波號
     # （純數字）與成員名（已驗過 [a-z][a-z0-9_-]*），沒有這個曝險，所以只改這一層。

@@ -111,14 +111,15 @@ if [ -n "$problems" ] && [ "$force" = 0 ]; then printf 'dk-wave-close: refused (
 tests="skipped (no DK_TEST_CMD)"
 if [ "$legacy" = 0 ]; then   # gate c
   mkdir -p "$dir/waves"
-  # 測試指令拿到的是一個不含任何 DK_* 的環境。領導這一側的 DK_ROOT／DK_PROJECT_ROOT／DK_WORKTREE
+  # 測試指令拿到的是一個不含任何 DK_* 與 HERDR_* 的環境。領導這一側的 DK_ROOT／DK_PROJECT_ROOT／DK_WORKTREE
   # 整包傳下去的話，測試裡任何 source lib/common.sh 的東西都會照 `${DK_X:-預設}` 吃到繼承值而打到
   # 真 repo —— 2026-09-19 領導在自己 session 跑 gate c，就這樣在源碼倉建了 7 個 worktree 與 8 個
-  # 分支（BACKLOG）。PATH、HOME 等非 DK_* 照舊，測試指令本身還是要找得到工具。
+  # 分支（BACKLOG）。HERDR_* 同理剝掉：HERDR_PANE_ID 等繼承值會讓專案測試以為自己在領導的
+  # pane 裡，打到真 herdr。PATH、HOME 等其他變數照舊，測試指令本身還是要找得到工具。
   # env 的第一個元素讓陣列永不為空：bash 3.2 對空陣列展開在 set -u 下會死。
   clean=(env)
-  # shellcheck disable=SC2086  # ${!DK_@} 要斷詞，一個變數名一個元素
-  for v in ${!DK_@}; do clean+=(-u "$v"); done
+  # shellcheck disable=SC2086  # ${!DK_@}／${!HERDR_@} 要斷詞，一個變數名一個元素
+  for v in ${!DK_@} ${!HERDR_@}; do clean+=(-u "$v"); done
   if [ "$multi" = 0 ]; then   # 單 repo：0.9.2 的行為一字不動（本波有沒有變更都跑）
     if [ -n "${DK_TEST_CMD:-}" ]; then
       log="$dir/waves/${n:-forced}.test.log"

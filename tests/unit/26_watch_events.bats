@@ -248,3 +248,42 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$epid" 2>/dev/null || break; done
   refute kill -0 "$epid" 2>/dev/null
 }
+
+# --- AC5（rest）：訂閱器也走 setsid／watch.log，死掉留遺言 ---
+epid_of() { sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
+ewlog() { echo "$DK_ROOT/.sessions/$(basename "$d").watch.log"; }
+kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
+
+@test "AC5: --events --ensure 印出的 pid 在 2 秒內成為 dk-watch --events，再 ensure 印 running 同一個 pid" {
+  unset DK_NO_WATCH
+  run dk-watch --events --ensure; [ "$status" -eq 0 ]
+  pid=$(printf '%s\n' "$output" | sed -n 's/^events: started (pid \([0-9]*\))$/\1/p'); [[ "$pid" =~ ^[0-9]+$ ]]
+  [ "$pid" = "$(epid_of)" ]
+  ok=0; for _ in $(seq 1 20); do ps -p "$pid" -o args= | grep -q -- 'dk-watch --events$' && { ok=1; break; }; sleep 0.1; done
+  [ "$ok" = 1 ] || { ps -p "$pid" -o args= >&2; false; }
+  run dk-watch --events --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"events: running (pid $pid)"* ]]
+  ok=0; for _ in $(seq 1 30); do grep -Eq "^[0-9T:-]+ start events pid $pid\$" "$(ewlog)" 2>/dev/null && { ok=1; break; }; sleep 0.1; done
+  [ "$ok" = 1 ] || { cat "$(ewlog)" >&2; false; }
+  kill_watchers
+}
+@test "AC5: --events --ensure 遇到死 pid 記 watch died: events 帶最後一行，排在 events started 之前" {
+  unset DK_NO_WATCH
+  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
+  sed -i "s/^DK_EVENTS_PID=.*/DK_EVENTS_PID=\"$dead\"/" "$d/.task.env"
+  mkdir -p "$DK_ROOT/.sessions"
+  { echo "2026-09-24T09:00 start events pid ${dead}1"
+    echo "2026-09-24T09:01 start events pid $dead"
+    echo "2026-09-24T09:02 signal INT events pid ${dead}1"; } > "$(ewlog)"
+  run dk-watch --events --ensure; [ "$status" -eq 0 ]
+  grep -q "watch died: events pid $dead last: 2026-09-24T09:01 start events pid $dead\$" "$d/process.md"
+  [ "$(grep -n 'watch died' "$d/process.md" | cut -d: -f1)" -lt "$(grep -n 'events started' "$d/process.md" | cut -d: -f1)" ]
+  kill_watchers
+}
+@test "AC5: 訂閱器收到 TERM 寫 signal 與 exit 行" {
+  dk-watch --events --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
+  ok=0; for _ in $(seq 1 30); do grep -Eq "start events pid $p\$" "$(ewlog)" 2>/dev/null && { ok=1; break; }; sleep 0.1; done; [ "$ok" = 1 ]
+  kill -TERM "$p"
+  ok=0; for _ in $(seq 1 40); do grep -Eq "^[0-9T:-]+ exit events pid $p rc=[0-9]+\$" "$(ewlog)" && { ok=1; break; }; sleep 0.1; done
+  [ "$ok" = 1 ] || { cat "$(ewlog)" >&2; false; }
+  grep -Eq "^[0-9T:-]+ signal TERM events pid $p\$" "$(ewlog)"
+}

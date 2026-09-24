@@ -177,6 +177,18 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再�
   grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
 }
 
+@test "rest AC6: 第一個 glob 含 \| 時 first_glob 取到完整的第一個 glob（repo 判對）" {
+  # 守護而非取紅：first_glob 只拿來取 repo 前綴，而前綴一定在 \| 之前，舊碼截斷成 shared:src/a\
+  # 也判得出 shared —— 這條守的是改走跳脫感知切欄後前綴與 cwd 不變。
+  multirepo_task
+  sed -i 's#^| backend | api:src/\*\*, shared:src/\*\* |#| backend | shared:src/a\\|b/**, api:src/** |#' "$d/brief.md"
+  grep -qF '| backend | shared:src/a\|b/**, api:src/** |' "$d/brief.md"
+  run dk-spawn backend; [ "$status" -eq 0 ]
+  grep -q -- "--cwd $(dk_repo_field "$d" shared wt) --no-focus" "$HERDR_STUB_LOG"
+  p=$(grep '^agent prompt login-backend' "$HERDR_STUB_LOG")
+  [[ "$p" == *"你的 pane 在「shared」的 worktree"* ]]
+}
+
 @test "AC8: 首輪提示點名自己的 repo；單 repo 模式不印這一句" {
   multirepo_task
   run dk-spawn backend; [ "$status" -eq 0 ]

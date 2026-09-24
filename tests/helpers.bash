@@ -11,10 +11,7 @@ setup_project() {
   local v
   for v in ${!DK_@}; do unset "$v"; done
   PROJECT="$(mktemp -d)"
-  cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
-  # .sessions/ 是主樹的執行期狀態（gitignore，只追蹤 .gitkeep）。原樣帶進來的話，開發機上一筆
-  # 未過期的 kinds-down 就讓 10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
-  find "$PROJECT/.dkbo/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
+  fixture_copy_dkbo "$REPO_ROOT" "$PROJECT/.dkbo"
   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
   # 源碼倉自己的 settings.env 是 dogfood 任務在用的（DK_TEST_CMD=tests/run.sh 給 gate c），
   # fixture 不能原樣繼承：gate c 會在假 worktree 裡跑一個不存在的指令，每條「閘全過」的
@@ -35,6 +32,34 @@ setup_project() {
   export DK_ROOT="$PROJECT/.dkbo"
   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
   cd "$PROJECT"
+}
+# 把 SRC_REPO/.dkbo 複製成 DEST_DKBO。整份 cp -r：worktree 裡未 commit 的 .dkbo/ 改動（含未追蹤的
+# 新 bin）照樣進夾具，員工才測得到自己正在寫的東西。複製完再丟掉兩類主樹的執行期狀態：
+# - .sessions/（gitignore，只追蹤 .gitkeep）：原樣帶進來的話，開發機上一筆未過期的 kinds-down 就讓
+#   10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
+# - SRC_REPO 是 git 倉時，.dkbo/tasks/ 底下未追蹤的項目（領導正在跑的任務資料夾，帶 .panes、
+#   .task.env）刪掉，追蹤中但與 HEAD 不同（含被刪）的檔還原成 HEAD 版（INDEX.md 多出的那一列等）。
+#   例外：tasks/ 底下（含 BACKLOG.md）worktree 未 commit 的改動因此不會進夾具；目前沒有測試讀夾具裡
+#   的 BACKLOG 內容，要讀的話得改這裡。
+# git 只用不刷新 index 的 plumbing 加 --no-optional-locks：每條測試的 setup 都跑這裡、同波數人並跑，
+# 會刷新 index 的 git status／git diff 會搶 .git/index.lock。不是 git 倉就只做前兩步、不報錯。
+fixture_copy_dkbo() { # SRC_REPO DEST_DKBO
+  local src="$1" dest="$2" p
+  local g=(git --no-optional-locks -C "$src")
+  cp -r "$src/.dkbo" "$dest"
+  find "$dest/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
+  "${g[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+  while IFS= read -r -d '' p; do
+    rm -rf "${dest:?}/${p#.dkbo/}"
+  done < <("${g[@]}" ls-files -z --others --exclude-standard --directory -- .dkbo/tasks)
+  while IFS= read -r -d '' p; do
+    if "${g[@]}" cat-file -e "HEAD:./$p" 2>/dev/null; then
+      mkdir -p "$(dirname "$dest/${p#.dkbo/}")"
+      "${g[@]}" show "HEAD:./$p" > "$dest/${p#.dkbo/}"
+    else
+      rm -f "$dest/${p#.dkbo/}"   # 只加進 index、HEAD 沒有的檔：跟未追蹤一樣丟掉
+    fi
+  done < <("${g[@]}" diff-index -z --name-only --relative HEAD -- .dkbo/tasks 2>/dev/null)
 }
 teardown_project() {
   # --ensure 起的是背景常駐行程（輪詢一條、訂閱一條）。留著的話它們會在後面的測試裡

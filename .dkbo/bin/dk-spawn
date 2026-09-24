@@ -54,7 +54,10 @@ report="$dir/state/$sname.report.md"
 # DK_WORKTREE 為空＝任務還沒實體化（計畫階段的 reviewer），那時只有主樹可用。
 mcwd="${DK_WORKTREE:-$DK_PROJECT_ROOT}"; mrepo=""; mrepo_wt=""
 if [ -n "${DK_WORKTREE:-}" ]; then
-  first_glob=$(dk_brief_owners "$dir/brief.md" 2>/dev/null | awk -F'|' -v m="$sname" '$1==m{print $2; exit}' | cut -d, -f1 | sed 's/^ *//; s/ *$//')
+  # 跳脫感知切欄（同 dk_owned）：可改欄的 \| 不是分隔，切完才還原成字面 |。
+  # awk 變數不能叫 m、c、p、i、j、v、nf、line：DK__BRIEF_SPLIT 自己用它們，會被蓋掉。
+  first_glob=$(dk_brief_owners "$dir/brief.md" 2>/dev/null | awk -v who="$sname" "$DK__BRIEF_SPLIT"'c[1]==who{print c[2]; exit}' \
+    | cut -d, -f1 | sed 's/^ *//; s/ *$//; s/\\|/|/g')
   if [ -n "$first_glob" ]; then
     mrepo=$(dk_glob_split "$first_glob" | cut -f1)
     mrepo_wt=""
