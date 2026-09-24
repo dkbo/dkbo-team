@@ -1,0 +1,1295 @@
+# BACKLOG 剩餘六條（測試與守望） — wave 1 since 810b931 — 2026-09-24T19:28
+# files changed: 24 (working tree included)
+
+## commits
+
+## stat
+ .dkbo/PROJECT.md                |   4 +-
+ .dkbo/bin/dk-brief-check        |   4 +-
+ .dkbo/bin/dk-msg                |  22 +++++---
+ .dkbo/bin/dk-spawn              |   5 +-
+ .dkbo/bin/dk-task-new           |  11 ++--
+ .dkbo/bin/dk-watch              |  84 +++++++++++++++++++++++++----
+ .dkbo/bin/dk-wave-close         |   9 ++--
+ .dkbo/lib/ownership.sh          |   8 ++-
+ .dkbo/skills/run/SKILL.md       |   2 +-
+ .dkbo/tasks/BACKLOG.md          |   6 ---
+ CHANGELOG.md                    |   7 ++-
+ tests/helpers.bash              |  33 ++++++++++--
+ tests/unit/05_task_new.bats     |  17 ++++++
+ tests/unit/06_msg.bats          |  58 ++++++++++++++++++++
+ tests/unit/07_spawn.bats        |  12 +++++
+ tests/unit/08_wave_close.bats   |  21 ++++++++
+ tests/unit/09_watch.bats        | 114 ++++++++++++++++++++++++++++++++++++++++
+ tests/unit/11_chore.bats        |  23 ++++++++
+ tests/unit/16_brief_check.bats  |  17 ++++++
+ tests/unit/21_version.bats      |   4 +-
+ tests/unit/22_ownership.bats    |  18 +++++++
+ tests/unit/26_watch_events.bats |  39 ++++++++++++++
+ tests/unit/36_fixture.bats      |  62 ++++++++++++++++++++++
+ tests/unit/37_shellcheck.bats   |  42 +++++++++++++++
+ 24 files changed, 577 insertions(+), 45 deletions(-)
+
+## diff (-U10)
+diff --git a/.dkbo/PROJECT.md b/.dkbo/PROJECT.md
+index 48d8fb9..071a1c6 100644
+--- a/.dkbo/PROJECT.md
++++ b/.dkbo/PROJECT.md
+@@ -1,8 +1,8 @@
+ # 專案事實（≤40 行；由 init skill 預填，領導或 it 維護）
+ - 技術棧：純 bash 3.2+ 腳本（`.dkbo/bin/dk-*` 與 `.dkbo/lib/*.sh`），依賴 jq、git、herdr 0.9.0；沒有任何套件管理器。
+ - 安裝 / 啟動：這裡是 dkbo 的原始碼倉，`.dkbo/` 是產品本身，**不要在本倉跑 `install.sh`**；領導以指名 `.dkbo/skills/*/SKILL.md` 進場。
+-- 測試指令：`tests/run.sh`（bats-core，第一次跑會 clone 進 `tests/lib/`）。shellcheck **不在** run.sh 裡，要另外跑 `shellcheck .dkbo/bin/* .dkbo/lib/*.sh .dkbo/kinds/*.sh`，目前沒有機械閘守它。單檔：`tests/run.sh tests/unit/09_watch.bats`。
+-- 目錄慣例：`tests/unit/NN_name.bats` 兩位數遞增；`tests/stub/herdr` 是假 herdr（零 token），`tests/stub/cli/*` 是假的 claude/codex/agy；`tests/helpers.bash` 建臨時專案並洗掉繼承的 `DK_*`。`docs/` 被 gitignore（設計文件不進版控）。
++- 測試指令：`tests/run.sh`（bats-core，第一次跑會 clone 進 `tests/lib/`）。shellcheck 由 `tests/unit/37_shellcheck.bats` 守（沒裝就 skip），檔案集合同全域約束（`.dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh tests/run.sh`）。單檔：`tests/run.sh tests/unit/09_watch.bats`。
++- 目錄慣例：`tests/unit/NN_name.bats` 兩位數遞增；`tests/stub/herdr` 是假 herdr（零 token），`tests/stub/cli/*` 是假的 claude/codex/agy；`tests/helpers.bash` 建臨時專案並洗掉繼承的 `DK_*`，複製 `.dkbo` 時丟掉主樹未追蹤的任務資料夾、tasks/ 追蹤檔還原成 HEAD 版。`docs/` 被 gitignore（設計文件不進版控）。
+ - 已知坑：`lib/common.sh` 幾乎每個變數都是 `${DK_X:-預設}`，繼承值優先 —— 任何會 source 它的測試或子行程都要先 unset `DK_*`，否則會打到真 repo。領導跑的是主樹的腳本，員工在 worktree 改 `.dkbo/` 的成果要等合併後的下一個任務才生效。
+ - 多 repo（0.10.0）：`settings.env` 的 `DK_REPOS` 空字串＝本倉是單 repo 專案，行為與 0.9.2 相同；`dk-leader <short> --run` 才會依 `DK_REPOS` 切 worktree、在你叫 `/dkbo-run` 當下所在的 workspace 開任務 tab 並交棒，`dk-task-new` 只建任務資料夾。多 repo 的檔案所有權、`touched`、`file:line` 一律 `<名>:` 前綴。
+ - 交棒改開 tab（0.11.0）：`dk-leader <short> --run` 不再 `herdr workspace create`，改在 `HERDR_WORKSPACE_ID`（0.16.0 起優先；空才退回 `.task.env` 的 `DK_WORKSPACE`，不同時回寫它）用 `herdr tab create` 開 label `dk/<short>` 的任務根 tab，id 記進 `.task.env` 的 `DK_TASK_TAB`。
+diff --git a/.dkbo/bin/dk-brief-check b/.dkbo/bin/dk-brief-check
+index a68cf9a..bcfee39 100755
+--- a/.dkbo/bin/dk-brief-check
++++ b/.dkbo/bin/dk-brief-check
+@@ -126,28 +126,28 @@ while IFS='|' read -r w _type m _what tier _done review; do
+   esac
+ done <<< "$(printf '%s\n' "$waves" | sed "s/\\\\|/$esc/g")"
+ # 欄數閘：波次表固定 7 欄（跳脫的 \| 不算分隔）。
+ while IFS=$'\t' read -r nc w m; do
+   [ -n "$nc" ] || continue
+   [ "$nc" -eq 7 ] || fail "波次表 $w $m" "每列須 7 欄，得到 $nc 欄（欄內的字面管線要寫成 \\|）"
+ done <<< "$(printf '%s\n' "$waves" | dk_brief_ncols 1 3)"
+ for w in $(printf '%s\n' "$waves" | cut -d'|' -f1 | grep -E '^[0-9]+$' | sort -un); do
+   [ -n "$(dk_brief_wave_review "$brief" "$w")" ] || fail "波次表 $w" "審查欄未填（預設 / skip: <理由> / kinds: …）"
+   devs=0
+-  for m in $(printf '%s\n' "$waves" | awk -F'|' -v n="$w" '$1==n{print $3}'); do
++  for m in $(printf '%s\n' "$waves" | awk -v n="$w" "$DK__BRIEF_SPLIT"'c[1]==n{print c[3]}'); do
+     [ "$(dk_member_group "$m" 2>/dev/null || true)" = dev ] && devs=$((devs+1))
+   done
+   [ "$devs" -le "$DK_TAB1_SLOTS" ] || warn "波次表 $w" "dev 成員 $devs 位超過 tab 1 的 $DK_TAB1_SLOTS 格，建議拆波"
+   # 同一波不得有兩位成員宣告同一個獨佔資源：worktree 隔離檔案，但兩位 dev 仍會對同一個
+   # dev DB 跑 migration、搶同一個 port、重啟同一組 docker。
+   claimed=""
+-  for m in $(printf '%s\n' "$waves" | awk -F'|' -v n="$w" '$1==n{print $3}'); do
++  for m in $(printf '%s\n' "$waves" | awk -v n="$w" "$DK__BRIEF_SPLIT"'c[1]==n{print c[3]}'); do
+     # 同 line 27 的理由改成 while read：獨佔資源是自由文字（db、port:3000、docker…），
+     # 可以含 * 與 ?，未加引號的 $(…) 會拿 cwd 的檔名把它換掉。上面兩層迴圈跑的是波號
+     # （純數字）與成員名（已驗過 [a-z][a-z0-9_-]*），沒有這個曝險，所以只改這一層。
+     while IFS= read -r r; do
+       [ -n "$r" ] || continue
+       prev=$(printf '%s' "$claimed" | awk -F'\t' -v rr="$r" '$1==rr{print $2; exit}')
+       if [ -n "$prev" ]; then fail "波次表 $w" "獨佔資源 $r 同時被 $prev 與 $m 宣告（同一波不得共用）"
+       else claimed="$claimed$r	$m
+ "; fi
+     done <<< "$(printf '%s\n' "$owners" | awk -v mm="$m" "$DK__BRIEF_SPLIT"'c[1]==mm{print c[4]}' \
+diff --git a/.dkbo/bin/dk-msg b/.dkbo/bin/dk-msg
+index 855e790..589f933 100755
+--- a/.dkbo/bin/dk-msg
++++ b/.dkbo/bin/dk-msg
+@@ -65,21 +65,31 @@ dk_msg_unacked() { # LOG LEADER → "N|TS|SENDER"（最新一則），沒有未
+     }' "$1"
+ }
+ if [ -n "${DK_CHORE_FILE:-}" ]; then   # chore worker: no task binding; the leader is whoever ran dk-chore
+   chore=1; leader="${DK_LEADER:?dk-msg: DK_LEADER unset}"; sender="${DK_AGENT:?dk-msg: DK_AGENT unset}"
+   log="$DK_ROOT/tasks/_chores/messages.log"; mkdir -p "$(dirname "$log")"
+ else
+   chore=0; dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
+   leader=$(dk_leader_name); sender="${DK_AGENT:-$leader}"; log="$dir/messages.log"
+ fi
+ 
+-if [ "${1:-}" = "--ack" ]; then echo "$(dk_now) $sender [ACK]" >> "$log"; exit 0; fi
++# 守望曾經無聲死掉整波沒人發現：事故那一波唯一還在跑的是員工的 dk-msg。所以綁著任務時，每一個
++# 寫 messages.log 的出口（含背景送的前景那一半）之後都 --ensure 一次，死了就地叫回來、process 記 watch died。
++# 雜務的守望由 dk-chore 負責；--ensure 自己有鎖，四人波接連送 [DONE] 不會起兩隻。
++# .panes 不在＝任務已結案（dk-task-close 刪它）：還在背景送的那一份不能對已 commit 的任務目錄
++# 記 watch died、改 .task.env、起一對第一輪就自己退出的守望（rest 波 1 審查 M1）。
++wake_watch() {
++  [ "$chore" = 0 ] && [ -z "${DK_NO_WATCH:-}" ] && [ -f "$dir/.panes" ] || return 0
++  "$DK_ROOT/bin/dk-watch" --ensure </dev/null >/dev/null 2>&1 || true
++}
++
++if [ "${1:-}" = "--ack" ]; then echo "$(dk_now) $sender [ACK]" >> "$log"; wake_watch; exit 0; fi
+ target="${1:-}"; text="${2:-}"
+ [ -n "$target" ] && [ -n "$text" ] || dk_die "usage: dk-msg <target> \"[TYPE] body\""
+ [ "$target" = leader ] && target="$leader"
+ 
+ if [[ ! "$text" =~ ^\[(TASK|DONE|BUG|FIXED|QUESTION|ANSWER|ESCALATE|DECISION|STOP|BLOCKED)\]\ (.+)$ ]]; then
+   echo "dk-msg: text must be '[TYPE] body' with a known type" >&2; exit 2; fi
+ type="${BASH_REMATCH[1]}"; body="${BASH_REMATCH[2]}"
+ if [ "${#body}" -gt 200 ]; then echo "dk-msg: body >200 chars; put details in your state file" >&2; exit 2; fi
+ if [ "$chore" = 1 ] && [ "$target" != "$leader" ]; then
+   echo "dk-msg: chore workers may only message leader" >&2; exit 2; fi
+@@ -112,21 +122,21 @@ fi
+ # 送出前 state 必須已是 done —— 否則這則 DONE 沉進 log，而 dk-watch 也因為 state 沒 done
+ # 不會推聚合，整波會靜悄悄卡到整波逾時才有人吭聲。擋在這裡，錯誤當場回到犯錯的人手上。
+ if [ "$chore" = 0 ] && [ "$type" = DONE ] && [ "$target" = "$leader" ] \
+    && [ "$(awk -v n="$sender" '$1==n{print $4; exit}' "$dir/.panes" 2>/dev/null)" = dev ]; then
+   sf="$dir/state/${sender#"$DK_SHORT"-}.md"
+   grep -q '^status: done' "$sf" 2>/dev/null \
+     || { echo "dk-msg: 先把 $sf 寫成 'status: done'（report 也要寫好）再送 [DONE]" >&2; exit 2; }
+   err=$(dk_state_format_error "$sf" "$dir")
+   [ -z "$err" ] || { echo "dk-msg: state 格式錯：$err" >&2; exit 2; }
+   echo "$(dk_now) $sender -> $target [$type] $body" >> "$log"
+-  exit 0
++  wake_watch; exit 0
+ fi
+ 
+ line="[$type] from $sender: $body"
+ 
+ # 收件者解析。herdr 認的是註冊名，PROTOCOL 教人寫的是短名，兩者對不上時 herdr 回 agent_not_found，
+ # wait 與 prompt 雙雙非零 —— 看起來就跟「對方忙到送不進」一模一樣。panova2/sportswitch 實跑 13 筆
+ # 訊息 12 筆 UNDELIVERED，兩個方向各壞一邊：員工的 dk-msg leader 打到從未註冊的 leader-<short>，
+ # 領導的 [TASK] 打到沒有任務前綴的 reviewer-a。pane id 是唯一不靠 rename 的把手，留作退路。
+ fallback=""
+ if [ "$chore" = 0 ]; then
+@@ -192,35 +202,35 @@ redispatch() { # AGENT — 只動 .panes 裡真的有的列；雜務與已收工
+ }
+ 
+ # dev → qa 的 [DONE] 改背景送：qa 多半正在寫探測腳本，前景等它閒下來會把 dev 的 pane 卡住
+ # 12–30 分（panova autofold 22／13 分、gamemore 30 分），而 qa 本來就會自己看 dev 的 state 開工。
+ # 仍然會送到：qa 若已停下來等，這一則就是叫醒它的訊號。送達或送不到照常由背景那一份記 log。
+ if [ "$chore" = 0 ] && [ "$type" = DONE ] && [ -z "${DK_MSG_BG:-}" ] && [ -f "$dir/.panes" ] \
+    && [ "$(awk -v n="$sender" '$1==n{print $4; exit}' "$dir/.panes")" = dev ] \
+    && [ "$(awk -v n="$target" '$1==n{print $4; exit}' "$dir/.panes")" = review ]; then
+   DK_MSG_BG=1 nohup "$0" "$target" "$text" </dev/null >/dev/null 2>&1 3>&- &
+   echo "dk-msg: 改在背景等 $target 閒下來再送（結果記在 messages.log），你直接往下做"
+-  exit 0
++  wake_watch; exit 0
+ fi
+ 
+ # AC5（#14）：領導送給員工的指派型訊息也改背景送。領導前景等員工閒下來，一則就能卡掉五分鐘，
+ # 等不到還整則放棄（UNDELIVERED）——而領導卡住的那段時間整隊都在等他。背景那一份等得比較久
+ # （預設 6 次 × 5 分＝30 分），送達才 redispatch，最終送不到另記 process，dk-resume 翻得到。
+ # 對象限 .panes 裡的員工：雜務與已收工的人不在 .panes，照舊前景送。
+ if [ "$chore" = 0 ] && [ "$sender" = "$leader" ] && [ "$target" != "$leader" ] && [ -z "${DK_MSG_BG:-}" ] \
+    && [[ "$type" =~ ^(TASK|BUG|DECISION|STOP)$ ]] && in_panes "$target"; then
+   q="$dir/.blocked/msgq-$target"; mkdir -p "$dir/.blocked"
+   DK_MSG_BG=1 DK_MSG_QUEUED=1 DK_MSG_TRIES="${DK_MSG_TRIES:-6}" nohup "$0" "$target" "$text" </dev/null >/dev/null 2>&1 3>&- &
+   # 排隊號碼在前景就落下：連送兩則時第二則一定排在第一則後面，不看背景那一份誰先醒。
+   ( flock -w 5 9 || true; echo "$!" >> "$q" ) 9>"$q.lock"
+   echo "dk-msg: 改在背景等 $target 閒下來再送（結果記在 messages.log），你直接往下做"
+-  exit 0
++  wake_watch; exit 0
+ fi
+ 
+ # 背景那一份：同一收件者一次只送一則、照送出順序（FIFO）。輪到自己＝佇列頭是自己的 pid；
+ # 佇列頭的行程已經不在（被殺、機器重開）就剔掉它，免得後面整排永遠等下去。
+ queue_wait() { # QUEUE — 回傳時自己已是佇列頭（最多等 DK_MSG_QUEUE_SEC 秒，預設一小時，過了就不排了）
+   local q="$1" head waited=0
+   while :; do
+     head=$( (flock -w 5 9 || true
+       while :; do
+         h=$(head -n 1 "$q" 2>/dev/null) || h=""
+@@ -248,19 +258,19 @@ if [ -n "${DK_MSG_QUEUED:-}" ] && [ "$chore" = 0 ]; then
+   bgq="$dir/.blocked/msgq-$target"; queue_wait "$bgq"; trap 'queue_leave "$bgq"' EXIT
+ fi
+ 
+ # 重試而不是一次定生死：實跑中 reviewer 的 [DONE] 曾在一分鐘內就被判失敗、整筆遺失，
+ # 而它的報告好端端躺在磁碟上 —— 領導從不知道它交過。
+ tries="${DK_MSG_TRIES:-3}"; i=1
+ while [ "$i" -le "$tries" ]; do
+   # log 一律記解析後的名字，不記 pane id：那是人與 dk-wave-close 讀的那一欄。
+   if deliver "$target" || { [ -n "$fallback" ] && deliver "$fallback"; }; then
+     if [ "$chore" = 0 ] && { [ "$type" = TASK ] || [ "$type" = BUG ]; }; then redispatch "$target"; fi
+-    echo "$(dk_now) $sender -> $target [$type] $body" >> "$log"; exit 0
++    echo "$(dk_now) $sender -> $target [$type] $body" >> "$log"; wake_watch; exit 0
+   fi
+   [ "$i" -lt "$tries" ] && sleep "${DK_MSG_RETRY_SEC:-5}"
+   i=$((i+1))
+ done
+ echo "$(dk_now) $sender -> $target [UNDELIVERED] [$type] $body" >> "$log"
+ [ "$chore" = 1 ] || [ "$sender" != "$leader" ] || dk_process "undelivered $target [$type]"
+ echo "dk-msg: undelivered to $target (logged); note it in your state blocked_by and continue" >&2
+-exit 1
++wake_watch; exit 1
+diff --git a/.dkbo/bin/dk-spawn b/.dkbo/bin/dk-spawn
+index bade26c..0c18b7c 100755
+--- a/.dkbo/bin/dk-spawn
++++ b/.dkbo/bin/dk-spawn
+@@ -47,21 +47,24 @@ agent=$(dk_agent_name "$role" "$alias"); sname=$(dk_state_name "$role" "$alias")
+ # CLI 那側的 session 顯示名：pane 上看到的是 <任務>-<角色>，不是 CLI 自己取的標題（領導已經是 dk/<short>）。
+ # 名字合 [a-z0-9_-]、不含空白，可以跟 $args 一起不加引號展開。codex、agy 沒有對應旗標，回空字串。
+ dk_kind_load "$kind"; sess=$(kind_session_args "$agent"); [ -z "$sess" ] || args="$args $sess"
+ brief_for="$dir/brief.md"; [ -f "$dir/briefs/$sname.md" ] && brief_for="$dir/briefs/$sname.md"
+ report="$dir/state/$sname.report.md"
+ 
+ # 成員的家 = 它第一個可改 glob 所在 repo 的 worktree（決策⑧：不另立欄位，第一個 glob 就是宣告）。
+ # DK_WORKTREE 為空＝任務還沒實體化（計畫階段的 reviewer），那時只有主樹可用。
+ mcwd="${DK_WORKTREE:-$DK_PROJECT_ROOT}"; mrepo=""; mrepo_wt=""
+ if [ -n "${DK_WORKTREE:-}" ]; then
+-  first_glob=$(dk_brief_owners "$dir/brief.md" 2>/dev/null | awk -F'|' -v m="$sname" '$1==m{print $2; exit}' | cut -d, -f1 | sed 's/^ *//; s/ *$//')
++  # 跳脫感知切欄（同 dk_owned）：可改欄的 \| 不是分隔，切完才還原成字面 |。
++  # awk 變數不能叫 m、c、p、i、j、v、nf、line：DK__BRIEF_SPLIT 自己用它們，會被蓋掉。
++  first_glob=$(dk_brief_owners "$dir/brief.md" 2>/dev/null | awk -v who="$sname" "$DK__BRIEF_SPLIT"'c[1]==who{print c[2]; exit}' \
++    | cut -d, -f1 | sed 's/^ *//; s/ *$//; s/\\|/|/g')
+   if [ -n "$first_glob" ]; then
+     mrepo=$(dk_glob_split "$first_glob" | cut -f1)
+     mrepo_wt=""
+     [ -z "$mrepo" ] || mrepo_wt=$(dk_repo_field "$dir" "$mrepo" wt)
+     if [ -n "$mrepo_wt" ]; then mcwd="$mrepo_wt"; else mrepo=""; fi
+   fi
+ fi
+ 
+ upstream=""   # 只有真的被排進這一波的 review 成員要等人；reviewer 不在波次表裡，它讀的是收齊後的 diff pack
+ if [ "$group" = review ] && [ -n "${DK_WAVE:-}" ] && [ -f "$dir/brief.md" ] \
+diff --git a/.dkbo/bin/dk-task-new b/.dkbo/bin/dk-task-new
+index 5f666b0..663004c 100755
+--- a/.dkbo/bin/dk-task-new
++++ b/.dkbo/bin/dk-task-new
+@@ -88,18 +88,17 @@ if [ "$current" != "leader-$short" ]; then
+     # process.md 一片乾淨，而整場 12 筆訊息全打在一個不存在的 leader-<short> 上。
+     # dk-msg 的 pane id 退路接得住，但領導得知道自己是靠退路在跑。
+     echo "dk-task-new: agent rename reported success but the pane is still not leader-$short; dk-msg will fall back to $HERDR_PANE_ID" >&2
+     dk_process "rename 沒生效（herdr 回成功但名字沒變）；訊息改走 pane id $HERDR_PANE_ID"
+   fi
+ fi
+ dk_index_add "$date" "$display" task planning "—"
+ trap - EXIT   # task fully recorded
+ 
+ if [ -x "$DK_ROOT/bin/dk-watch" ] && [ -z "${DK_NO_WATCH:-}" ]; then
+-  # close fd 3 and stdin so bats/herdr never wait on the detached watcher
+-  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" </dev/null >/dev/null 2>&1 3>&- &
+-  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$!\"/" "$dir/.task.env"
+-  # 訂閱器是另一條命脈：輪詢 30 秒一輪，它在畫面冒出審批／額度的當下就動
+-  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" --events </dev/null >/dev/null 2>&1 3>&- &
+-  sed -i "s/^DK_EVENTS_PID=.*/DK_EVENTS_PID=\"$!\"/" "$dir/.task.env"
++  # 第一對守望（輪詢＋訂閱）也走 --ensure：setsid、watch.log、鎖跟之後每次叫回同一條路，兩個 pid
++  # 由它落進 .task.env。自己 nohup 起的話，只要這一對活著，之後的 --ensure 都判 running，任務從建立
++  # 到第一次死亡跑的都是沒有 setsid 保護、stderr 丟 /dev/null 的舊守望（rest 波 1 審查 Important 1）。
++  # close fd 3 and stdin so bats/herdr never wait on the detached watcher；stdout 關掉：本腳本只印任務目錄
++  DK_TASK_DIR="$dir" "$DK_ROOT/bin/dk-watch" --ensure </dev/null >/dev/null 2>&1 3>&- || true
+ fi
+ echo "$dir"
+diff --git a/.dkbo/bin/dk-watch b/.dkbo/bin/dk-watch
+index eac80cc..e9d1787 100755
+--- a/.dkbo/bin/dk-watch
++++ b/.dkbo/bin/dk-watch
+@@ -7,54 +7,99 @@ set -euo pipefail
+ once=0; interval=""; ensure=0; chores=0; events=0
+ while [ $# -gt 0 ]; do case "$1" in
+   --once) once=1; shift;; --interval) interval="$2"; shift 2;;
+   --ensure) ensure=1; shift;; --chores) chores=1; shift;; --events) events=1; shift;;
+   *) dk_die "unknown flag $1";; esac; done
+ [ -n "$interval" ] || { if [ "$events" = 1 ]; then interval=2; else interval=30; fi; }
+ cdir="$DK_ROOT/tasks/_chores"                       # chore mode: no .task.env, so pid and markers live in
+ cmark="$DK_ROOT/.sessions/chores.blocked"           # .sessions, which is gitignored and already holds transient state
+ cpid="$DK_ROOT/.sessions/chores.watch.pid"
+ crdir="$DK_ROOT/.sessions/chores"                   # 一件雜務一個記錄檔；存在 ⟺ 它還在跑
++wlog="$DK_ROOT/.sessions/chores.watch.log"          # 背景守望的遺言；任務模式下面改成 <任務目錄名>.watch.log
+ alive() { [[ "${1:-}" =~ ^[0-9]+$ ]] && ps -p "$1" -o args= 2>/dev/null | grep -q "${2:-dk-watch}"; }
+ # the full command line, not kill -0: pids get recycled and kill -0 would call a stranger alive
+ 
++# 守望曾經無聲死掉、沒人發現（BACKLOG）。三件事一起補：stdout／stderr 追加到 watch.log 而不是丟
++# /dev/null（.sessions/ 已 gitignore、結案不刪）；有 setsid 就用它起，脫離呼叫者的 session，關掉
++# 那個 pane 送的 HUP 打不到它，沒有（macOS）照舊 nohup；--ensure 看到死 pid 先記一行 watch died。
++# 不得用 `setsid -f`：它一定 fork，$! 會變成 setsid 自己。非互動 shell 的 & 不是行程組長，
++# setsid 不必 fork、直接 exec，所以 $! 就是 dk-watch 本身。
++# 非 job control 的 & 會讓子行程忽略 INT，而進場前就被忽略的訊號 bash 不准 trap —— 守望的 INT trap
++# 形同虛設。GNU env 的 --default-signal 把它還原；同 setsid，有才用（macOS 沒有），env 也是 exec，pid 不變。
++# 用 setsid 時連 HUP 一起還原：呼叫者本身可能是 nohup 起的（dk-msg 背景那一份），HUP 會以「已忽略」
++# 繼承下來。脫離了 session 就沒有終端機會送 HUP，交給 trap 記一行照跑；只有 nohup 可用時不動它。
++bg_start() { # LOG [FLAG] → new=<pid>
++  local l=nohup sigs=INT; command -v setsid >/dev/null 2>&1 && { l=setsid; sigs=INT,HUP; }
++  # 3>&-：bats 與 herdr 不等它；8>&-：--ensure 的鎖不能跟著常駐行程活下去，否則下一個 --ensure 永遠拿不到
++  if env --default-signal=INT true 2>/dev/null; then
++    "$l" env --default-signal="$sigs" "$DK_ROOT/bin/dk-watch" ${2:+"$2"} </dev/null >>"$1" 2>&1 3>&- 8>&- &
++  else
++    "$l" "$DK_ROOT/bin/dk-watch" ${2:+"$2"} </dev/null >>"$1" 2>&1 3>&- 8>&- &
++  fi
++  new=$!
++}
++bg_settle() { # PID PATTERN — 等它 exec 成 dk-watch（最多 3 秒）。fork 之後、exec 之前 args 還是
++  # --ensure 自己，這時放鎖，下一個 --ensure 會把它看成死的再起一隻
++  local i=0; while [ "$i" -lt 30 ]; do alive "$1" "$2" && return 0; sleep 0.1; i=$((i+1)); done
++}
++# --ensure 整段串行化：dk-msg 每則都會呼叫它，四人波幾秒內接連送 [DONE] 時不能起兩隻、後寫的 pid
++# 蓋掉先寫的。鎖檔與 dk_env_set 的 <任務>.lock 不同檔、fd 也不同（8 對 9），鎖內呼叫它不會自鎖。
++ensure_lock() { # LOCKFILE
++  mkdir -p "$(dirname "$1")"; exec 8>"$1"
++  flock -w 10 8 || echo "watch: lock timeout on $1; continuing" >&2
++}
++wlog_last() { # PID → watch.log 裡該 pid 的最後一行，沒有就 no log。詞界比對：pid 12 不吃到 pid 123
++  local l=""
++  [[ "$1" =~ ^[0-9]+$ ]] && [ -f "$wlog" ] && l=$(grep -E " pid $1( |\$)" "$wlog" | tail -1 || true)
++  printf '%s' "${l:-no log}"
++}
++
+ if [ "$chores" = 1 ] && [ "$ensure" = 1 ]; then   # idempotent start; the last chore closing lets it exit on its own
+   [ -z "${DK_NO_WATCH:-}" ] || { echo "watch: disabled (DK_NO_WATCH)"; exit 0; }
++  ensure_lock "$DK_ROOT/.sessions/chores.watch.lock"
+   pid=$(cat "$cpid" 2>/dev/null || true)
+   if alive "$pid" 'dk-watch.*--chores'; then echo "watch: chores running (pid $pid)"; exit 0; fi
+-  mkdir -p "$(dirname "$cpid")"
+-  nohup "$DK_ROOT/bin/dk-watch" --chores </dev/null >/dev/null 2>&1 3>&- &
+-  pid=$!; echo "$pid" > "$cpid"
++  bg_start "$wlog" --chores; pid=$new; echo "$pid" > "$cpid"
++  bg_settle "$pid" 'dk-watch.*--chores'
+   echo "watch: chores started (pid $pid)"; exit 0
+ fi
+ 
+-if [ "$chores" = 0 ]; then dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env; fi
++if [ "$chores" = 0 ]; then
++  dir=$(dk_task_dir); DK_TASK_DIR="$dir"; export DK_TASK_DIR; dk_task_env
++  wlog="$DK_ROOT/.sessions/$(basename "$dir").watch.log"
++fi
+ dk_settings
+ thr="${DK_BLOCK_SEC:-60}"
+ 
+ ensure_events() { # 訂閱器與輪詢是兩條獨立的命脈，各自 ensure：一條死掉另一條還在
+   [ -z "${DK_NO_WATCH:-}" ] || { echo "events: disabled (DK_NO_WATCH)"; return 0; }
+   if alive "${DK_EVENTS_PID:-}" 'dk-watch.*--events'; then echo "events: running (pid $DK_EVENTS_PID)"; return 0; fi
+-  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" --events </dev/null >/dev/null 2>&1 3>&- &
+-  new=$!
++  [ -z "${DK_EVENTS_PID:-}" ] || dk_process "watch died: events pid $DK_EVENTS_PID last: $(wlog_last "$DK_EVENTS_PID")"
++  bg_start "$wlog" --events
+   dk_env_set DK_EVENTS_PID "$new"; dk_process "events started (pid $new)"
++  bg_settle "$new" 'dk-watch.*--events'
+   echo "events: started (pid $new)"
+ }
+ 
++if [ "$ensure" = 1 ] && [ -z "${DK_NO_WATCH:-}" ]; then
++  ensure_lock "$DK_ROOT/.sessions/$(basename "$dir").watch.lock"
++  dk_task_env   # 鎖外讀到的 pid 可能已被前一個 --ensure 改掉，鎖內重讀
++fi
+ if [ "$events" = 1 ] && [ "$ensure" = 1 ]; then ensure_events; exit 0; fi
+ 
+ if [ "$ensure" = 1 ]; then   # idempotent start: the safety net must not disappear silently
+   [ -z "${DK_NO_WATCH:-}" ] || { echo "watch: disabled (DK_NO_WATCH)"; exit 0; }
+   if alive "${DK_WATCH_PID:-}" 'dk-watch$'; then echo "watch: running (pid $DK_WATCH_PID)"; ensure_events; exit 0; fi
+-  DK_TASK_DIR="$dir" nohup "$DK_ROOT/bin/dk-watch" </dev/null >/dev/null 2>&1 3>&- &
+-  new=$!
++  [ -z "${DK_WATCH_PID:-}" ] || dk_process "watch died: poll pid $DK_WATCH_PID last: $(wlog_last "$DK_WATCH_PID")"
++  bg_start "$wlog"
+   dk_env_set DK_WATCH_PID "$new"; dk_process "watch restarted (pid $new)"
++  bg_settle "$new" 'dk-watch$'
+   echo "watch: restarted (pid $new)"; ensure_events; exit 0
+ fi
+ 
+ agent_status() { printf '%s' "$2" | jq -r --arg a "$1" '(.result.agents // [])[] | select(.name==$a) | .agent_status' 2>/dev/null | head -1 || true; }
+ 
+ # 送給領導的提示必須先等它閒下來：守望觸發的前提正是領導忙著，而「提示送給 working 的 agent
+ # 會排隊還是被丟掉」在三個 kind 上都還是 unknown。等待要有界，否則背景迴圈會被卡住；沒送到就
+ # 不寫 delivered，下一 tick 重試。桌面通知與熔斷不受影響，各自只做一次。
+ # fallback 是 pane id：DK_LEADER_PANE（領導在哪），缺席的舊任務退回版面錨點 DK_ROOT_PANE。
+ # 交棒之後兩者不同格，而每輪都重讀 .task.env，所以訂閱器與輪詢都自動跟上。
+@@ -375,16 +420,35 @@ events_arm() { # agent pane — 等這個 pane 的畫面冒出審批或額度。
+ 
+ events_tick() { # 一輪訂閱：每個 pane 一個等待者，誰先命中誰先被處理
+   [ -f "$dir/.panes" ] || exit 0
+   local agent pane
+   now=$(date +%s); mkdir -p "$dir/.blocked"
+   dk_task_env   # DK_KIND_DOWN 可能被上一輪或輪詢那邊改過
+   while read -r agent pane _; do
+     [ -n "$agent" ] && [ -n "$pane" ] || continue
+     events_arm "$agent" "$pane" &
+   done < "$dir/.panes"
+-  wait
++  # 有 trap 的訊號（HUP）會讓 wait 立刻回 >128；set -e 下那等於整隻退出，所以等到真的收齊為止
++  until wait; do :; done
+ }
+ 
+ run() { if [ "$chores" = 1 ]; then chore_tick; elif [ "$events" = 1 ]; then events_tick; else tick; fi; }
+ if [ "$once" = 1 ]; then run; exit 0; fi
+-while :; do run; sleep "$interval"; done
++
++# 常駐行程在 watch.log 留 start／signal／exit 三種行：死因從此看得到（--ensure 的 watch died 引它最後一行）。
++# HUP 記一行照跑（nohup 語意）；INT／TERM 記一行後結束。
++# 輪與輪之間的 sleep 放背景再 wait：bash 要等前景指令結束才跑 trap，前景 sleep 會讓 TERM 晚一整個
++# --interval 才生效（dk-task-close 殺完就驗它走了沒）；wait 則會被有 trap 的訊號當場打斷。
++# 仍然會延後的：tick 裡正在跑的前景指令（herdr、jq）要跑完 trap 才輪到；events 模式的 herdr pane
++# wait-output 子行程在 TERM 後變成孤兒，跑到自己的 --timeout 才走。
++# 以 nohup 起（沒有 setsid）時 HUP 在進場前就被忽略、trap 不生效；env 不支援 --default-signal 時，
++# --ensure 起的守望 INT 同理被忽略（見 bg_start）——這兩種都只是少了那一行，行為仍是不退出／不理會。
++if [ "$chores" = 1 ]; then mode=chores; elif [ "$events" = 1 ]; then mode=events; else mode=poll; fi
++wline() { { echo "$(dk_now) $1 $mode pid $$${2:-}" >> "$wlog"; } 2>/dev/null || true; }
++mkdir -p "$(dirname "$wlog")"
++spid=""
++trap 'wline exit " rc=$?"; [ -z "$spid" ] || kill "$spid" 2>/dev/null || true' EXIT
++trap 'wline "signal HUP"' HUP
++trap 'wline "signal INT"; exit 130' INT
++trap 'wline "signal TERM"; exit 143' TERM
++wline start
++while :; do run; sleep "$interval" & spid=$!; wait "$spid" || kill "$spid" 2>/dev/null || true; spid=""; done
+diff --git a/.dkbo/bin/dk-wave-close b/.dkbo/bin/dk-wave-close
+index 55598ce..793c114 100755
+--- a/.dkbo/bin/dk-wave-close
++++ b/.dkbo/bin/dk-wave-close
+@@ -104,28 +104,29 @@ if [ "$legacy" = 0 ]; then
+         echo "dk-wave-close: unreported change: $p (owner $owner); $owner's state left it out of touched"
+         dk_process "unreported $p (owner $owner)"
+       fi
+     done <<< "$changed"
+   fi
+ fi
+ if [ -n "$problems" ] && [ "$force" = 0 ]; then printf 'dk-wave-close: refused (use --force to close anyway):%b\n' "$problems"; exit 1; fi
+ tests="skipped (no DK_TEST_CMD)"
+ if [ "$legacy" = 0 ]; then   # gate c
+   mkdir -p "$dir/waves"
+-  # 測試指令拿到的是一個不含任何 DK_* 的環境。領導這一側的 DK_ROOT／DK_PROJECT_ROOT／DK_WORKTREE
++  # 測試指令拿到的是一個不含任何 DK_* 與 HERDR_* 的環境。領導這一側的 DK_ROOT／DK_PROJECT_ROOT／DK_WORKTREE
+   # 整包傳下去的話，測試裡任何 source lib/common.sh 的東西都會照 `${DK_X:-預設}` 吃到繼承值而打到
+   # 真 repo —— 2026-09-19 領導在自己 session 跑 gate c，就這樣在源碼倉建了 7 個 worktree 與 8 個
+-  # 分支（BACKLOG）。PATH、HOME 等非 DK_* 照舊，測試指令本身還是要找得到工具。
++  # 分支（BACKLOG）。HERDR_* 同理剝掉：HERDR_PANE_ID 等繼承值會讓專案測試以為自己在領導的
++  # pane 裡，打到真 herdr。PATH、HOME 等其他變數照舊，測試指令本身還是要找得到工具。
+   # env 的第一個元素讓陣列永不為空：bash 3.2 對空陣列展開在 set -u 下會死。
+   clean=(env)
+-  # shellcheck disable=SC2086  # ${!DK_@} 要斷詞，一個變數名一個元素
+-  for v in ${!DK_@}; do clean+=(-u "$v"); done
++  # shellcheck disable=SC2086  # ${!DK_@}／${!HERDR_@} 要斷詞，一個變數名一個元素
++  for v in ${!DK_@} ${!HERDR_@}; do clean+=(-u "$v"); done
+   if [ "$multi" = 0 ]; then   # 單 repo：0.9.2 的行為一字不動（本波有沒有變更都跑）
+     if [ -n "${DK_TEST_CMD:-}" ]; then
+       log="$dir/waves/${n:-forced}.test.log"
+       if (cd "$DK_WORKTREE" && "${clean[@]}" bash -c "$DK_TEST_CMD") > "$log" 2>&1; then tests="ok ($DK_TEST_CMD)"
+       else
+         echo "dk-wave-close: tests failed ($DK_TEST_CMD); last 20 lines of $log:"; tail -n 20 "$log"
+         if [ "$force" = 0 ]; then dk_process "wave-close ${n:-?} tests failed ($DK_TEST_CMD)"; exit 1; fi
+         tests="failed ($DK_TEST_CMD, forced)"
+       fi
+     fi
+diff --git a/.dkbo/lib/ownership.sh b/.dkbo/lib/ownership.sh
+index 6122d4c..e90f2e6 100644
+--- a/.dkbo/lib/ownership.sh
++++ b/.dkbo/lib/ownership.sh
+@@ -1,22 +1,28 @@
+ # shellcheck shell=bash
+ # 檔案所有權的比對。需要先 source common.sh；前綴規則整套在 repos.sh。
+ # 呼叫端有些只 source 了 ownership.sh，所以缺了就自己補上（source 兩次是冪等的）。
+ # shellcheck source=/dev/null
+ command -v dk_glob_split >/dev/null 2>&1 || . "$DK_ROOT/lib/repos.sh"
++# shellcheck source=/dev/null
++command -v dk_brief_owners >/dev/null 2>&1 || . "$DK_ROOT/lib/brief.sh"
+ 
+ # dk_owned BRIEF STATE_NAME PATH → exit 0 if PATH matches one of the member's 可改 globs.
+ # 多 repo 模式下 PATH 與 glob 都帶 `<名>:` 前綴，前綴不同就不比 —— 兩個 repo 裡的同名路徑
+ # 是兩個檔。單 repo 模式兩邊都沒有前綴，比法與 0.9.2 相同。
+ dk_owned() {
+   local brief="$1" who="$2" path="$3" globs g s prepo ppath grepo gglob
+-  globs=$(awk -F'|' -v w="$who" '{c=$2; gsub(/^ +| +$/, "", c)} c==w {print $3; exit}' "$brief" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
++  # 只讀「## 檔案所有權」段、用跳脫感知切欄：對整份 brief 裸 awk -F'|' 的話，前面段落裡第一格
++  # 恰好是成員名的表格會被當成所有權列，欄內的 \| 也會把可改欄截斷。切完才把 \| 還原成
++  # 字面 |（同 dk_brief_md_rows：切欄時保留跳脫，用到值的那一刻才還原）。
++  globs=$(dk_brief_owners "$brief" 2>/dev/null | awk -v w="$who" "$DK__BRIEF_SPLIT"'c[1]==w {print c[2]; exit}' \
++    | tr ',' '\n' | sed 's/^ *//; s/ *$//; s/\\|/|/g')
+   [ -n "$globs" ] || return 1
+   # 用參數展開切，不用 `IFS=$'\t' read`：tab 是 IFS 的空白字元，read 會把「開頭的空欄」
+   # 整個吃掉 —— 沒有前綴的 "\tsrc/api/**" 會被讀成 repo=src/api/** 、glob 空。
+   s=$(dk_glob_split "$path"); prepo="${s%%$'\t'*}"; ppath="${s#*$'\t'}"
+   while IFS= read -r g; do
+     [ -n "$g" ] || continue
+     s=$(dk_glob_split "$g"); grepo="${s%%$'\t'*}"; gglob="${s#*$'\t'}"
+     [ "$grepo" = "$prepo" ] || continue
+     # shellcheck disable=SC2254  # $gglob IS a glob pattern (brief 可改 column)
+     case "$ppath" in
+diff --git a/.dkbo/skills/run/SKILL.md b/.dkbo/skills/run/SKILL.md
+index 49b80f9..ed91f57 100644
+--- a/.dkbo/skills/run/SKILL.md
++++ b/.dkbo/skills/run/SKILL.md
+@@ -6,21 +6,21 @@ description: 只在使用者明確要求啟動 dkbo 團隊流程（或明確指
+ 
+ 先讀 `.dkbo/LEADER.md`，再照本篇。
+ 
+ ## 不停車（交棒之後的總原則）
+ `/dkbo-run` 開跑後**不停下來等人**：人常在睡覺，一題選擇題就能讓任務停一整晚，而 panova autofold 執行中途問人的 4 題，人 4 題都選了推薦項。選擇題、規格缺口、reviewer 意見矛盾、修法取捨、要超過某個上限，一律**自己裁定**：選若錯代價最小、最容易回退的那個，記 `dk-process "ruling: [自主] <決定> — <原因> — <若錯代價>"`，繼續跑。不用 AskUserQuestion、不問「要繼續嗎」、不為報進度停下來。裁錯了人在關卡③看得到、改得回來；卡在一個問題上，人整晚什麼都拿不到。人自己打字插話照做（改需求走「跑一波」第 9 步），只是你不主動等他回覆。只有這幾種會停：關卡③（合併）、不可逆或破壞性的操作、影響 worktree 以外的動作（push、發佈、動共用服務）、brief 壞到每一條路都只能猜——最後一種寫進 report.md 遺留段、停在關卡③、結束 turn，不開著問題空等。
+ 
+ ## 第 0 步：交棒（每次進本篇先看這一條）
+ `.task.env` 的 `DK_WORKTREE` 為空（任務還沒實體化）或 `HERDR_PANE_ID` 不等於 `DK_ROOT_PANE`（你不是任務根 tab 根 pane 上的執行領導）：跑 `dk-leader <short> --run`，然後**結束這個 turn**。它會切 worktree、跑 `DK_SETUP_CMD` 依賴鉤子、用 `herdr tab create` 在你叫 `/dkbo-run` 當下所在的 workspace（`HERDR_WORKSPACE_ID`，空才退回 `.task.env` 的 `DK_WORKSPACE`；兩者不同時回寫 `DK_WORKSPACE` 並記 process）開一個 label 為 `dk/<short>` 的任務根 tab、在它的根 pane 起執行領導並改綁 `.sessions`；`agent start` 之前任一步失敗會把 worktree、分支、tab 與 `.task.env` 全部還原，重跑是幂等的。交棒之後人的 session 不再是領導，員工的訊息都送到執行領導那裡（人要看進度用 `dk-resume <任務>`，唯讀）。
+ 
+ ## 每次醒來先做
+-1. 若不確定狀態：執行 `dk-resume`，讀完再行動。它印 brief、本波（base、reviewer 狀態、熔斷）、watcher 狀態、裁定、未處理訊息、每 tab 的員工。watcher 有兩行：`watch: …`（30 秒輪詢）與 `events: …`（herdr 事件訂閱，畫面一冒出審批或額度就動）。兩條是獨立的命脈，一條死了另一條還在；死了 dk-resume、dk-wave-open、dk-spawn 都會就地重啟，你不用手動管。本波段開頭兩行是時間（任務已進行、本波已進行），在線員工每位附「等了 N min」——「該不該催」不必再憑感覺。
++1. 若不確定狀態：執行 `dk-resume`，讀完再行動。它印 brief、本波（base、reviewer 狀態、熔斷）、watcher 狀態、裁定、未處理訊息、每 tab 的員工。watcher 有兩行：`watch: …`（30 秒輪詢）與 `events: …`（herdr 事件訂閱，畫面一冒出審批或額度就動）。兩條是獨立的命脈，一條死了另一條還在；死了 dk-resume、dk-wave-open、dk-spawn 與 `dk-msg`（員工送 `[DONE]` 時）都會就地重啟並在 process 記一行 `watch died`，死因看 `.sessions/<任務>.watch.log`，你不用手動管。本波段開頭兩行是時間（任務已進行、本波已進行），在線員工每位附「等了 N min」——「該不該催」不必再憑感覺。
+ 2. 想看整張時間表（每波開了多久、dev 多久、審查多久）：`dk-timeline [<任務>]`。只讀 process.md、零 token、不寫任何檔，隨時可跑；結案時 `dk-task-close` 會自動把它附進 `report.md` 的「## 時間」段，你不用手抄。
+ 3. 送 `[TASK]`／`[DECISION]` 前，先讀 messages.log 裡未 ack 的訊息（`dk-msg` 會自動提示未 ack 則數）。你送給員工的 `[TASK]`／`[BUG]`／`[DECISION]`／`[STOP]` 一律背景送：當場返回、背景最多等 30 分鐘，送達那一刻才算重新指派；最終送不到記 `[UNDELIVERED]` 並進 process 的 `undelivered <target> [<type>]`（`dk-resume` 印得出），你不用自己背景重送。
+ 
+ ## 跑一波
+ 1. `dk-wave-open N`：記 base sha、寫每位成員的切片 `briefs/<成員>.md`（員工只讀切片）。
+ 2. 對該波每位成員 `dk-spawn <角色> [別名] [--tier S|M|L] [--kind K] [--isolated]`。先派 dev 再派 qa，版面才會照 tab 填。結束這個 turn，閒置。員工訊息與人的輸入會自己推進來。不輪詢、不主動讀員工終端。
+ 3. 收到 dk-watch 的 `[DONE] wave N dev 全員完成`（dev 逐筆的 `[DONE]` 只落盤在 `messages.log`，不再逐筆叫醒你；聚合的觸發條件就是每位 dev 的 state 都寫了 `status: done`。要看個別回報就翻 `messages.log`，`dk-resume` 也會印。仍要確認 `state/<成員>.report.md` 有 `## 測試`）：`dk-review-pack N` 再 `dk-review`。reviewer 與 qa 並行，不必等 qa。
+ 4. 收到 reviewer `[DONE]`：讀 `state/reviewer-<x>.report.md`。達 `DK_REVIEW_MIN` 且無 Important，或所有 reviewer 皆回覆，即裁定：`dk-process "review N verdict a: ok / b: important 2"`，再記 `ruling:`（格式見 `.dkbo/LEADER.md` 的「裁定」段）。reviewer 的 Minor 逐條 `dk-process "minor N: <一句> <file:line>"`（格式需對齊 `dk-review` 讀它的正規表示式），整枝評議時才會 triage。有 Important → `dk-msg <dev> "[BUG] review: …"` 指向 reviewer 的 report；dev `[FIXED]` 後重跑 `dk-review-pack N`，`dk-msg <reviewer> "[TASK] 複看 waves/N.diff"`。同一 bug 兩輪上限照 PROTOCOL：第一輪回原 dev，再驗仍失敗就 `dk-spawn <角色> <別名> --handoff "<原因>"` 換 kind（挑沒進 `DK_KIND_DOWN` 的）或升 `--tier L`，第三次就照下方「熔斷器」判，不再派人、也不問人。`--handoff` 會自己把 ruling 寫進 process.md，你不用另外記。
+ 5. qa `[DONE]` 且審查已裁定 → `dk-wave-close`。裁定行必須**交代每一位真的派出去的 reviewer**（`review N spawned` 那行列出誰就要有誰）：正常回覆的寫結果，沒回來的寫 `<別名>: skipped (<理由>)`。少一位 wave-close 就不放行 —— 派了兩個 kind 卻只讀一個的意見，等於第二意見白花。四道閘：裁定行、每位 dev 的 report、在 worktree 跑 `DK_TEST_CMD`、拿 worktree 的**真實 git diff**（含未 commit 與未追蹤）比對本波的檔案所有權。四道全過才關 pane，並自己在 worktree 內 commit（訊息預設 `wave N: <成員>`，要自訂用 `dk-wave-close -m "<訊息>"`）—— 你不用再手動 commit。留意 `unreported change` 與 state 超長警告。
+ 6. 純文件波：審查欄寫 `skip: <理由>`，領導 `dk-process "review N skipped: <理由>"`，wave-close 就放行。
+diff --git a/.dkbo/tasks/BACKLOG.md b/.dkbo/tasks/BACKLOG.md
+index 7333a34..cec06fc 100644
+--- a/.dkbo/tasks/BACKLOG.md
++++ b/.dkbo/tasks/BACKLOG.md
+@@ -1,14 +1,8 @@
+ | 日期 | 來源 | 一句描述 | 建議處理 |
+ |---|---|---|---|
+-| 2026-09-12 | 0.5.0 最終審查 | 記錄檔遺失時把空 branch 正規化成 `-` 的那道守衛沒有測試守著，改壞了出口 4 會悄悄回來 | 補一條測試，下次動 `dk-chore-close` 時一起 |
+ | 2026-09-19 | highfix 波 1 疑慮 | `kinds/agy.sh` 的 `KIND_BLOCK_RE` 沒有資料夾信任詢問的畫面字樣（agy 的 `trustedWorkspaces` 逐路徑精確比對、不繼承上層，新 worktree 第一次跑必問），守望認不出這種卡住 | 下次實跑 agy 員工時把信任詢問的原文抄進 `KIND_BLOCK_RE`，順便決定要不要由 dkbo 代寫全域信任設定（decisions.md 2026-09-19 那條尾巴）；多 repo 任務是 N 個 worktree 各問一次（原 multirepo 結案那條併進來） |
+-| 2026-09-19 | highfix 波 1 疑慮 | `dk-wave-close` gate c 的 `env -u` 只剝 `DK_*`，`HERDR_*`（`HERDR_PANE_ID`、`HERDR_ENV` 等）照樣傳給 `DK_TEST_CMD`；專案測試若讀 `HERDR_*` 同類問題還在 | 契約目前只寫 `DK_*`；若要擴到 `HERDR_*` 先確認 dkbo 自己的測試（`tests/stub/herdr`）不依賴繼承的 `HERDR_*` |
+-| 2026-09-19 | watchtime 波 1 疑慮 | `tests/run.sh` 只 `exec bats`，沒有任何一處跑 shellcheck；每個任務的「shellcheck 零警告」都是員工手動跑的，漏跑沒人吭聲。領導的 PROJECT.md 之前還寫錯說 run.sh 會跑（已改） | 把 shellcheck 併進 `tests/run.sh`（有裝才跑、沒裝印 WARN 不擋），或加一條 bats 測試呼叫它 |
+ | 2026-09-20 | multirepo 結案（2026-09-24 改寫） | 單 repo 的 `dk-leader --run` 交棒已在真 herdr 實跑三次：2026-09-22 tasktab（主樹仍是 0.10.0，走 `workspace create`）、2026-09-23 ops（0.11.0 起開 tab，`materialize … tab wB:tJ`）與 2026-09-24 testtrust（`materialize … tab wB:tK`）；**多 repo** 的交棒路徑（逐 repo 切 worktree、逐 repo 跑 `DK_SETUP_CMD_<名>`）仍沒在真 herdr 上走過 | 第一個設了 `DK_REPOS` 的專案就是第一次實跑；跑之前先 `dk-resume` 看 `.repos`，交棒失敗時 pane 會留著，`herdr pane read` 看它 |
+ | 2026-09-20 | multirepo 結案 | `setup.<名>.log`（`DK_SETUP_CMD` 的輸出）落在 `tasks/<t>/` 進任務記憶，一次 `pnpm install` 的輸出就進版控 | 觀察體積；太大就改寫到 `.sessions/` 並加 gitignore，一行的事 |
+ | 2026-09-23 | ops 整枝評議第三輪 Minor | codex 在重置時間是同一天時可能只印 `try again at 3:15 PM`（不帶日期），目前會落 guess＝現在＋5h；未實測 | 下次 codex 撞額度時收一份真樣本；若屬實，`dk_kind_parse_codex_reset` 補「只有時分」的分支（今天，已過則明天） |
+-| 2026-09-24 | testtrust 波 1 審查（reviewer-a Minor 4） | `setup_project`（`tests/helpers.bash:14` 的 `cp -r "$REPO_ROOT/.dkbo"`）清掉了 `.sessions/`，但仍把主樹**未追蹤**的進行中任務資料夾（含 `.panes`、`.task.env`）與未 commit 的 `tasks/INDEX.md`、`decisions.md` 帶進夾具：任何列舉 `tasks/*/` 或讀 INDEX 的測試，結果取決於領導在主樹跑的那一刻開發機上有哪些任務 | 只複製追蹤中的檔（`git -C "$REPO_ROOT" ls-files .dkbo` 或 `git archive HEAD .dkbo`）能根治，但取捨是：員工在 worktree **未 commit** 的 `.dkbo/` 改動會進不了夾具，測的變成上一個 commit 而不是正在改的碼（`dk-wave-close` 才 commit）；折衷是複製後只清掉 `tasks/` 下未追蹤的任務資料夾、把 INDEX／decisions 還原成追蹤版，並補一條「髒主樹」測試（比照 `36_fixture` 的 `.sessions/` 那條） |
+-| 2026-09-24 | testtrust 波 1 實跑 | 守望程序死了沒人知道：`dk-watch` 與 `dk-watch --events`（`dk-watch:37,48` 以 `nohup … >/dev/null 2>&1 &` 起、無 `setsid`、無日誌）在 08:45 開波後某時靜默死亡，08:55 backend 的 `[DONE]` 沒有觸發 dev-done 聚合，領導 pane 也就沒被叫醒，任務空轉 53 分鐘，直到 09:48 手動 `dk-watch --ensure` 才接上，還連帶推了一則假的整波 `[TIMEOUT]`（60min）。`.task.env` 的 `DK_WATCH_PID`／`DK_EVENTS_PID` 在，但沒有任何東西去確認它們還活著。死因未確認（猜是啟動它的那次 Bash 工具呼叫結束時整個行程群組被收掉，未驗證） | 起法改 `setsid` 並把輸出導到 `.sessions/` 或任務目錄下的 watch.log，下次死掉至少有遺言；`dk-msg`（任何人送 `[DONE]` 時）、`dk-resume`、`dk-spawn` 順手 `kill -0` 兩個 pid，死了就 `--ensure` 重啟並記 process；釐清死因後再決定要不要更強的保活 |
+-| 2026-09-24 | bklog 波 2 審查 Minor 3 | `lib/ownership.sh:12` 的 `dk_owned` 與 `dk-spawn:57` 的 `first_glob` 仍用裸 `awk -F` 以管線字元切可改欄，可改欄含跳脫管線時會錯位 | 改用 `lib/brief.sh` 的 `DK__BRIEF_SPLIT` 切欄（同 0.16.0 `dk-wave-open`／`all_globs` 的改法） |
+ 
+ 已修好的條目在修掉它的同一個 commit 裡整列刪掉，不留「已修」標記；表頭固定佔前兩行（`dk-resume` 讀 `head -n 2`），說明只能寫在表格之後。
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 08a62e9..1ed0920 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,21 +13,26 @@
+ - feat(brief): `dk-wave-open` 切片的波次表列與所有權列改用看得懂 `\|` 跳脫的共用切法（`lib/brief.sh`），「做什麼」欄寫 `a\|b` 不再少一欄；`dk-brief-check` 加欄數閘：所有權表每列 3 或 4 欄、波次表每列 7 欄（跳脫的 `\|` 不算分隔），否則 FAIL 並指出哪一列。所有權重疊檢查（`all_globs`）也改用同一套切法，可改欄含 `\|` 時不再切斷 glob 而漏判或誤判重疊。
+ - feat(brief): 共用契約的擁有者、消費者欄可寫 `<成員>@波<N>`（單一成員跨多波時「波 1 產出、波 3 消費」）；`dk-brief-check` 驗成員存在、波號存在、該成員在第 N 波有列。不帶 `@` 與 `—` 行為不變，`templates/brief.md` 的說明句同步。
+ - feat(brief): 員工切片的「## 倉庫」段多一句：編輯一律用上面的 worktree 路徑，`$DK_ROOT` 指向主樹的 `.dkbo/`、只拿來跑 bin。ops 波 1 的 S 檔員工拿 `$DK_ROOT/…` 當編輯路徑，把 10 個檔寫進主樹。
+ - feat(leader)!: `dk-leader <short> --run` 的任務 tab 改開在**你叫 `/dkbo-run` 當下所在的 workspace**：`HERDR_WORKSPACE_ID` 非空就用它，空才退回 `.task.env` 的 `DK_WORKSPACE`；兩者不同時回寫 `DK_WORKSPACE` 為當下值、process 記 `workspace <舊> → <新>（--run 開在當下所在的 workspace）` 並印一行提示。語意反轉（0.11.0 起是計畫那一刻記下的 workspace）：人在 A 計畫、幾天後從 B 叫 run，tab 先前會開在 A，眼前的 B 什麼都沒有。人拍板選「開在你當下所在的」。
+ - feat(wave): state 行數上限改成 `touched:` 清單項以外 ≤20 行——`dk-wave-close` 的 `state too long` 警告不再計入 `touched:` 之後以 `  - ` 開頭的連續行，員工首段提示同步。一波動 24 個檔的成員先前寫不進 20 行。
+ - fix(repos): 多 repo 模式下 `dk_glob_check` 驗 `<名>:` 前綴時用 `printf … | grep -qx`，grep 命中就退出、printf 偶爾還沒寫完就吃 SIGPIPE，呼叫端開著 pipefail 時整條管線非零——合法的 repo 名被 `dk-brief-check` 判成「未知的 repo 名字」（直呼 3000 次約 20 次）。改成 here-string；`dk-brief-check`、`dk-wave-close`、`dk-wave-open` 裡同類寫法一併改掉。
+ - fix(wave): `dk-wave-close` 檢查裁定行有沒有交代每位 reviewer 時改成詞界比對（別名前面要是行首或空白），`note:`、`if:` 不再冒充 `e:`、`f:` 的交代而讓閘靜默放行。
+ - docs(protocol): `PROTOCOL.md` 測試規則補取紅做法：一律 cp 到獨立目錄或 `git archive <base>` 解到暫存目錄，不在共用 worktree 用 `git stash`／`git checkout -- <檔>`（ops 波 4 夥伴並跑的測試讀到舊碼假紅兩次，stash 堆疊也跨 worktree 共用），`templates/report-employee.md` 的「### 紅」同義一句；雜務段重複的 `dk-msg leader "[DONE] <一句結果>"` 收成一次；state 段改寫成新的行數規則。
+ - docs(leader): `LEADER.md` 新增「額度」段：派 reviewer 或員工前先 `dk-kind`；任何來源確認某 kind 額度耗盡，當下 `dk-kind down <k> [--until …]`，不能只寫在 ruling 裡。run SKILL 的故障段改寫 reviewer `[TIMEOUT]` 那條（仍在工作的不關 pane、照常等；熔斷版才關並補派）、新增 dev／qa 閒置逾時的處理（先看 messages.log 有沒有它在等的 `[DECISION]`／`[UNDELIVERED]`，再補送或 `--resume`；交接波等夥伴 `[DONE]` 時觸發是預期內），補派 reviewer 直接再跑 `dk-review --kinds <k>`、失敗那位寫 `<別名>: skipped (<理由>)`，領導訊息已是背景送；plan SKILL 的計畫審查補派同理（`dk-brief-review --kinds <k>`）。
+ - docs(readme): 三份 README 的 `dk-kind` 補 `down`、`dk-task-close` 補「任務 tab 不自動關（最後一行印 `herdr tab close <id>`）」，`dk-watch` 與疑難排解的 `[TIMEOUT]` 說明補兩種新訊息；三份 README、`LEADER.md`、`PROJECT.md`、run SKILL 與 `tests/integration/README.md` 的 tab 位置說法改成「你叫 `/dkbo-run` 當下所在的 workspace」。`tasks/BACKLOG.md` 刪掉本版收掉的 17 列（A–C 類）。
+-- 測試：724 bats（+68；`09_watch` 逾時不熔斷與閒置逾時、`34_kind_down` 的 `dk-kind down`、`20_review`／`28_brief_review` 補派命名、`06_msg` 背景送與重派、新增 `36_process` 的 minor 行格式、`16`／`15`／`18` 的 brief 工具、`13_leader` 的 workspace、`08_wave_close` 的 state 行數、等 `.panes` 鎖與裁定行詞界、`07_spawn` 等鎖、`25_docs_policy` 的 Important4 改守新語意並補 AC14–AC16 三條、`21_version` 首節斷言）；shellcheck 零警告。
++- feat(watch): 守望程序死了會留遺言、也有人把它叫回來。`dk-watch` 的三種背景啟動（`--ensure` 的輪詢、`--events`、`--chores`）有 `setsid` 就用 `setsid` 起（不用 `setsid -f`，記下的 pid 仍是 dk-watch 本身），沒有照舊 `nohup`；stdout／stderr 不再丟 `/dev/null`，改追加到 `.sessions/<任務目錄名>.watch.log`（雜務 `.sessions/chores.watch.log`），每隻背景行程寫 `<時間> start <poll|events|chores> pid <pid>`、結束寫 `exit … rc=<rc>`、收到訊號寫 `signal <SIG> …`（HUP 記完繼續跑，INT／TERM 記完結束）。`--ensure` 發現記錄的 pid 已死時，在 `watch restarted`／`events started` 之前先記 process `watch died: <poll|events> pid <舊 pid> last: <log 裡該 pid 的最後一行或 no log>`（pid 比對看詞界）；整段以 flock 串行化（`.sessions/<任務目錄名>.watch.lock`），並行呼叫不會起兩隻。`dk-msg` 綁著任務時每個寫進 messages.log 的出口（含 dev 對 leader 的 `[DONE]` 只落盤那條）之後都跑一次 `dk-watch --ensure`（`DK_NO_WATCH` 設了不跑）。依據：testtrust 波 1 兩隻守望靜默死亡，backend 的 `[DONE]` 沒觸發聚合，任務空轉 53 分鐘，死因至今不明。
++- fix(wave-close): gate c 交給 `DK_TEST_CMD`／`DK_TEST_CMD_<名>` 的環境除了 `DK_*` 也剝掉所有 `HERDR_*`（同一個 `clean` 陣列）；`HERDR_PANE_ID` 等繼承值會讓專案測試以為自己在領導的 pane 裡，打到真 herdr。`PATH`、`HOME` 等照舊。
++- fix(ownership): `lib/ownership.sh` 的 `dk_owned` 只讀 `## 檔案所有權` 段、用 `lib/brief.sh` 看得懂 `\|` 跳脫的切法，不再對整份 brief 裸 `awk -F'|'`——可改欄含 `\|` 時不再錯位，別段表格第一格剛好等於成員名也不會被誤判成擁有；`dk-spawn` 的 `first_glob` 與 `dk-brief-check` 取波次成員的兩處同樣改用跳脫感知切欄（後者只為一致，舊碼本來不受影響）。
++- test: shellcheck 進測試套件——新增 `tests/unit/37_shellcheck.bats`，對全域約束的檔案集合（`.dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh tests/run.sh`）跑 shellcheck、零警告才過，沒裝就 skip，並對含 SC2086 的暫存腳本自我驗證不是空轉；`tests/run.sh` 不改。測試夾具不再帶進主樹的進行中任務：`tests/helpers.bash` 抽出 `fixture_copy_dkbo`，照舊 `cp -r` 並清 `.sessions/`，來源是 git 倉時再刪掉 `.dkbo/tasks/` 下未追蹤的項目、把與 HEAD 不同的追蹤檔（INDEX、decisions 等）還原成 HEAD 版（只用 plumbing，不搶 `.git/index.lock`）；worktree 未 commit 的 `.dkbo/` 改動照樣進夾具，`tasks/` 底下的除外。`11_chore` 補 `dk-chore-close` 記錄檔遺失且模板沒有 `branch:` 行時把空 branch 當成 `-` 的那道守衛。
++- docs(run): run SKILL「每次醒來先做」第 1 條的 watcher 句補上 `dk-msg`（員工送 `[DONE]` 時）也會就地重啟、死因看 `.sessions/<任務>.watch.log`、process 記 `watch died`；`PROJECT.md` 的測試指令改說 shellcheck 由 37 守，目錄慣例補夾具丟掉主樹任務資料夾；`tasks/BACKLOG.md` 再刪本任務收掉的 6 列。
++- 測試：754 bats（+98；`09_watch` 逾時不熔斷與閒置逾時、`34_kind_down` 的 `dk-kind down`、`20_review`／`28_brief_review` 補派命名、`06_msg` 背景送與重派、新增 `36_process` 的 minor 行格式、`16`／`15`／`18` 的 brief 工具、`13_leader` 的 workspace、`08_wave_close` 的 state 行數、等 `.panes` 鎖與裁定行詞界、`07_spawn` 等鎖、`25_docs_policy` 的 Important4 改守新語意並補 AC14–AC16 三條、`21_version` 首節斷言；守望與測試可信度 +30：新增 `37_shellcheck` 3 條（零警告、檔案集合涵蓋、SC2086 自我驗證）、`09_watch` +10 與 `26_watch_events` +3（setsid 與 pid、watch.log 的 start／signal／exit、`watch died` 詞界、`--ensure` 並行只起一隻）、`06_msg` +4（`[DONE]` 只落盤、`[QUESTION]` 送達與 `[UNDELIVERED]` 出口都叫回守望、`DK_NO_WATCH`）、`08_wave_close` +2（gate c 單／多 repo 剝 `HERDR_*`）、`22_ownership` +2 與 `07_spawn`、`16_brief_check` 各 +1（`\|` 跳脫與別段誘餌）、`36_fixture` +3（`fixture_copy_dkbo` 髒主樹、非 git 來源）、`11_chore` +1（空 branch 守衛））；shellcheck 零警告，並由 `37_shellcheck` 守。
+ - 升級：`roles/` 不受影響；沒有新 settings 鍵、新 `.task.env` 鍵、新依賴、新 skill、新 bin（`dk-kind down` 是既有 `dk-kind` 的子指令）。`--run` 的 tab 位置語意反轉：要開在計畫時的 workspace，就回那個 workspace 叫 `/dkbo-run`。
+ 
+ ## 0.15.0 — 2026-09-23
+ 
+ - feat(run)!: `/dkbo-run` 開跑後不停下來等人（取消關卡②）。`skills/run/SKILL.md` 新增「不停車」段：選擇題、規格缺口、reviewer 意見矛盾、修法取捨、要超過某個上限，一律由領導自己裁定——選若錯代價最小、最容易回退的那個，記 `ruling: [自主] <決定> — <原因> — <若錯代價>`，不用 AskUserQuestion。只剩四種會停：關卡③（合併）、不可逆或破壞性的操作、影響 worktree 以外的動作、brief 壞到每一條路都只能猜（最後一種寫進遺留段、停在關卡③）。依據：panova autofold 在執行中途問人的 4 題，人 4 題都選推薦項，每題等 1–13 分；人在睡覺時一題就停一整晚。規則參考 superpowers 6.4.1 `subagent-driven-development` 的「Rulings, not stalls」。人自己打字插話仍然照做。
+ - feat(run): 新增「熔斷器」段取代三處升關卡②（同一 bug 換過腦袋仍沒好、wave-close 測試連兩次失敗、整枝評議的修復輪用完）：停止派人，逐條判——reviewer 判錯或有爭議就 park、真的但後面沒有工作依賴它就 park 並把驗收項標未達成、真的且後面依賴它就選最小改法寫進下一波。整枝評議挑出的 Important 一次全部寫進同一個修復波，修完還有就走熔斷器，不開第二個修復波。
+ - feat(run): 員工 `[BLOCKED]`（卡在權限審批）不再「告知人去按」：reviewer 交給既有的 `[TIMEOUT]`；dev／qa 由領導看畫面、記 ruling、`dk-spawn --resume` 重派並叫它改用不需要審批的做法，卡第二次換 kind，再卡就 park。
+ - feat(run): 視覺變更不再等人看畫面才跑整枝評議；qa 每波在 report 附截圖（必要時錄影）並逐條對應 AC，人在關卡③一起看。人剛好在場時，dev 全員完成那一刻告訴他 dev server 網址，追加需求用 `--refresh` 併進本波（headermerge、autofold 的波 2 都是結波後人才看畫面開出來的）。
+ - feat(report): `templates/report.md` 新增「自主裁定（待你複核）」段，列出 `grep -F ' ruling: [自主]' process.md` 的每一條，照順序、一條不漏、附若錯代價；`LEADER.md` 的裁定段、三份 README 的流程說明同步。
+ - fix(msg): dev 送給 qa（`.panes` 的 review 組）的 `[DONE]` 改在背景送——`dk-msg` 當場返回，背景那一份照舊等對方閒下來、重試、記 log。前景等忙碌中的 qa 會把 dev 的 pane 卡住：panova 實測 autofold 22／13 分、gamemore 30 分、headermerge 12 分，而 qa 本來就看 dev 的 state 開工。dev 送 dev 的 `[DONE]` 照常前景送。`roles/qa.md` 補「已在測就不必因晚到的 `[DONE]` 重跑」。
+diff --git a/tests/helpers.bash b/tests/helpers.bash
+index ffdf276..5fba1a5 100644
+--- a/tests/helpers.bash
++++ b/tests/helpers.bash
+@@ -4,24 +4,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ setup_project() {
+   # 繼承來的 DK_* 一律洗掉，再設 harness 自己要的那兩個。
+   # common.sh 幾乎每個變數都寫成 ${DK_X:-<預設>}，繼承值優先 —— 只覆寫 DK_ROOT 不夠：
+   # DK_PROJECT_ROOT 會留著指向呼叫者的 repo，而 dk-task-new 是 git -C "$DK_PROJECT_ROOT"
+   # worktree add。2026-09-19 領導在自己 session 跑 gate c，就這樣在真 repo 建了 7 個
+   # worktree 與 8 個分支；員工手動跑全綠，因為員工的 shell 沒 source 過 common.sh。
+   # 逐一列舉會隨新變數再度過時，所以整片清 —— 回歸測試在 tests/unit/30_isolation.bats。
+   local v
+   for v in ${!DK_@}; do unset "$v"; done
+   PROJECT="$(mktemp -d)"
+-  cp -r "$REPO_ROOT/.dkbo" "$PROJECT/.dkbo"
+-  # .sessions/ 是主樹的執行期狀態（gitignore，只追蹤 .gitkeep）。原樣帶進來的話，開發機上一筆
+-  # 未過期的 kinds-down 就讓 10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
+-  find "$PROJECT/.dkbo/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
++  fixture_copy_dkbo "$REPO_ROOT" "$PROJECT/.dkbo"
+   chmod +x "$PROJECT"/.dkbo/bin/* 2>/dev/null || true
+   # 源碼倉自己的 settings.env 是 dogfood 任務在用的（DK_TEST_CMD=tests/run.sh 給 gate c），
+   # fixture 不能原樣繼承：gate c 會在假 worktree 裡跑一個不存在的指令，每條「閘全過」的
+   # wave-close 測試都紅。要測 gate c 的測試自己往 settings.env append 一行蓋掉即可。
+   sed -i 's/^DK_TEST_CMD=.*/DK_TEST_CMD=""/' "$PROJECT/.dkbo/settings.env"
+   git -C "$PROJECT" init -q
+   git -C "$PROJECT" config user.name t; git -C "$PROJECT" config user.email t@t
+   git -C "$PROJECT" commit -q --allow-empty -m init
+   git -C "$PROJECT" branch -M main
+   HERDR_STUB_LOG="$PROJECT/.herdr-calls.log"; : > "$HERDR_STUB_LOG"
+@@ -29,20 +26,48 @@ setup_project() {
+   cp -r "$REPO_ROOT/tests/stub/responses" "$HERDR_STUB_RESPONSES"
+   WORKTREE_PATH="$PROJECT/.worktrees/login"
+   sed -i "s#__WORKTREE__#$WORKTREE_PATH#; s#__PROJECT__#$PROJECT#" "$HERDR_STUB_RESPONSES"/*.json
+   export HERDR_STUB_LOG HERDR_STUB_RESPONSES PROJECT WORKTREE_PATH
+   export PATH="$REPO_ROOT/tests/stub:$REPO_ROOT/tests/stub/cli:$PROJECT/.dkbo/bin:$PATH"
+   export HERDR_ENV=1 HERDR_PANE_ID=wB:p1 HERDR_WORKSPACE_ID=wB HERDR_TAB_ID=wB:t1
+   export DK_ROOT="$PROJECT/.dkbo"
+   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
+   cd "$PROJECT"
+ }
++# 把 SRC_REPO/.dkbo 複製成 DEST_DKBO。整份 cp -r：worktree 裡未 commit 的 .dkbo/ 改動（含未追蹤的
++# 新 bin）照樣進夾具，員工才測得到自己正在寫的東西。複製完再丟掉兩類主樹的執行期狀態：
++# - .sessions/（gitignore，只追蹤 .gitkeep）：原樣帶進來的話，開發機上一筆未過期的 kinds-down 就讓
++#   10_resume 兩條紅 —— 測試結果不能取決於誰的機器、哪一天跑。
++# - SRC_REPO 是 git 倉時，.dkbo/tasks/ 底下未追蹤的項目（領導正在跑的任務資料夾，帶 .panes、
++#   .task.env）刪掉，追蹤中但與 HEAD 不同（含被刪）的檔還原成 HEAD 版（INDEX.md 多出的那一列等）。
++#   例外：tasks/ 底下（含 BACKLOG.md）worktree 未 commit 的改動因此不會進夾具；目前沒有測試讀夾具裡
++#   的 BACKLOG 內容，要讀的話得改這裡。
++# git 只用不刷新 index 的 plumbing 加 --no-optional-locks：每條測試的 setup 都跑這裡、同波數人並跑，
++# 會刷新 index 的 git status／git diff 會搶 .git/index.lock。不是 git 倉就只做前兩步、不報錯。
++fixture_copy_dkbo() { # SRC_REPO DEST_DKBO
++  local src="$1" dest="$2" p
++  local g=(git --no-optional-locks -C "$src")
++  cp -r "$src/.dkbo" "$dest"
++  find "$dest/.sessions" -mindepth 1 -maxdepth 1 -not -name .gitkeep -exec rm -rf {} +
++  "${g[@]}" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
++  while IFS= read -r -d '' p; do
++    rm -rf "${dest:?}/${p#.dkbo/}"
++  done < <("${g[@]}" ls-files -z --others --exclude-standard --directory -- .dkbo/tasks)
++  while IFS= read -r -d '' p; do
++    if "${g[@]}" cat-file -e "HEAD:./$p" 2>/dev/null; then
++      mkdir -p "$(dirname "$dest/${p#.dkbo/}")"
++      "${g[@]}" show "HEAD:./$p" > "$dest/${p#.dkbo/}"
++    else
++      rm -f "$dest/${p#.dkbo/}"   # 只加進 index、HEAD 沒有的檔：跟未追蹤一樣丟掉
++    fi
++  done < <("${g[@]}" diff-index -z --name-only --relative HEAD -- .dkbo/tasks 2>/dev/null)
++}
+ teardown_project() {
+   # --ensure 起的是背景常駐行程（輪詢一條、訂閱一條）。留著的話它們會在後面的測試裡
+   # 繼續消耗 pid 並寫檔 —— 兩個認 pid 的 --ensure 測試就是這樣間歇性紅的。
+   local f p v
+   for f in "$DK_ROOT"/tasks/*/.task.env; do
+     [ -f "$f" ] || continue
+     for v in DK_WATCH_PID DK_EVENTS_PID; do
+       p=$(sed -n "s/^$v=\"\([0-9]*\)\"$/\1/p" "$f")
+       [ -n "$p" ] && kill "$p" 2>/dev/null || true
+     done
+diff --git a/tests/unit/05_task_new.bats b/tests/unit/05_task_new.bats
+index 4c39d2d..325af29 100644
+--- a/tests/unit/05_task_new.bats
++++ b/tests/unit/05_task_new.bats
+@@ -217,10 +217,27 @@ teardown() { teardown_project; }
+   printf 'DK_REPOS="main=. api=%s"\n' "$PROJECT-plain" >> "$DK_ROOT/settings.env"
+   run dk-task-new login x; [ "$status" -eq 1 ]; [[ "$output" == *"api"* ]]
+   rm -r "$PROJECT-plain"
+ }
+ @test "task-new 不驗工作樹乾不乾淨（--no-clean；那一項是 dk-leader --run 的事）" {
+   setup_multirepo
+   repo_dirty_tracked "$REPO_API"
+   run dk-task-new login x; [ "$status" -eq 0 ]
+   [ -d "$DK_ROOT/tasks/$(date +%F)-login" ]
+ }
++
++# --- AC5 ⑦（rest 波 1 審查 Important 1）：第一對守望也走 --ensure（setsid、watch.log、鎖） ---
++@test "AC5 ⑦: task-new 起的第一對守望走 --ensure：setsid 的 session 首領、寫 start 行、process 記啟動" {
++  command -v setsid >/dev/null 2>&1 || skip "沒有 setsid"
++  DK_NO_WATCH= run dk-task-new login 使用者登入; [ "$status" -eq 0 ]
++  d="$output"; [ -d "$d" ]
++  wpid=$(sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$wpid" =~ ^[0-9]+$ ]]
++  epid=$(sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"); [[ "$epid" =~ ^[0-9]+$ ]]
++  [ "$(ps -o sid= -p "$wpid" | tr -d ' ')" = "$wpid" ]
++  [ "$(ps -o sid= -p "$epid" | tr -d ' ')" = "$epid" ]
++  grep -q "watch restarted (pid $wpid)" "$d/process.md"
++  grep -q "events started (pid $epid)" "$d/process.md"
++  wl="$DK_ROOT/.sessions/$(basename "$d").watch.log"
++  ok=0; for _ in $(seq 1 30); do grep -Eq "^[0-9T:-]+ start poll pid $wpid\$" "$wl" 2>/dev/null && { ok=1; break; }; sleep 0.1; done
++  [ "$ok" = 1 ] || { cat "$wl" >&2; false; }
++  pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true
++}
+diff --git a/tests/unit/06_msg.bats b/tests/unit/06_msg.bats
+index 43f4f0e..c472440 100644
+--- a/tests/unit/06_msg.bats
++++ b/tests/unit/06_msg.bats
+@@ -547,10 +547,68 @@ SH
+   [ ! -e "$d/.blocked/msgq-login-reviewer-a.tmp" ]
+ }
+ 
+ @test "整枝評議 Minor①：redispatch 的鎖檔在 .blocked/panes.lock，不在任務目錄根（結案不被 commit 進記憶）" {
+   d="$DK_ROOT/tasks/$(date +%F)-login"; rv_panes "$d"
+   DK_MSG_BG=1 run dk-msg login-reviewer-a "[TASK] 複看第二輪"
+   [ "$status" -eq 0 ]
+   [ -f "$d/.blocked/panes.lock" ]
+   [ ! -e "$d/.panes.lock" ]
+ }
++
++# --- AC5（rest）：dk-msg 每個寫 messages.log 的出口都把守望叫回來 ---
++# 事故走的正是 dev 對 leader 的 [DONE]：它只落盤就 exit 0，守望死了沒有任何人發現。
++msg_task() { echo "$DK_ROOT/tasks/$(date +%F)-login"; }
++kill_dead_watch() { # 把 .task.env 的輪詢 pid 換成一個已死的 pid
++  local dead; sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
++  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$(msg_task)/.task.env"; echo "$dead"
++}
++watch_pid_now() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$(msg_task)/.task.env"; }
++watch_alive() { local p; p=$(watch_pid_now); [[ "$p" =~ ^[0-9]+$ ]] && ps -p "$p" -o args= | grep -q 'dk-watch$'; }
++kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
++
++@test "AC5: 守望已死時 dev 對 leader 的 [DONE]（只落盤、不送達）把它叫回來" {
++  d=$(msg_task); dev_panes "$d"
++  echo x > "$d/state/backend.report.md"
++  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
++  unset DK_NO_WATCH; dead=$(kill_dead_watch)
++  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"; [ "$status" -eq 0 ]
++  refute_grep '^agent prompt' "$HERDR_STUB_LOG"
++  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
++  grep -q "watch died: poll pid $dead" "$d/process.md"
++  kill_watchers
++}
++@test "AC5: 一般 [QUESTION] 送達路徑也把守望叫回來" {
++  d=$(msg_task)
++  unset DK_NO_WATCH; dead=$(kill_dead_watch)
++  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
++  grep -q '^agent prompt login-frontend \[QUESTION\]' "$HERDR_STUB_LOG"
++  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
++  kill_watchers
++}
++@test "AC5: [UNDELIVERED] 出口也把守望叫回來" {
++  d=$(msg_task)
++  unset DK_NO_WATCH; dead=$(kill_dead_watch)
++  DK_MSG_TRIES=1 HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 在嗎"
++  [ "$status" -eq 1 ]; grep -q '\[UNDELIVERED\]' "$d/messages.log"
++  [ "$(watch_pid_now)" != "$dead" ]; watch_alive
++  kill_watchers
++}
++@test "AC5: DK_NO_WATCH 設了時 dk-msg 不起守望" {
++  d=$(msg_task); dev_panes "$d"
++  echo x > "$d/state/backend.report.md"
++  printf 'status: done\ntouched: []\nreport: state/backend.report.md\n' > "$d/state/backend.md"
++  dead=$(kill_dead_watch)
++  DK_AGENT=login-backend run dk-msg leader "[DONE] POST /login 完成"; [ "$status" -eq 0 ]
++  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
++  [ "$(watch_pid_now)" = "$dead" ]
++  refute_grep 'watch died\|watch restarted' "$d/process.md"
++}
++@test "AC5 ⑧: 任務結案後（.panes 已刪）送訊息不叫回守望：process 沒有新的 watch 行、pid 不變" {
++  d=$(msg_task)
++  unset DK_NO_WATCH; dead=$(kill_dead_watch); rm "$d/.panes"
++  DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 錯誤碼用哪一套？"; [ "$status" -eq 0 ]
++  DK_MSG_TRIES=1 HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa run dk-msg login-frontend "[QUESTION] 在嗎"; [ "$status" -eq 1 ]
++  [ "$(watch_pid_now)" = "$dead" ]
++  refute_grep 'watch' "$d/process.md"
++  refute pgrep -f "$PROJECT/.dkbo/bin/dk-watch"
++}
+diff --git a/tests/unit/07_spawn.bats b/tests/unit/07_spawn.bats
+index 3528b22..a156bd3 100644
+--- a/tests/unit/07_spawn.bats
++++ b/tests/unit/07_spawn.bats
+@@ -170,20 +170,32 @@ multirepo_task() {   # setup 建的是單 repo fixture；多 repo 要從頭再
+   [[ "$start" == *"--add-dir $PROJECT "* ]] || [[ "$start" == *"--add-dir $PROJECT" ]]
+   for r in main api shared; do
+     [[ "$start" == *"--add-dir $(dk_repo_field "$d" "$r" wt)"* ]]
+   done
+   # qa 的第一個 glob 在 main
+   : > "$HERDR_STUB_LOG"
+   run dk-spawn qa; [ "$status" -eq 0 ]
+   grep -q -- "--cwd $(dk_repo_field "$d" main wt) --no-focus" "$HERDR_STUB_LOG"
+ }
+ 
++@test "rest AC6: 第一個 glob 含 \| 時 first_glob 取到完整的第一個 glob（repo 判對）" {
++  # 守護而非取紅：first_glob 只拿來取 repo 前綴，而前綴一定在 \| 之前，舊碼截斷成 shared:src/a\
++  # 也判得出 shared —— 這條守的是改走跳脫感知切欄後前綴與 cwd 不變。
++  multirepo_task
++  sed -i 's#^| backend | api:src/\*\*, shared:src/\*\* |#| backend | shared:src/a\\|b/**, api:src/** |#' "$d/brief.md"
++  grep -qF '| backend | shared:src/a\|b/**, api:src/** |' "$d/brief.md"
++  run dk-spawn backend; [ "$status" -eq 0 ]
++  grep -q -- "--cwd $(dk_repo_field "$d" shared wt) --no-focus" "$HERDR_STUB_LOG"
++  p=$(grep '^agent prompt login-backend' "$HERDR_STUB_LOG")
++  [[ "$p" == *"你的 pane 在「shared」的 worktree"* ]]
++}
++
+ @test "AC8: 首輪提示點名自己的 repo；單 repo 模式不印這一句" {
+   multirepo_task
+   run dk-spawn backend; [ "$status" -eq 0 ]
+   p=$(grep '^agent prompt login-backend' "$HERDR_STUB_LOG")
+   [[ "$p" == *"你的 pane 在「api」的 worktree"* ]]
+   [[ "$p" == *"$(dk_repo_field "$d" api wt)"* ]]
+   [[ "$p" == *"「## 倉庫」"* ]]
+   [[ "$p" == *"以「api:」"* ]]
+   teardown_project; setup_project; d=$(fixture_task login 使用者登入); fixture_brief "$d"
+   run dk-spawn backend; [ "$status" -eq 0 ]
+diff --git a/tests/unit/08_wave_close.bats b/tests/unit/08_wave_close.bats
+index d825337..7fbc973 100644
+--- a/tests/unit/08_wave_close.bats
++++ b/tests/unit/08_wave_close.bats
+@@ -181,20 +181,29 @@ teardown() { teardown_project; }
+   run dk-wave-close; [ "$status" -eq 0 ]
+   [ -f "$out" ]; [ ! -s "$out" ] || { echo "洩漏："; cat "$out"; false; }
+ }
+ 
+ @test "gate c: 非 DK_* 的環境照舊（PATH、HOME 都還在）" {
+   out="$PROJECT/gatec-env.txt"
+   echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
+   run dk-wave-close; [ "$status" -eq 0 ]
+   grep -q '^PATH=' "$out"; grep -q '^HOME=' "$out"
+ }
++@test "gate c: 測試指令拿到的環境裡也沒有任何 HERDR_*（單 repo）" {
++  # 繼承的 HERDR_PANE_ID 等會讓專案測試以為自己在領導的 pane 裡，打到真 herdr。
++  # HERDR_ENV、HERDR_PANE_ID 由 helpers export（後者是 dk-wave-close 找任務用的，不能改值）
++  export HERDR_SOCKET_PATH=/tmp/leader.sock; [ -n "$HERDR_PANE_ID" ]; [ -n "$HERDR_ENV" ]
++  out="$PROJECT/gatec-herdr.txt"
++  echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
++  run dk-wave-close; [ "$status" -eq 0 ]
++  refute_grep '^HERDR_' "$out"; refute_grep '^DK_' "$out"; grep -q '^PATH=' "$out"
++}
+ @test "AC6: 關波印本波耗時並記進 process" {
+   H=$(date +%H); MM=$(date +%M); T=$(date +%Y-%m-%d)
+   base=$(git -C "$WORKTREE_PATH" rev-parse --short=7 HEAD)
+   cat > "$d/process.md" <<P
+ ${T}T00:00 wave-open 1 base $base members backend qa
+ ${T}T00:19 dev-done wave 1 (2: backend qa)
+ ${T}T00:20 review 1 spawned login-reviewer-a(claude)
+ ${T}T00:24 review 1 verdict a: 待修
+ ${T}T00:27 review 1 verdict a: ok
+ P
+@@ -251,20 +260,32 @@ multirepo_close() {
+   multirepo_close
+   mkdir -p "$main_wt/src/api" "$api_wt/src" "$shared_wt/src"
+   echo m > "$main_wt/src/api/login.ts"; echo a > "$api_wt/src/a.ts"; echo s > "$shared_wt/src/s.ts"
+   echo 'DK_TEST_CMD="cat >/dev/null; echo main-ran"' >> "$DK_ROOT/settings.env"   # helpers 已給 DK_TEST_CMD_api="true"
+   run dk-wave-close; [ "$status" -eq 0 ]
+   grep -q 'main ok' "$d/process.md"
+   grep -q 'api ok (true)' "$d/process.md"
+   grep -q 'shared skipped (no DK_TEST_CMD_shared)' "$d/process.md"
+ }
+ 
++@test "gate c: 多 repo 的測試指令也拿不到 HERDR_* 與 DK_*" {
++  multirepo_close
++  # HERDR_ENV、HERDR_PANE_ID 由 helpers export（後者是 dk-wave-close 找任務用的，不能改值）
++  export HERDR_SOCKET_PATH=/tmp/leader.sock; [ -n "$HERDR_PANE_ID" ]; [ -n "$HERDR_ENV" ]
++  mkdir -p "$main_wt/src/api"; echo m > "$main_wt/src/api/login.ts"
++  out="$PROJECT/gatec-herdr-multi.txt"
++  echo "DK_TEST_CMD=\"env > $out\"" >> "$DK_ROOT/settings.env"
++  run dk-wave-close; [ "$status" -eq 0 ]
++  grep -q 'main ok' "$d/process.md"
++  refute_grep '^HERDR_' "$out"; refute_grep '^DK_' "$out"; grep -q '^PATH=' "$out"
++}
++
+ @test "AC11: 本波沒變更的 repo 不跑它的測試" {
+   multirepo_close
+   mkdir -p "$api_wt/src"; echo a > "$api_wt/src/a.ts"
+   echo 'DK_TEST_CMD="echo main-ran"' >> "$DK_ROOT/settings.env"
+   run dk-wave-close; [ "$status" -eq 0 ]
+   [ -f "$d/waves/1.api.test.log" ]; [ ! -f "$d/waves/1.main.test.log" ]
+   grep -q 'main skipped (no change)' "$d/process.md"
+ }
+ 
+ @test "AC11: 某個 repo 的測試紅了要點名它，pane 不關" {
+diff --git a/tests/unit/09_watch.bats b/tests/unit/09_watch.bats
+index 99ac213..2cc8ab6 100644
+--- a/tests/unit/09_watch.bats
++++ b/tests/unit/09_watch.bats
+@@ -688,10 +688,124 @@ idle_msg() { echo "^agent prompt leader-login \\[TIMEOUT\\] from dk-watch: $1 
+ }
+ @test "AC2: 失敗送不到時下一 tick 重試，process 只記一次" {
+   idle_wave
+   HERDR_STUB_FAIL="agent wait" dk-watch --once
+   refute_grep 'login-backend 閒置' "$HERDR_STUB_LOG"
+   refute_grep '^delivered$' "$d/.blocked/login-backend.idle"
+   dk-watch --once
+   grep -q "$(idle_msg login-backend 25)" "$HERDR_STUB_LOG"
+   [ "$(grep -c ' idle login-backend 25min$' "$d/process.md")" -eq 1 ]
+ }
++
++# --- AC5（rest）：守望程序靜默死亡 —— setsid、watch.log、遺言與 --ensure 串行化 ---
++wlog() { echo "$DK_ROOT/.sessions/$(basename "$d").watch.log"; }
++ensured_pid() { printf '%s\n' "$1" | sed -n 's/^watch: restarted (pid \([0-9]*\))$/\1/p'; }
++# fork 之後、exec 之前 args 仍是父行程；輪詢 2 秒等它變成 dk-watch 本身，不寫成「啟動後立刻 alive」
++args_end_within() { # PID SUFFIX
++  local i; for i in $(seq 1 20); do ps -p "$1" -o args= 2>/dev/null | grep -q -- "$2\$" && return 0; sleep 0.1; done
++  echo "args_end_within: pid $1 的 args 不是以 '$2' 結尾: $(ps -p "$1" -o args= 2>/dev/null)" >&2; return 1
++}
++wait_line() { # FILE ERE [TENTHS] — 等某一行出現（預設 3 秒）
++  local i; for i in $(seq 1 "${3:-30}"); do grep -Eq -- "$2" "$1" 2>/dev/null && return 0; sleep 0.1; done
++  echo "wait_line: $1 裡等不到 /$2/: $(cat "$1" 2>/dev/null)" >&2; return 1
++}
++kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
++
++@test "AC5: --ensure 印出的 pid 在 2 秒內成為 dk-watch 本身，再 ensure 印 running 同一個 pid" {
++  unset DK_NO_WATCH
++  run dk-watch --ensure; [ "$status" -eq 0 ]
++  pid=$(ensured_pid "$output"); [[ "$pid" =~ ^[0-9]+$ ]]; [ "$pid" = "$(wpid)" ]
++  args_end_within "$pid" 'dk-watch'
++  run dk-watch --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"watch: running (pid $pid)"* ]]
++  kill_watchers
++}
++@test "AC5: 背景守望啟動時在 .sessions/<任務>.watch.log 寫 start 行" {
++  unset DK_NO_WATCH
++  run dk-watch --ensure; [ "$status" -eq 0 ]; pid=$(ensured_pid "$output")
++  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
++  kill_watchers
++}
++@test "AC5: TERM 寫 signal 與 exit 兩行後結束" {
++  dk-watch --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
++  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $p\$"
++  kill -TERM "$p"
++  wait_line "$(wlog)" "^[0-9T:-]+ exit poll pid $p rc=[0-9]+\$" 40
++  grep -Eq "^[0-9T:-]+ signal TERM poll pid $p\$" "$(wlog)"
++  for _ in $(seq 1 20); do kill -0 "$p" 2>/dev/null || break; sleep 0.1; done
++  refute kill -0 "$p" 2>/dev/null
++}
++@test "AC5: HUP 只寫 signal 行，行程照跑（nohup 語意）" {
++  dk-watch --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
++  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $p\$"
++  kill -HUP "$p"
++  wait_line "$(wlog)" "^[0-9T:-]+ signal HUP poll pid $p\$" 40
++  sleep 1.5
++  kill -0 "$p"
++  refute_grep -E "exit poll pid $p " "$(wlog)"
++  kill -TERM "$p" 2>/dev/null || true
++}
++@test "AC5: --ensure 遇到死 pid 先記 watch died 帶該 pid 最後一行，不吃到前綴相同的 pid" {
++  unset DK_NO_WATCH
++  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
++  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
++  mkdir -p "$DK_ROOT/.sessions"
++  { echo "2026-09-24T09:00 start poll pid $dead"
++    echo "2026-09-24T09:05 exit poll pid $dead rc=1"
++    echo "2026-09-24T09:06 start poll pid ${dead}7"
++    echo "2026-09-24T09:07 signal TERM poll pid ${dead}7"; } > "$(wlog)"
++  run dk-watch --ensure; [ "$status" -eq 0 ]
++  grep -q "watch died: poll pid $dead last: 2026-09-24T09:05 exit poll pid $dead rc=1\$" "$d/process.md"
++  [ "$(grep -n 'watch died' "$d/process.md" | cut -d: -f1)" -lt "$(grep -n 'watch restarted' "$d/process.md" | cut -d: -f1)" ]
++  kill_watchers
++}
++@test "AC5: watch died 在 log 裡找不到該 pid 就寫 no log；pid 空白不記" {
++  unset DK_NO_WATCH
++  run dk-watch --ensure; [ "$status" -eq 0 ]
++  refute_grep 'watch died' "$d/process.md"
++  kill_watchers
++  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
++  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
++  run dk-watch --ensure; [ "$status" -eq 0 ]
++  grep -q "watch died: poll pid $dead last: no log\$" "$d/process.md"
++  kill_watchers
++}
++@test "AC5: 守望已死時並行兩個 --ensure，只起一隻、process 只一行 watch restarted" {
++  unset DK_NO_WATCH
++  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
++  sed -i "s/^DK_WATCH_PID=.*/DK_WATCH_PID=\"$dead\"/" "$d/.task.env"
++  dk-watch --ensure >/dev/null 2>&1 3>&- & a=$!
++  dk-watch --ensure >/dev/null 2>&1 3>&- & b=$!
++  wait "$a"; wait "$b"
++  sleep 0.5
++  n=$(ps -eo args= | grep -c -- "$PROJECT/.dkbo/bin/dk-watch\$" || true)
++  [ "$n" -eq 1 ] || { ps -eo pid=,args= | grep -- "$PROJECT/.dkbo/bin/dk-watch" >&2; false; }
++  [ "$(grep -c 'watch restarted' "$d/process.md")" -eq 1 ]
++  kill_watchers
++}
++@test "AC5: --chores --ensure 起的守望寫 start chores 行進 chores.watch.log" {
++  unset DK_NO_WATCH; chore_rec chore-frontend-1 leader-login
++  run dk-watch --chores --ensure; [ "$status" -eq 0 ]
++  pid=$(cat "$DK_ROOT/.sessions/chores.watch.pid")
++  wait_line "$DK_ROOT/.sessions/chores.watch.log" "^[0-9T:-]+ start chores pid $pid\$"
++  kill_watchers
++}
++@test "AC5: --ensure 起的守望收到 INT 寫 signal 與 exit 行後結束（需要 env --default-signal）" {
++  env --default-signal=INT true 2>/dev/null || skip "env 不支援 --default-signal（非 GNU coreutils ≥8.31）"
++  unset DK_NO_WATCH
++  run dk-watch --ensure; [ "$status" -eq 0 ]; pid=$(ensured_pid "$output")
++  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
++  kill -INT "$pid"
++  wait_line "$(wlog)" "^[0-9T:-]+ exit poll pid $pid rc=[0-9]+\$" 40
++  grep -Eq "^[0-9T:-]+ signal INT poll pid $pid\$" "$(wlog)"
++  kill_watchers
++}
++@test "AC5: 呼叫者是 nohup 起的（dk-msg 背景那一份），叫回的守望收到 HUP 仍記 signal 行、照跑" {
++  command -v setsid >/dev/null 2>&1 || skip "沒有 setsid"
++  env --default-signal=INT true 2>/dev/null || skip "env 不支援 --default-signal"
++  unset DK_NO_WATCH
++  nohup dk-watch --ensure </dev/null >"$PROJECT/ensure.out" 2>&1 3>&-; pid=$(ensured_pid "$(cat "$PROJECT/ensure.out")")
++  wait_line "$(wlog)" "^[0-9T:-]+ start poll pid $pid\$"
++  kill -HUP "$pid"
++  wait_line "$(wlog)" "^[0-9T:-]+ signal HUP poll pid $pid\$" 40
++  kill -0 "$pid"
++  kill_watchers
++}
+diff --git a/tests/unit/11_chore.bats b/tests/unit/11_chore.bats
+index 251a2b6..5b213bc 100644
+--- a/tests/unit/11_chore.bats
++++ b/tests/unit/11_chore.bats
+@@ -193,20 +193,43 @@ pane: wC:p2
+ leader: wB:p1
+ status: done
+ touched:
+ 結果：
+ X
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 0 ]
+   grep -q '| fix | chore | done | merged ' "$DK_ROOT/tasks/INDEX.md"
+ }
+ 
++@test "legacy：沒有記錄檔、雜務檔是新版模板（沒有 branch: 行），關得掉且不碰分支" {
++  dk-chore frontend "fix" >/dev/null
++  # 記錄檔不見了（半途被清掉），雜務檔是現在的 templates/chore.md 寫的：沒有 branch/workspace/pane。
++  # 空的 branch 不是分支名 —— dk-chore-close 要當成「沒分支」，不能拿空字串去 merge 或刪分支。
++  rm -f "$DK_ROOT/.sessions/chores/chore-frontend-1"
++  f=$(chore_files)
++  cat > "$f" <<'X'
++交代：fix
++成員：chore-frontend-1 (claude / M)
++status: done
++touched:
++結果：
++X
++  # 只比分支名稱：close 本來就會在 main 上 commit 一筆 dkbo memory，main 的 sha 一定會動
++  local before; before=$(git -C "$PROJECT" for-each-ref --format='%(refname)' refs/heads)
++  run dk-chore-close chore-frontend-1
++  [ "$status" -eq 0 ] || { echo "$output"; false; }
++  grep -q '| fix | chore | done |' "$DK_ROOT/tasks/INDEX.md"
++  [ "$(git -C "$PROJECT" for-each-ref --format='%(refname)' refs/heads)" = "$before" ]
++  [ -z "$(git -C "$PROJECT" rev-list --merges main)" ]   # 沒有 merge 過任何東西
++  [[ "$output" != *"merge conflict"* ]]
++}
++
+ @test "close 在 INDEX 找不到那一列時警告，而不是靜靜成功" {
+   dk-chore frontend "翻譯 README" >/dev/null
+   done_msg chore-frontend-1 "docs/README.en.md"
+   sed -i 's/| 翻譯 README |/| 翻譯 READM |/' "$DK_ROOT/tasks/INDEX.md"   # 人手動改壞了名稱
+   run dk-chore-close chore-frontend-1
+   [ "$status" -eq 0 ]
+   [[ "$output" == *"INDEX 沒有名稱為「翻譯 README」的列"* ]]
+ }
+ 
+ @test "chore prompt tells the worker to report through dk-msg, not a raw herdr prompt" {
+diff --git a/tests/unit/16_brief_check.bats b/tests/unit/16_brief_check.bats
+index 52fef9d..9358746 100644
+--- a/tests/unit/16_brief_check.bats
++++ b/tests/unit/16_brief_check.bats
+@@ -264,10 +264,27 @@ ac8_repo() {
+   printf '| it | src/api/types.ts | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$b"
+   run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 所有權 backend/it: 可改範圍重疊"* ]]
+   # 兩條不同的 glob 共用 \| 之前的前綴：切斷後會變成同一條 "src/a\" → 誤判重疊
+   fixture_brief "$d"; sed -i 's#^| backend | src/api/\*\* |#| backend | src/a\\|b |#; s#^| frontend-cart | src/web/\*\* |#| frontend-cart | src/a\\|c |#' "$b"
+   run dk-brief-check; refute_grep -q '重疊' <<< "$output"
+ }
+ @test "bklog Minor②: 欄數閘走 dk_brief_ncols，不再內聯一份切欄 awk" {
+   grep -q 'dk_brief_ncols' "$DK_ROOT/bin/dk-brief-check"
+   refute_grep -q 'print nf' "$DK_ROOT/bin/dk-brief-check"
+ }
++
++@test "rest AC6: 「做什麼」欄含 \| 時取波次成員照常（dev 計數與獨佔資源）" {
++  # 回歸守護，不要求取紅：舊碼只取第 1、3 欄，「做什麼」（第 4 欄）的 \| 本來就不影響；
++  # 136／143 行改走跳脫感知切欄只為一致，這條守的是改完成員照樣取得到。
++  sed -i 's#^| 1 | 實作 | backend | POST /login | M |#| 1 | 實作 | backend | 拆 a\\|b | M |#' "$b"
++  sed -i 's#^| 1 | 實作 | qa | 驗 API | S |#| 1 | 實作 | qa | 驗 x\\|y | S |#' "$b"
++  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db |#' "$b"
++  sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/** | — | db |#' "$b"
++  printf '| backend-b | db/b/** | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$b"
++  printf '| 1 | 實作 | backend-b | 表 c\\|d | S | 過 | |\n' | sed -i '/^| 1 | 實作 | qa/r /dev/stdin' "$b"
++  grep -qF '| 拆 a\|b |' "$b"; grep -qF '| 驗 x\|y |' "$b"; grep -qF '| 表 c\|d |' "$b"
++  run dk-brief-check; [ "$status" -eq 1 ]
++  [[ "$output" == *"獨佔資源 db 同時被 backend 與 qa 宣告"* ]] || { echo "$output"; false; }
++  echo 'DK_TAB1_SLOTS="1"' >> "$DK_ROOT/settings.env"
++  run dk-brief-check
++  [[ "$output" == *"WARN 波次表 1: dev 成員 2 位超過 tab 1 的 1 格"* ]] || { echo "$output"; false; }
++}
+diff --git a/tests/unit/21_version.bats b/tests/unit/21_version.bats
+index b2f4778..1b27cca 100644
+--- a/tests/unit/21_version.bats
++++ b/tests/unit/21_version.bats
+@@ -40,16 +40,18 @@ teardown() { teardown_project; }
+   v=$(tr -d '[:space:]' < "$REPO_ROOT/.dkbo/VERSION")
+   top=$(grep -m1 -oE '^## [0-9]+\.[0-9]+\.[0-9]+' "$REPO_ROOT/CHANGELOG.md" | awk '{print $2}')
+   [ "$top" = "$v" ] || { echo "CHANGELOG top is '$top' but .dkbo/VERSION is '$v'"; false; }
+ }
+ @test "CHANGELOG 首節列出本版的每一條變更" {
+   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
+   for w in 'feat(watch)' '逾時但仍在工作（未熔斷）' '閒置 <N> 分鐘未交' 'feat(kind)' 'dk-kind down' \
+            'feat(review)' 'p1`–`p6' 'feat(msg)' '背景送' '[UNDELIVERED]' '（你已交付過' \
+            'feat(process)' 'minor 行格式不符' 'feat(brief)' 'WARN 所有權' '<成員>@波<N>' '\|' \
+            'feat(leader)!' 'HERDR_WORKSPACE_ID' 'docs(protocol)' '取紅' 'state too long' \
+-           'docs(readme)' '任務 tab 不自動關' 'fix(repos)' 'SIGPIPE' 'fix(wave)' 'panes.lock' '別名還回來' 'all_globs' '測試：'; do
++           'docs(readme)' '任務 tab 不自動關' 'fix(repos)' 'SIGPIPE' 'fix(wave)' 'panes.lock' '別名還回來' 'all_globs' \
++           'fix(wave-close)' 'HERDR_*' 'setsid' 'watch.log' 'watch died' 'fix(ownership)' 'first_glob' \
++           'test:' '37_shellcheck' 'fixture_copy_dkbo' '空 branch' 'docs(run)' '測試：'; do
+     [[ "$sec" == *"$w"* ]] || { echo "CHANGELOG 首節缺 $w"; false; }
+   done
+   # 測試條數是實跑值，不留 N 佔位
+   grep -qE '^- 測試：[0-9]+ bats（\+[0-9]+；' <<< "$sec" || { echo "CHANGELOG 首節測試條數仍是佔位"; false; }
+ }
+diff --git a/tests/unit/22_ownership.bats b/tests/unit/22_ownership.bats
+index 4d6d509..6980567 100644
+--- a/tests/unit/22_ownership.bats
++++ b/tests/unit/22_ownership.bats
+@@ -86,10 +86,28 @@ teardown() { teardown_project; }
+ 
+ @test "dk_owned 前綴相同才算擁有，跨 repo 的同名路徑不算" {
+   b="$d/brief.md"
+   sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | api:src/** , shared:lib/** | main:src/web/** |#' "$b"
+   run dk_owned "$b" backend 'api:src/login.ts'; [ "$status" -eq 0 ]
+   run dk_owned "$b" backend 'shared:lib/t.ts'; [ "$status" -eq 0 ]
+   run dk_owned "$b" backend 'main:src/login.ts'; [ "$status" -eq 1 ]   # 同一個 glob、不同 repo
+   run dk_owned "$b" backend 'src/login.ts'; [ "$status" -eq 1 ]        # 沒前綴的路徑不配帶前綴的 glob
+   run dk_owned "$b" backend 'api:db/x.sql'; [ "$status" -eq 1 ]
+ }
++
++# ── dk_owned：只讀「## 檔案所有權」段，欄內的 \| 不當分隔（rest AC6）─────────────
++@test "rest AC6: 可改欄含 \\| 時兩個 glob 都認得，\\| 還原成字面 |" {
++  b="$d/brief.md"
++  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/a\\|b/**, src/c/** | src/web/** |#' "$b"
++  grep -qF '| backend | src/a\|b/**, src/c/** |' "$b"
++  run dk_owned "$b" backend 'src/c/x'; [ "$status" -eq 0 ]
++  run dk_owned "$b" backend 'src/a|b/y'; [ "$status" -eq 0 ]
++  run dk_owned "$b" backend 'src/a/y'; [ "$status" -eq 1 ]
++}
++
++@test "rest AC6: 所有權段之前的表格第一格等於成員名也不算（誘餌）" {
++  b="$d/brief.md"
++  sed -i 's#^登入 API 與表單。$#&\n\n| 成員 | 備註 |\n|---|---|\n| backend | bait/** |#' "$b"
++  grep -qx '| backend | bait/\*\* |' "$b"
++  run dk_owned "$b" backend 'bait/x'; [ "$status" -eq 1 ]
++  run dk_owned "$b" backend 'src/api/login.ts'; [ "$status" -eq 0 ]
++}
+diff --git a/tests/unit/26_watch_events.bats b/tests/unit/26_watch_events.bats
+index 12b0e0a..bce754a 100644
+--- a/tests/unit/26_watch_events.bats
++++ b/tests/unit/26_watch_events.bats
+@@ -241,10 +241,49 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
+   git -C "$PROJECT" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base
+   printf '| 2026-09-10 | 使用者登入 | task | running | — |\n' >> "$DK_ROOT/tasks/INDEX.md"
+   dk-watch --ensure >/dev/null
+   epid=$(sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env")
+   [[ "$epid" =~ ^[0-9]+$ ]]; kill -0 "$epid"
+   : > "$d/.panes"; echo '# r' > "$d/report.md"
+   run dk-task-close; [ "$status" -eq 0 ]
+   for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$epid" 2>/dev/null || break; done
+   refute kill -0 "$epid" 2>/dev/null
+ }
++
++# --- AC5（rest）：訂閱器也走 setsid／watch.log，死掉留遺言 ---
++epid_of() { sed -n 's/^DK_EVENTS_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
++ewlog() { echo "$DK_ROOT/.sessions/$(basename "$d").watch.log"; }
++kill_watchers() { pkill -f "$PROJECT/.dkbo/bin/dk-watch" 2>/dev/null || true; }
++
++@test "AC5: --events --ensure 印出的 pid 在 2 秒內成為 dk-watch --events，再 ensure 印 running 同一個 pid" {
++  unset DK_NO_WATCH
++  run dk-watch --events --ensure; [ "$status" -eq 0 ]
++  pid=$(printf '%s\n' "$output" | sed -n 's/^events: started (pid \([0-9]*\))$/\1/p'); [[ "$pid" =~ ^[0-9]+$ ]]
++  [ "$pid" = "$(epid_of)" ]
++  ok=0; for _ in $(seq 1 20); do ps -p "$pid" -o args= | grep -q -- 'dk-watch --events$' && { ok=1; break; }; sleep 0.1; done
++  [ "$ok" = 1 ] || { ps -p "$pid" -o args= >&2; false; }
++  run dk-watch --events --ensure; [ "$status" -eq 0 ]; [[ "$output" == *"events: running (pid $pid)"* ]]
++  ok=0; for _ in $(seq 1 30); do grep -Eq "^[0-9T:-]+ start events pid $pid\$" "$(ewlog)" 2>/dev/null && { ok=1; break; }; sleep 0.1; done
++  [ "$ok" = 1 ] || { cat "$(ewlog)" >&2; false; }
++  kill_watchers
++}
++@test "AC5: --events --ensure 遇到死 pid 記 watch died: events 帶最後一行，排在 events started 之前" {
++  unset DK_NO_WATCH
++  sh -c 'exit 0' & dead=$!; wait "$dead" 2>/dev/null || true
++  sed -i "s/^DK_EVENTS_PID=.*/DK_EVENTS_PID=\"$dead\"/" "$d/.task.env"
++  mkdir -p "$DK_ROOT/.sessions"
++  { echo "2026-09-24T09:00 start events pid ${dead}1"
++    echo "2026-09-24T09:01 start events pid $dead"
++    echo "2026-09-24T09:02 signal INT events pid ${dead}1"; } > "$(ewlog)"
++  run dk-watch --events --ensure; [ "$status" -eq 0 ]
++  grep -q "watch died: events pid $dead last: 2026-09-24T09:01 start events pid $dead\$" "$d/process.md"
++  [ "$(grep -n 'watch died' "$d/process.md" | cut -d: -f1)" -lt "$(grep -n 'events started' "$d/process.md" | cut -d: -f1)" ]
++  kill_watchers
++}
++@test "AC5: 訂閱器收到 TERM 寫 signal 與 exit 行" {
++  dk-watch --events --interval 1 </dev/null >/dev/null 2>&1 3>&- & p=$!
++  ok=0; for _ in $(seq 1 30); do grep -Eq "start events pid $p\$" "$(ewlog)" 2>/dev/null && { ok=1; break; }; sleep 0.1; done; [ "$ok" = 1 ]
++  kill -TERM "$p"
++  ok=0; for _ in $(seq 1 40); do grep -Eq "^[0-9T:-]+ exit events pid $p rc=[0-9]+\$" "$(ewlog)" && { ok=1; break; }; sleep 0.1; done
++  [ "$ok" = 1 ] || { cat "$(ewlog)" >&2; false; }
++  grep -Eq "^[0-9T:-]+ signal TERM events pid $p\$" "$(ewlog)"
++}
+diff --git a/tests/unit/36_fixture.bats b/tests/unit/36_fixture.bats
+index e24eb8f..b9cdd8c 100644
+--- a/tests/unit/36_fixture.bats
++++ b/tests/unit/36_fixture.bats
+@@ -83,10 +83,72 @@ env_keys() { sed -n 's/^\(DK_[A-Z_]*\)=.*/\1/p' "$1"; }
+   : > "$s/kinds-down.lock"; : > "$s/chores/chore-x-1"; echo 2026-09-24-x > "$s/wB:p9"; echo 1 > "$s/chores.watch.pid"
+   teardown_project
+   REPO_ROOT="$FAKE_REPO" setup_project
+   [ "$(ls -A "$DK_ROOT/.sessions")" = ".gitkeep" ] || { ls -A "$DK_ROOT/.sessions"; false; }
+   [ -f "$s/kinds-down" ]   # 來源那一邊（主樹）不動
+ }
+ 
+ @test "真的 REPO_ROOT 跑 setup_project：.sessions/ 同樣只剩 .gitkeep" {
+   [ "$(ls -A "$DK_ROOT/.sessions")" = ".gitkeep" ]
+ }
++
++# --- AC3：夾具不帶進主樹的進行中任務（fixture_copy_dkbo） ------------------------------
++# 造一個「主樹」：.dkbo 整份 commit 進 git，之後才在 tasks/ 底下弄髒（領導正在跑的任務長這樣）
++fake_git_repo() {
++  FAKE_REPO=$(mktemp -d)
++  cp -r "$REPO_ROOT/.dkbo" "$FAKE_REPO/.dkbo"
++  mkdir -p "$FAKE_REPO/tests"; cp -r "$REPO_ROOT/tests/stub" "$FAKE_REPO/tests/stub"
++  echo "# 決策" > "$FAKE_REPO/.dkbo/tasks/decisions.md"
++  git -C "$FAKE_REPO" init -q
++  git -C "$FAKE_REPO" add -A
++  git -C "$FAKE_REPO" -c user.name=t -c user.email=t@t commit -q -m base
++  local live="$FAKE_REPO/.dkbo/tasks/2026-09-24-live"
++  mkdir -p "$live/state"
++  echo 'wB:p9 backend' > "$live/.panes"; echo 'DK_SHORT="live"' > "$live/.task.env"; echo x > "$live/state/backend.md"
++  echo '| live | working |' >> "$FAKE_REPO/.dkbo/tasks/INDEX.md"
++  echo '主樹上領導剛寫的決策' >> "$FAKE_REPO/.dkbo/tasks/decisions.md"
++  rm "$FAKE_REPO/.dkbo/tasks/BACKLOG.md"                                  # 追蹤中但被刪
++  printf '#!/usr/bin/env bash\necho new\n' > "$FAKE_REPO/.dkbo/bin/newtool"   # tasks/ 以外的未追蹤檔
++  echo '未 commit 的規則改動' >> "$FAKE_REPO/.dkbo/PROTOCOL.md"                # tasks/ 以外的追蹤檔改動
++}
++
++@test "髒主樹跑 setup_project：未追蹤任務資料夾不進夾具、tasks/ 追蹤檔還原成 HEAD 版、tasks/ 以外照舊帶" {
++  fake_git_repo
++  teardown_project
++  REPO_ROOT="$FAKE_REPO" setup_project
++  [ ! -e "$DK_ROOT/tasks/2026-09-24-live" ] || { ls -A "$DK_ROOT/tasks/2026-09-24-live"; false; }
++  [ "$(cat "$DK_ROOT/tasks/INDEX.md")" = "$(git -C "$FAKE_REPO" show HEAD:.dkbo/tasks/INDEX.md)" ]
++  [ "$(cat "$DK_ROOT/tasks/decisions.md")" = "# 決策" ]
++  [ "$(cat "$DK_ROOT/tasks/BACKLOG.md")" = "$(git -C "$FAKE_REPO" show HEAD:.dkbo/tasks/BACKLOG.md)" ]
++  [ -x "$DK_ROOT/bin/newtool" ]
++  grep -qx '未 commit 的規則改動' "$DK_ROOT/PROTOCOL.md"
++  # 來源那一邊（主樹）一律不動
++  [ -f "$FAKE_REPO/.dkbo/tasks/2026-09-24-live/.panes" ]
++  grep -q '主樹上領導剛寫的決策' "$FAKE_REPO/.dkbo/tasks/decisions.md"
++  [ ! -e "$FAKE_REPO/.dkbo/tasks/BACKLOG.md" ]
++}
++
++@test "fixture_copy_dkbo：不刷新來源的 index（不搶 .git/index.lock）" {
++  fake_git_repo
++  local before after dest
++  touch -d '2020-01-01' "$FAKE_REPO/.dkbo/tasks/INDEX.md"   # stat 髒掉：會刷新 index 的指令就會改寫它
++  before=$(stat -c "%i %y" "$FAKE_REPO/.git/index")
++  dest=$(mktemp -d)
++  fixture_copy_dkbo "$FAKE_REPO" "$dest/.dkbo"
++  after=$(stat -c "%i %y" "$FAKE_REPO/.git/index")
++  rm -rf "$dest"
++  [ "$before" = "$after" ]
++}
++
++@test "fixture_copy_dkbo：來源不是 git 倉時照樣複製、清 .sessions/、不報錯" {
++  FAKE_REPO=$(mktemp -d)
++  cp -r "$REPO_ROOT/.dkbo" "$FAKE_REPO/.dkbo"
++  mkdir -p "$FAKE_REPO/.dkbo/tasks/2026-09-24-live"; : > "$FAKE_REPO/.dkbo/tasks/2026-09-24-live/.panes"
++  echo 1 > "$FAKE_REPO/.dkbo/.sessions/chores.watch.pid"
++  local dest; dest=$(mktemp -d)
++  run fixture_copy_dkbo "$FAKE_REPO" "$dest/.dkbo"
++  [ "$status" -eq 0 ]; [ -z "$output" ] || { echo "$output"; false; }
++  [ -f "$dest/.dkbo/PROTOCOL.md" ]
++  [ -f "$dest/.dkbo/tasks/2026-09-24-live/.panes" ]   # 不是 git 倉就分不出哪些是追蹤的，整份照帶
++  [ "$(ls -A "$dest/.dkbo/.sessions")" = ".gitkeep" ]
++  rm -rf "$dest"
++}
+diff --git a/tests/unit/37_shellcheck.bats b/tests/unit/37_shellcheck.bats
+new file mode 100644
+index 0000000..281649f
+--- /dev/null
++++ b/tests/unit/37_shellcheck.bats
+@@ -0,0 +1,42 @@
++load ../helpers
++# shellcheck 零警告是全域約束，但過去只靠人記得另外跑。這一檔把它收進 tests/run.sh 的完整套件。
++# 不必 setup_project：shellcheck 只讀檔，不碰 herdr、不 source common.sh。
++setup() {
++  command -v shellcheck >/dev/null 2>&1 || skip "shellcheck 未安裝，跳過（CI 與開發機請裝）"
++}
++
++# 檔案集合只寫這一處（同全域約束那一行）。相對 REPO_ROOT 展開；沒命中的 glob 會原樣留下，
++# 由 sc_run 交給 shellcheck 報「不存在」—— 不會靜悄悄少掃一類檔。
++sc_targets() {
++  ( cd "$REPO_ROOT" && printf '%s\n' .dkbo/bin/* .dkbo/lib/*.sh .dkbo/install.sh .dkbo/kinds/*.sh tests/run.sh )
++}
++# ②③ 共用的呼叫：零警告回 0，否則回非零並把 shellcheck 原文印出來（bats 失敗時會顯示）。
++sc_run() { # FILE…（相對 REPO_ROOT 或絕對路徑）
++  ( cd "$REPO_ROOT" && shellcheck "$@" )
++}
++
++@test "全域約束的檔案集合 shellcheck 零警告" {
++  local files=() f
++  while IFS= read -r f; do files+=("$f"); done < <(sc_targets)
++  [ "${#files[@]}" -gt 5 ]
++  run sc_run "${files[@]}"
++  [ "$status" -eq 0 ] || { echo "$output"; false; }
++}
++
++@test "檔案集合涵蓋 bin、lib、install.sh、kinds 與 tests/run.sh" {
++  local t; t=$(sc_targets)
++  echo "$t" | grep -qx '.dkbo/bin/dk-msg'
++  echo "$t" | grep -qx '.dkbo/lib/common.sh'
++  echo "$t" | grep -qx '.dkbo/install.sh'
++  echo "$t" | grep -q '^\.dkbo/kinds/.*\.sh$'
++  echo "$t" | grep -qx 'tests/run.sh'
++}
++
++@test "自我驗證：同一個 sc_run 對含 SC2086（未加引號的 \$x）的腳本回非零、印出原文" {
++  local t; t=$(mktemp)
++  printf '#!/usr/bin/env bash\nx="a b"\necho $x\n' > "$t"
++  run sc_run "$t"
++  rm -f "$t"
++  [ "$status" -ne 0 ]
++  [[ "$output" == *SC2086* ]]
++}
+

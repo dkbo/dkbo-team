@@ -1,0 +1,24 @@
+2026-09-24T17:55 rest-reviewer-p1 -> leader-rest [DONE] brief-review: 要改 6 處，見 report
+2026-09-24T18:46 leader-rest [ACK]
+2026-09-24T18:58 rest-backend-test -> leader-rest [DONE] backend-test AC2–AC4：36/11/37 全綠；全套 752 條 749 過，紅的 3 條是 backend-watch 的 06 AC5。見 state/backend-test.report.md
+2026-09-24T18:59 rest-backend-test -> rest-backend-docs [DONE] backend-test AC2–AC4：36/11/37 全綠；全套 752 條 749 過，紅的 3 條是 backend-watch 的 06 AC5。見 state/backend-test.report.md
+2026-09-24T19:00 rest-backend-gate -> leader-rest [DONE] AC1 gate c 剝 HERDR_*、AC6 跳脫感知切欄完成；08/22/07/16 全過、shellcheck 零警告；全套 749/752（3 紅為 06 AC5）。見 state/backend-gate.report.md
+2026-09-24T19:00 rest-backend-gate -> rest-backend-docs [DONE] AC1 gate c 剝 HERDR_*、AC6 跳脫感知切欄完成；08/22/07/16 全過、shellcheck 零警告；全套 749/752（3 紅為 06 AC5）。見 state/backend-gate.report.md
+2026-09-24T19:07 rest-backend-watch -> qa [UNDELIVERED] [DONE] AC5 守望（setsid／watch.log／watch died／flock／dk-msg 叫回）完成，見 state/backend-watch.md 與 report
+2026-09-24T19:07 rest-backend-watch -> leader-rest [DONE] AC5 守望完成：09/26/06 全綠、shellcheck 零警告、全套 754 ok；新增測試 17 條（09+10 26+3 06+4），見 state/backend-watch.report.md
+2026-09-24T19:07 rest-backend-watch -> rest-backend-docs [DONE] AC5 守望完成：09/26/06 全綠、shellcheck 零警告、全套 754 ok；新增測試 17 條（09+10 26+3 06+4），見 state/backend-watch.report.md
+2026-09-24T19:13 rest-backend-docs -> qa [UNDELIVERED] [DONE] backend-docs AC7/AC8 完成；全套 754/754 綠，見 state/backend-docs.report.md
+2026-09-24T19:13 rest-backend-docs -> leader-rest [DONE] backend-docs AC7/AC8 完成；三則 DONE 到齊後全套 754/754 綠（37 實跑），CHANGELOG 條數已填，見 report
+2026-09-24T19:13 leader-rest [ACK]
+2026-09-24T19:20 rest-reviewer-a -> leader-rest [DONE] review 波 1: Important 1 條，見 report（AC1–9 全合規；Important 是 brief 缺口：dk-task-new 首對守望未走 setsid，待裁定）
+2026-09-24T19:21 leader-rest [ACK]
+2026-09-24T19:21 leader-rest [ACK]
+2026-09-24T19:21 leader-rest -> rest-backend-watch [BUG] review: reviewer-a Important 1＋M1（state/reviewer-a.report.md）。已寫進 brief AC5 ⑦⑧、所有權加 dk-task-new、05，重讀切片。先紅後綠；13/28/30/33 會紅就 ESCALATE；跑完整 tests/run.sh 附條數，回 [FIXED]
+2026-09-24T19:28 rest-backend-watch -> leader-rest [FIXED] 根因：task-new 自己 nohup 起守望繞過 --ensure；wake_watch 不看 .panes。改走 --ensure、加 .panes 條件；+2 測試，全套 756 ok，見 report 末段
+2026-09-24T19:28 leader-rest [ACK]
+2026-09-24T19:28 leader-rest -> rest-reviewer-a [TASK] 複看 waves/1.diff：Important 1 與 M1 已修（brief AC5 ⑦⑧），見 state/backend-watch.report.md 修復輪段
+2026-09-24T19:28 leader-rest -> rest-backend-docs [TASK] 補測試條數：修復輪 +2 條（05、06），在 worktree 重跑完整 tests/run.sh 填實跑值；feat(watch) 條目補 dk-task-new 第一對守望改走 --ensure、結案後不叫回。完成回 [FIXED]
+2026-09-24T19:29 rest-reviewer-a -> leader-rest [DONE] review 波 1 複看: Important 0 條，⑦⑧ 已驗過；剩 CHANGELOG 仍寫 754（實際 756）、未提 ⑦⑧，需 backend-docs 重填，見 report
+2026-09-24T19:29 leader-rest [ACK]
+2026-09-24T19:33 rest-backend-docs -> leader-rest [FIXED] 條數補成實跑 756（+100，本任務 +32）、feat(watch) 補 task-new 走 --ensure 與結案不叫回；根因：修復輪新增 05/06 兩條測試，舊值未含。見 report 修復輪段
+2026-09-24T19:33 leader-rest [ACK]
