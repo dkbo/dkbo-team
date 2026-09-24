@@ -36,21 +36,57 @@ teardown() { teardown_project; }
   grep -q 'DK_TASK_TAB' "$DK_ROOT/README.md"
 }
 
-@test "Important4: DK_WORKSPACE 講成任務所屬，不再講成人所在的那一刻" {
+@test "Important4（0.16.0 反轉）: --run 的 tab 開在你叫 /dkbo-run 當下所在的 workspace，不再講計畫時記下" {
+  # 0.11.0 的語意是「任務所屬的 workspace（計畫時記下）」；人拍板改成當下所在的（bklog AC11）。
+  # 歷史紀錄不改寫：任務目錄、decisions.md、CHANGELOG 0.16.0 以前的節。
   while IFS= read -r f; do
     case "$f" in
-      .dkbo/tasks/*) continue ;;
+      .dkbo/tasks/*|.dkbo/decisions.md|CHANGELOG.md) continue ;;
       tests/unit/25_docs_policy.bats) continue ;;
     esac
-    refute_grep -E '人所在的 workspace|你所在的 workspace|時所在的那個 workspace' "$REPO_ROOT/$f"
-    refute_grep -E "workspace you're (already )?in" "$REPO_ROOT/$f"
+    # 只禁舊的 tab 位置句型「workspace（…計畫時記下」；「退回計畫時記下的 DK_WORKSPACE」講的是退路來源，照留
+    refute_grep -E 'workspace（[^）]*計畫時記下|recorded at plan time' "$REPO_ROOT/$f"
   done < <(git -C "$REPO_ROOT" ls-files)
-  grep -q '任務所屬的 workspace' "$REPO_ROOT/README.md"
-  grep -q '任務所屬的 workspace' "$DK_ROOT/README.md"
-  grep -q '任務所屬的 workspace' "$REPO_ROOT/CHANGELOG.md"
-  grep -q '任務所屬的 workspace' "$DK_ROOT/LEADER.md"
-  grep -q '任務所屬的 workspace' "$DK_ROOT/PROJECT.md"
-  grep -q "task's workspace" "$REPO_ROOT/README.en.md"
+  sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
+  refute_grep -E 'workspace（[^）]*計畫時記下' <<< "$sec"
+  for f in README.md .dkbo/README.md .dkbo/LEADER.md .dkbo/PROJECT.md .dkbo/skills/run/SKILL.md; do
+    grep -qF '你叫 `/dkbo-run` 當下所在的 workspace' "$REPO_ROOT/$f" || { echo "$f 缺新說法"; false; }
+    refute_grep -F '任務所屬的 workspace' "$REPO_ROOT/$f"
+  done
+  grep -qF 'the workspace you invoke `/dkbo-run` from' "$REPO_ROOT/README.en.md"
+  refute_grep -F "task's workspace" "$REPO_ROOT/README.en.md"
+}
+
+@test "AC14: PROTOCOL 取紅不動共用 worktree、雜務的 [DONE] 句只出現一次、state 行數不算 touched 清單" {
+  f="$DK_ROOT/PROTOCOL.md"
+  grep -qF '取紅（證明新測試會紅）一律 cp 到獨立目錄或 `git archive <base>` 解到暫存目錄做，不在共用 worktree 用 `git stash`／`git checkout -- <檔>`' "$f"
+  grep -qF '夥伴並跑的測試會讀到舊碼而假紅' "$f"
+  [ "$(grep -cF 'dk-msg leader "[DONE] <一句結果>"' "$f")" -eq 1 ] || { echo "雜務 [DONE] 句不是恰好一次"; false; }
+  grep -qF 'dk-msg leader "[DONE] review 波 N' "$f"
+  grep -qF '`touched:` 底下的清單項以外 ≤20 行' "$f"
+  grep -qF 'git archive <base>' "$DK_ROOT/templates/report-employee.md"
+  grep -qF '不在共用 worktree 用 `git stash`' "$DK_ROOT/templates/report-employee.md"
+}
+
+@test "AC15: 額度耗盡當下 dk-kind down、兩種 [TIMEOUT]、補派 reviewer、領導訊息背景送" {
+  grep -qF '任何來源確認某 kind 額度耗盡（畫面、CLI 狀態列、前一個任務的 ruling、人告知），當下 `dk-kind down <k> [--until …]`，不能只寫在 ruling 裡' "$DK_ROOT/LEADER.md"
+  grep -qF '派 reviewer 或員工前先 `dk-kind`' "$DK_ROOT/LEADER.md"
+  f="$DK_ROOT/skills/run/SKILL.md"
+  grep -qF '仍在工作（未熔斷）' "$f"; grep -qF '不關 pane' "$f"
+  grep -qF '閒置 N 分鐘未交' "$f"; grep -qF '[UNDELIVERED]' "$f"
+  grep -qF 'dk-review --kinds <k>' "$f"; grep -qF '<別名>: skipped (<理由>)' "$f"
+  grep -qF '背景送' "$f"
+  refute_grep -F '該 kind 已寫進 `.task.env` 的 `DK_KIND_DOWN`' "$f"
+  grep -qF 'dk-brief-review --kinds <k>' "$DK_ROOT/skills/plan/SKILL.md"
+}
+
+@test "AC16: 三份 README 的 dk-kind 補 down、dk-task-close 補任務 tab 不自動關" {
+  for f in README.md README.en.md .dkbo/README.md; do
+    grep -qF 'dk-kind down' "$REPO_ROOT/$f" || { echo "$f 缺 dk-kind down"; false; }
+    grep -qF 'herdr tab close <id>' "$REPO_ROOT/$f" || { echo "$f 缺 tab close"; false; }
+  done
+  grep -E '^\| `dk-task-close`' "$REPO_ROOT/README.md" | grep -qF '任務 tab 不自動關'
+  grep -E '^\| `dk-task-close`' "$REPO_ROOT/README.en.md" | grep -qF 'herdr tab close <id>'
 }
 
 @test "AC13: skills/run/SKILL.md 帶新規範的五個字串，三份 README 都提到 dk-kind" {

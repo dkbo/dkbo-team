@@ -144,3 +144,25 @@ multirepo_task() {
   sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"
   run dk-wave-open 1; [ "$status" -eq 1 ]; [[ "$output" == *"already opened"* ]]   # 不帶 --refresh 照樣被擋
 }
+
+# ── bklog AC9／AC13 ─────────────────────────────────────────────────────────
+@test "bklog AC9: 做什麼欄寫 a\|b，切片的波次列仍是 7 欄並保留 a\|b" {
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$#| 1 | 實作 | backend | 拆 a\\|b 兩段 | M | 測試過 | 預設 |#' "$d/brief.md"
+  grep -qF '| 拆 a\|b 兩段 |' "$d/brief.md"      # 前提：brief 裡真的是跳脫的管線
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  grep -qxF '| 1 | 實作 | backend | 拆 a\|b 兩段 | M | 測試過 | 預設 |' "$d/briefs/backend.md"
+  grep -q ' wave-open 1 base .* members backend(M) qa(S)$' "$d/process.md"   # 難度欄沒被錯位
+}
+@test "bklog AC9: 所有權欄寫 \|，切片的所有權列仍是 3 欄並保留 \|" {
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** 與 a\\|b |#' "$d/brief.md"
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  grep -qxF '| backend | src/api/** | src/web/** 與 a\|b |' "$d/briefs/backend.md"
+}
+@test "bklog AC13: 切片的「## 倉庫」段告訴員工編輯一律用 worktree 路徑" {
+  run dk-wave-open 1; [ "$status" -eq 0 ]
+  grep -qxF '編輯一律用上面的 worktree 路徑；$DK_ROOT 指向主樹的 .dkbo/，只拿來跑 dk-msg 等 bin，不得當編輯路徑' "$d/briefs/backend.md"
+  # 緊接在路徑之後（段內），不是跑到別段
+  a=$(grep -nxF "$WORKTREE_PATH" "$d/briefs/backend.md" | cut -d: -f1)
+  b=$(grep -nF '編輯一律用上面的 worktree 路徑' "$d/briefs/backend.md" | cut -d: -f1)
+  [ "$b" -eq $((a+1)) ]
+}

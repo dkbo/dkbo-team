@@ -217,3 +217,70 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
 @test "dk-kind 以 100755 的權限存在（git ls-files -s 在結案 commit 後會看到這個 mode）" {
   [ -x "$DK_ROOT/bin/dk-kind" ]
 }
+
+# --- 0.16.0 AC3（#25）：dk-kind down，領導手動登記額度耗盡 -----------------------
+# 畫面、CLI 狀態列、前一個任務的 ruling、人告知——守望只看得到第一種。其餘來源確認的耗盡
+# 原本只能寫進 ruling，下一次派人時 dk_review_kinds 根本不知道（testtrust 白派 codex／agy）。
+
+future_ts() { # 分鐘數 → 從現在起算那一刻的本地 "YYYY-MM-DDTHH:MM"
+  dk_ts_from_minutes $(( $(dk_ts_minutes "$(dk_now)") + $1 ))
+}
+
+@test "AC3: --until 給定 → exact，列與輸出都用那個本地時間" {
+  t=$(future_ts 120)
+  run dk-kind down codex --until "$t"; [ "$status" -eq 0 ]
+  [ "$output" = "kind codex down until $t" ]
+  row=$(dk_kinds_down_get codex); set -- $row
+  [ "$3" = exact ]; [ "$5" = - ]; [ "$6" = leader ]
+  [[ "$row" == *" leader leader 人工登記" ]]
+  [ "$(dk_epoch_to_local "$2")" = "$t" ]
+}
+@test "AC3: 沒給 --until → 現在＋5 小時標 guess；--note 寫進 hit" {
+  run dk-kind down agy --note "人說 agy 週額度用完"; [ "$status" -eq 0 ]
+  [[ "$output" == "kind agy down until "*" (guess)" ]]
+  row=$(dk_kinds_down_get agy); set -- $row
+  [ "$3" = guess ]
+  now=$(date +%s); diff=$(( $2 - (now + 5*3600) )); [ "${diff#-}" -le 5 ]
+  [[ "$row" == *" leader 人說 agy 週額度用完" ]]
+}
+@test "AC3: 過去時間、格式錯、未知 kind、缺值都 exit 2 且不寫列" {
+  run dk-kind down codex --until "$(future_ts -10)"; [ "$status" -eq 2 ]
+  run dk-kind down codex --until "2026/09/24 10:00"; [ "$status" -eq 2 ]
+  run dk-kind down codex --until; [ "$status" -eq 2 ]
+  run dk-kind down not-a-kind; [ "$status" -eq 2 ]
+  run dk-kind down; [ "$status" -eq 2 ]
+  run dk-kind down codex --bogus x; [ "$status" -eq 2 ]
+  [ -z "$(dk_kinds_down_rows)" ]
+}
+@test "AC3: 寫入後 dk-kind status 列出它、dk_review_kinds 跳過它" {
+  dk-kind down codex --until "$(future_ts 60)" >/dev/null
+  run dk-kind status; [ "$status" -eq 0 ]
+  [[ "$output" == "codex  down until "*"from - — leader 人工登記" ]]
+  . "$DK_ROOT/lib/review.sh"
+  run dk_review_kinds "codex claude" dk-review review; [ "$status" -eq 0 ]
+  [[ "$output" == *"kind codex 在專案層熔斷到"* ]]; [[ "$output" == *$'\n'"claude "* ]]
+}
+@test "AC3: 同 kind 已有較晚的未過期列 → 照「取較晚」保留它" {
+  now=$(date +%s)
+  dk_kinds_down_set codex "$((now + 10*3600))" exact other-task agentA "hit"
+  run dk-kind down codex --until "$(future_ts 60)"; [ "$status" -eq 0 ]
+  [ "$(dk_kinds_down_rows | wc -l)" -eq 1 ]
+  [[ "$(dk_kinds_down_get codex)" == "codex $((now + 10*3600)) "* ]]
+}
+@test "AC3: 綁著任務時 DK_KIND_DOWN 加進它（不重複）、process 記 (leader) 行、來源是任務名" {
+  d=$(fixture_task login 使用者登入); export DK_TASK_DIR="$d"
+  sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="agy"/' "$d/.task.env"
+  run dk-kind down codex; [ "$status" -eq 0 ]
+  grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
+  grep -q ' kind codex down (leader) until [0-9T:-]* (guess)$' "$d/process.md"
+  set -- $(dk_kinds_down_get codex); [ "$5" = "$(basename "$d")" ]
+  run dk-kind down codex; [ "$status" -eq 0 ]
+  grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
+  t=$(future_ts 90); run dk-kind down agy --until "$t"; [ "$status" -eq 0 ]
+  grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
+  grep -q " kind agy down (leader) until $t\$" "$d/process.md"
+}
+@test "AC3: usage 列出三個子指令" {
+  run dk-kind bogus; [ "$status" -eq 2 ]
+  [[ "$output" == *"status"* ]]; [[ "$output" == *"up <kind>"* ]]; [[ "$output" == *"down <kind> [--until YYYY-MM-DDTHH:MM] [--note <文字>]"* ]]
+}

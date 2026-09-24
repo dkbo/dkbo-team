@@ -302,3 +302,20 @@ multirepo_close() {
   grep -qE ' commit [0-9a-f]{7} wave 1 repo api$' "$d/process.md"
   refute_grep ' repo main$' "$d/process.md"
 }
+
+@test "AC12: state 行數不計 touched 清單項——24 項＋其他 10 行不警告" {
+  { printf 'status: done\nwave: 1\ncurrent: x\ntouched:\n'
+    for i in $(seq 1 24); do printf '  - src/api/f%s.ts\n' "$i"; done
+    for i in $(seq 1 6); do printf 'notes: line %s\n' "$i"; done; } > "$d/state/backend.md"
+  [ "$(grep -vc '^  - ' "$d/state/backend.md")" -eq 10 ]   # 前提：清單以外剛好 10 行
+  run dk-wave-close --force; [ "$status" -eq 0 ]
+  refute_grep -q 'state too long' <<< "$output"
+}
+@test "AC12: touched 以外 21 行照樣警告（清單以外的 '  - ' 行照算）" {
+  { printf 'status: done\nwave: 1\ntouched:\n  - src/api/login.ts\ntodo:\n'
+    for i in $(seq 1 3); do printf '  - todo %s\n' "$i"; done
+    for i in $(seq 1 14); do printf 'notes: line %s\n' "$i"; done; } > "$d/state/backend.md"
+  [ "$(grep -vc '^  - src/' "$d/state/backend.md")" -eq 21 ]   # 前提：touched 清單以外 21 行
+  run dk-wave-close --force; [ "$status" -eq 0 ]
+  [[ "$output" == *"dk-wave-close: state too long: $d/state/backend.md"* ]]
+}

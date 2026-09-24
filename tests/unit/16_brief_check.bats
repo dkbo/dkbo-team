@@ -169,3 +169,91 @@ multirepo_brief() {
   [[ "$output" == *"獨佔資源 build-* 同時被"* ]]      # 訊息指的是宣告的那個字串
   refute_grep -q 'build-a' <<< "$output"              # 不是 cwd 展開出來的檔名
 }
+
+# ── bklog AC9：欄數閘 ───────────────────────────────────────────────────────
+@test "bklog AC9: 所有權表每列 3 或 4 欄，其他欄數 FAIL 並指出哪一列" {
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]                       # 3 欄（fixture）
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/** | src/web/** | db |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]                       # 4 欄（獨佔資源選填）
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* | db |$#| backend | src/api/** | src/web/** | db | x |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 所有權 backend: 每列須 3 或 4 欄"* ]]; [[ "$output" == *"得到 5 欄"* ]]
+  fixture_brief "$d"; sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 所有權 qa: 每列須 3 或 4 欄"* ]]; [[ "$output" == *"得到 2 欄"* ]]
+}
+@test "bklog AC9: 波次表每列固定 7 欄，\| 不算分隔" {
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M |#| 1 | 實作 | backend | 拆 a\\|b | M |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]                       # 跳脫的管線：仍 7 欄，難度沒錯位
+  fixture_brief "$d"; sed -i 's#^| 1 | 實作 | backend | POST /login | M |#| 1 | 實作 | backend | 拆 a|b | M |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 波次表 1 backend: 每列須 7 欄，得到 8 欄"* ]]
+  fixture_brief "$d"; sed -i 's#^| 1 | 實作 | qa | 驗 API | S | 全過 | |$#| 1 | 實作 | qa | 驗 API | S | 全過 |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 波次表 1 qa: 每列須 7 欄，得到 6 欄"* ]]
+}
+
+# ── bklog AC10：契約欄的 <成員>@波<N> ──────────────────────────────────────
+@test "bklog AC10: 擁有者／消費者寫 <成員>@波<N> 合法時照過" {
+  sed -i 's/^| login API | backend | frontend-cart, qa |/| login API | backend@波1 | frontend-cart@波2, qa@波1 |/' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+}
+@test "bklog AC10: @波N 的成員不存在要 FAIL" {
+  sed -i 's/^| login API | backend | frontend-cart, qa |/| login API | ghost@波1 | frontend-cart, qa |/' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 共用契約 login API: 擁有者 ghost@波1 不在檔案所有權表"* ]]
+}
+@test "bklog AC10: @波N 的波號不存在要 FAIL" {
+  sed -i 's/^| login API | backend | frontend-cart, qa |/| login API | backend | frontend-cart@波9, qa |/' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 共用契約 login API: 消費者 frontend-cart@波9 的波 9 不在波次表"* ]]
+}
+@test "bklog AC10: @波N 的成員不在那一波要 FAIL" {
+  sed -i 's/^| login API | backend | frontend-cart, qa |/| login API | backend@波2 | frontend-cart, qa |/' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 共用契約 login API: 擁有者 backend@波2 不在第 2 波"* ]]
+}
+
+# ── bklog AC8：無主測試檔 WARN ──────────────────────────────────────────────
+# 測試檔要在 git ls-files 裡才算：fixture 的 $PROJECT 只有一個空 commit，這裡補進版控。
+ac8_repo() {
+  sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |$#| backend | src/api/**, lib/auth.sh, docs/auth.md | src/web/** |#' "$b"
+  mkdir -p "$PROJECT/spec" "$PROJECT/tests" "$PROJECT/lib"
+  echo 'source lib/auth.sh' > "$PROJECT/spec/auth.spec.js"
+  echo 'load auth.sh' > "$PROJECT/tests/auth.bats"
+  echo 'see auth.sh' > "$PROJECT/spec/notes.md"             # 不是測試檔
+  echo 'docs/auth.md' > "$PROJECT/spec/doc.test.js"         # 只引用 .md 來源
+  echo 'lib/*.sh' > "$PROJECT/spec/glob.test.js"            # 只引用 glob 來源（src/api/** 的「**」）
+  : > "$PROJECT/lib/auth.sh"
+  git -C "$PROJECT" add spec tests lib && git -C "$PROJECT" commit -qm fixtures
+}
+@test "bklog AC8: 無人擁有的測試檔引用了成員的可改檔 → WARN，exit 0" {
+  ac8_repo
+  run dk-brief-check; [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN 所有權: spec/auth.spec.js 引用了 auth.sh（backend 的可改檔），但沒人擁有它（改行為時斷言舊行為的測試會紅）"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c '^WARN 所有權:')" -eq 1 ]   # tests/auth.bats 有主（qa 的 tests/**）
+}
+@test "bklog AC8: 測試檔有人擁有就不 WARN" {
+  ac8_repo
+  sed -i 's#^| qa | tests/\*\* | — |$#| qa | tests/**, spec/** | — |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+}
+@test "bklog AC8: glob 路徑與 .md 來源不觸發" {
+  ac8_repo
+  sed -i 's#| src/api/\*\*, lib/auth.sh, docs/auth.md |#| src/api/**, lib/*.sh, docs/auth.md |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+  refute_grep -q 'doc.test.js' <<< "$output"; refute_grep -q 'glob.test.js' <<< "$output"
+}
+@test "bklog AC8: 多 repo 各在自己的 ls-files 裡找，路徑帶 <名>:" {
+  multirepo_mode; multirepo_brief
+  sed -i 's#^| backend | api:src/\*\* |#| backend | api:src/**, api:lib/client.sh |#' "$b"
+  api="$REPO_API"
+  mkdir -p "$api/spec" "$PROJECT/spec"
+  echo 'client.sh' > "$api/spec/client.spec.js"; git -C "$api" add spec && git -C "$api" commit -qm t
+  echo 'client.sh' > "$PROJECT/spec/client.spec.js"; git -C "$PROJECT" add spec && git -C "$PROJECT" commit -qm t   # 別的 repo 的同名引用不算
+  run dk-brief-check; [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN 所有權: api:spec/client.spec.js 引用了 client.sh（backend 的可改檔）"* ]]
+  refute_grep -q 'main:spec/client.spec.js' <<< "$output"
+}
+
+@test "bklog: dk_glob_check 在 pipefail 下不會偶發誤判「未知的 repo 名字」（SIGPIPE 回歸）" {
+  # printf … | grep -qx：grep 命中第一列就退出，printf 偶爾還沒寫完 → SIGPIPE → pipefail 下整條
+  # 管線非零，合法的 main: 被判成未知（base 實測直呼 3000 次 20 次）。舊寫法下 1500 次實測紅率約九成（400 次約四成）。
+  multirepo_mode
+  run bash -c 'set -euo pipefail; . "$DK_ROOT/lib/common.sh"; . "$DK_ROOT/lib/repos.sh"; dk_settings
+    for i in $(seq 1 1500); do dk_glob_check "" "main:tests/**" >/dev/null || { echo "誤判 at $i"; exit 1; }; done; echo ok'
+  [ "$status" -eq 0 ]; [ "$output" = ok ]
+}

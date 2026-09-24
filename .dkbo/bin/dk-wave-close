@@ -97,7 +97,7 @@ if [ "$legacy" = 0 ]; then
       if [ -z "$owner" ]; then
         problems="$problems\n  unowned change: $p (no wave ${n:-?} member may change it)"
         dk_process "violation unowned: $p"
-      elif ! printf '%s\n' "$reported" | grep -qxF "$p"; then
+      elif ! grep -qxF "$p" <<< "$reported"; then   # here-string：printf | grep -q 在 pipefail 下會偶發 SIGPIPE（見 lib/repos.sh）
         echo "dk-wave-close: unreported change: $p (owner $owner); $owner's state left it out of touched"
         dk_process "unreported $p (owner $owner)"
       fi
@@ -165,7 +165,11 @@ closed=0; tabs=""
 while read -r agent pane _epoch _group tab _; do
   sname="${agent#"$DK_SHORT"-}"; sf="$dir/state/$sname.md"
   if [ -f "$sf" ]; then   # ownership is checked against the real diff above (gate d), not this file
-    [ "$(wc -l < "$sf")" -le 20 ] || echo "dk-wave-close: state too long: $sf"
+    # ≤20 行不含 touched 清單項（PROTOCOL 的 state 檔規則）：touched 要完整，大波一列 20 個檔
+    # 很正常，把它算進去等於逼人在「完整」與「不超長」之間二選一。只跳過 touched: 之後連續的
+    # `  - ` 行，todo 之類其他清單的項目照算。
+    [ "$(awk '/^touched:/{t=1; n++; next} t && /^  - /{next} {t=0; n++} END{print n+0}' "$sf")" -le 20 ] \
+      || echo "dk-wave-close: state too long: $sf"
   fi
   herdr pane close "$pane" >/dev/null </dev/null && closed=$((closed+1))
   if [ -n "${tab:-}" ] && [[ " $tabs " != *" $tab "* ]]; then tabs="$tabs $tab"; fi

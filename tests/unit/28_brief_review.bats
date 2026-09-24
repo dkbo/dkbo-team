@@ -105,3 +105,24 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
   # frontmatter 的 description 裡兩支指令都提過一次，拿它跟正文比對不出步驟順序。
   [ "$(grep -n '^4\. .*dk-brief-check' "$s" | cut -d: -f1)" -lt "$(grep -n '^5\. .*dk-brief-review' "$s" | cut -d: -f1)" ]
 }
+
+# --- 0.16.0 AC4（#26）：計畫審查補派 ------------------------------------------------
+@test "AC4: 補派計畫審查 → 別名 p2、spawned 行兩位都在、p1 的 pane 不被關" {
+  have_request
+  run dk-brief-review --kinds claude; [ "$status" -eq 0 ]; [ "$output" = "brief-review: login-reviewer-p1(claude)" ]
+  : > "$HERDR_STUB_LOG"
+  run dk-brief-review --kinds agy; [ "$status" -eq 0 ]
+  [ "$output" = "brief-review: login-reviewer-p1(claude) login-reviewer-p2(agy)" ]
+  grep -q '^agent start login-reviewer-p2 --kind agy ' "$HERDR_STUB_LOG"
+  refute_grep '^agent start login-reviewer-p1 ' "$HERDR_STUB_LOG"
+  refute_grep '^pane close' "$HERDR_STUB_LOG"
+  [ "$(grep ' brief-review spawned ' "$d/process.md" | tail -1 | sed 's/^[^ ]* //')" = "brief-review spawned login-reviewer-p1(claude) login-reviewer-p2(agy)" ]
+  grep -qF "$d/request.md" "$d/briefs/reviewer-p2.md"
+}
+@test "AC4: 計畫審查別名池到 p6 為止" {
+  have_request
+  dk-brief-review --kinds "claude codex agy" >/dev/null
+  run dk-brief-review --kinds "claude codex agy"; [ "$status" -eq 0 ]
+  [[ "$output" == *"login-reviewer-p4(claude) login-reviewer-p5(codex) login-reviewer-p6(agy)" ]]
+  run dk-brief-review --kinds claude; [ "$status" -eq 1 ]; [[ "$output" == *"別名"* ]]
+}
