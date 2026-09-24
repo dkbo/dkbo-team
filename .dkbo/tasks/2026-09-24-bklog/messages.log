@@ -1,0 +1,49 @@
+2026-09-24T08:15 bklog-reviewer-p1 -> leader-bklog [DONE] brief-review: 要改 7 處，見 report
+2026-09-24T14:32 leader-bklog [ACK]
+2026-09-24T14:34 bklog-backend-msg -> leader-bklog [ESCALATE] AC5 背景送會讓 06 的 11 條與 09 的 redispatched() 既有測試紅（前景斷言／送不到 status 1）。提案：這些呼叫前綴 DK_MSG_BG=1、斷言不動；09 需 backend-watch 配合。詳見 state/backend-msg.md notes
+2026-09-24T14:37 bklog-backend-watch -> leader-bklog [ESCALATE] 20_review.bats:18 同波第二次 dk-review --kinds agy 斷言 review 2: login-reviewer-a(agy)，AC4 下必成 c(agy)＋累加名單。提議只改該行期望值為新語意；細節見 state/backend-watch.md
+2026-09-24T14:44 leader-bklog -> bklog-backend-watch [DECISION] 准改 20:18 期望值為 c(agy)，並補一條斷言最新 spawned 行含 a、b、c 三位；--kind agy 那條保留。report 的測試段註明這是 AC4 改行為的期望值變更
+2026-09-24T14:44 leader-bklog [ACK]
+2026-09-24T14:51 bklog-backend-watch -> leader-bklog [DONE] AC1–AC4 完成，09/26/34/20/28 綠、我的檔 shellcheck 零警告；20:18 已依裁定改。全套 703/704，唯一紅在 25（backend-docs）。見 state/backend-watch.report.md
+2026-09-24T14:51 bklog-backend-watch -> bklog-backend-docs [DONE] AC1–AC4 完成：dk-kind down、兩種新 [TIMEOUT]、審查補派命名都照契約落地，字樣見 state/backend-watch.report.md「做了什麼」
+2026-09-24T14:52 bklog-backend-brief -> leader-bklog [ESCALATE] 兩件待決，細節在 state/backend-brief.md 的 blocked_by：①13_leader.bats:84 既有測試與 AC11 語意相反，要准我改寫它；②lib/repos.sh dk_glob_check 在 pipefail 下偶發 SIGPIPE 誤判，base 就有，lib 對我只讀
+2026-09-24T14:52 leader-bklog [ACK]
+2026-09-24T14:54 bklog-backend-msg -> bklog-backend-docs [DONE] 背景送與 minor 行格式兩個契約已照 brief 實作、字樣未改；細節見 state/backend-msg.report.md「做了什麼」
+2026-09-24T14:54 bklog-backend-msg -> leader-bklog [DONE] AC5–AC7 完成，06/36 全綠、我的檔 shellcheck 零警告。全套紅 3 條不在我的檔：09 #272/#275 待 backend-watch 加 DK_MSG_BG=1，25 #552 屬 docs。見 report
+2026-09-24T14:54 leader-bklog -> bklog-backend-msg [DECISION] 採提案 A：06 的既有前景斷言前綴 DK_MSG_BG=1、斷言不改；新測試守背景路徑。09 由 backend-watch 加前綴。05／11 若也會紅照同法，但它們不在你的可改欄→列出給我
+2026-09-24T14:54 leader-bklog -> bklog-backend-watch [TASK] AC5 後 dk-msg 領導→員工改背景送：09 的 redispatched() 等以領導身分送 TASK/BUG 的呼叫請前綴 DK_MSG_BG=1、斷言不改（ruling 見 process）
+2026-09-24T14:55 leader-bklog [ACK]
+2026-09-24T14:55 bklog-backend-msg -> leader-bklog [ANSWER] 已照提案 A 做完（6 條前綴 DK_MSG_BG=1）。05／11 全套實跑沒紅，不需處理；全套只剩 09 #272/#275 待 backend-watch 加前綴。
+2026-09-24T14:55 leader-bklog [ACK]
+2026-09-24T15:01 bklog-backend-watch -> leader-bklog [DONE] AC5 配合完成：09:406 redispatched() 前綴 DK_MSG_BG=1、斷言未改（我的其他測試檔無 dk-msg 呼叫）。全套 714/714 綠，見 report「AC5 配合」
+2026-09-24T15:01 bklog-backend-docs -> qa [UNDELIVERED] [DONE] AC14–AC18 文件完成：PROTOCOL/LEADER/SKILL/README×3/CHANGELOG 0.16.0/BACKLOG；21/25/04 全綠，完整測試 714/714。見 state/backend-docs.report.md
+2026-09-24T15:01 bklog-backend-docs -> leader-bklog [DONE] AC14–AC18 完成，完整測試 714/714、shellcheck 零警告；CHANGELOG 測試條數留 N 等你 [TASK]。Important4 斷言有收窄，理由見 report 自我審查
+2026-09-24T15:05 bklog-backend-brief -> bklog-backend-docs [DONE] AC8–AC13 完成，我擁有的三個契約照 brief 落地：--run 開在 HERDR_WORKSPACE_ID（process 行 workspace <舊> → <新>（--run 開在當下所在的 workspace））、契約欄 <成員>@波<N>、state 行數不計 touched 清單。字樣見 state/backend-brief.report.md
+2026-09-24T15:05 bklog-backend-brief -> leader-bklog [DONE] AC8–AC13＋repos.sh SIGPIPE 修正完成；16/18/13/08/15 綠、全套 714/714、shellcheck 零警告；AC8 本任務 WARN 15 個＝模擬 14＋33_repos。見 state/backend-brief.report.md
+2026-09-24T15:05 leader-bklog [ACK]
+2026-09-24T15:05 leader-bklog -> bklog-backend-brief [DECISION] ①准改寫 13:84 守 AC11 新語意 ②lib/repos.sh 已劃給你（brief 已改、切片已 refresh，重讀切片），照你提的 here-string 修，report 記實測誤報率與修後重跑結果
+2026-09-24T15:05 bklog-backend-docs -> bklog-backend-brief [QUESTION] AC11 改 dk-leader:146 註解時請拿掉「計畫時記下」字樣：25 的 Important4 新版全倉掃這四個字（排除 tasks/decisions/CHANGELOG），沒改會紅。能確認嗎？
+2026-09-24T15:06 bklog-backend-brief -> bklog-backend-docs [ANSWER] 確認，已改：dk-leader:108 註解改成「空才退回 .task.env 的 DK_WORKSPACE」，全倉（排除 tasks/decisions/CHANGELOG）只剩 25 自己含這四字；13＋25 共 55 條綠
+2026-09-24T15:06 bklog-backend-docs -> bklog-backend-brief [ANSWER] 撤回剛送到的那則 QUESTION：你改完的 dk-leader 已過 25 的 Important4（我把斷言收窄成只抓舊 tab 位置句型），不用再動任何東西。
+2026-09-24T15:17 bklog-reviewer-a -> leader-bklog [DONE] review 波 1: Important 1 條，見 report
+2026-09-24T15:17 leader-bklog [ACK]
+2026-09-24T15:17 leader-bklog -> bklog-backend-msg [BUG] review: dk-msg 背景佇列兩個缺陷（未排隊者空等一小時、queue_leave 留 pid），外加 Minor 7 的 .panes 競態，見 state/reviewer-a.report.md 的 Important 1 與 Minor 7；06 補佇列檔已存在時 dev→qa [DONE] 立刻送。修好回 [FIXED] 帶根因
+2026-09-24T15:24 bklog-backend-msg -> leader-bklog [FIXED] 根因：子行程憑佇列檔存在與否排隊（檔永存），改憑前景傳的 DK_MSG_QUEUED；queue_leave 的 grep 在 set -e 下回 1 中斷 mv。.panes 改 flock＋mv 前比對。06 補兩條，全套 716/716
+2026-09-24T15:24 leader-bklog [ACK]
+2026-09-24T15:24 leader-bklog -> bklog-reviewer-a [TASK] 複看 waves/1.diff：backend-msg 已修 Important 1 與 Minor 7（見其 [FIXED] 與 state/backend-msg.report.md），只需判這兩條是否解決、有無回歸，結論追加進你的 report
+2026-09-24T15:27 bklog-reviewer-a -> leader-bklog [DONE] review 波 1 複看: Important 0 條（I1、Minor 7 已解決、無回歸），新 Minor 2 條，見 report 末段
+2026-09-24T15:27 leader-bklog [ACK]
+2026-09-24T15:40 bklog-backend-msg -> bklog-backend-docs [DONE] 波2 Minor 三項完成：.panes 鎖移到 .blocked/panes.lock 且 spawn／wave-close 同鎖、gate a2 詞界比對。對外契約無變更，見 state/backend-msg.report.md
+2026-09-24T15:40 bklog-backend-msg -> leader-bklog [DONE] 波2 Minor ①②③完成，06/07/08 共132條綠、shellcheck 零警告；全套 723/724，唯一紅 16:487 屬 backend-brief。見 state/backend-msg.report.md
+2026-09-24T15:42 bklog-backend-brief -> bklog-backend-docs [DONE] 波 2 Minor ①②③ 完成：別名用完提示改寫、dk_brief_ncols 接進欄數閘、all_globs 跳脫感知；見 state/backend-brief.report.md
+2026-09-24T15:42 bklog-backend-brief -> leader-bklog [DONE] 波 2 Minor ①②③ 完成，15/16/20 全綠、全套 724 綠、shellcheck 零警告；紅綠見 state/backend-brief.report.md
+2026-09-24T15:47 bklog-backend-docs -> leader-bklog [DONE] 波 2 ①②③④ 完成：25 Important4 改回嚴格、README --note <文字>/<text>、CHANGELOG 補 fix(repos)/fix(wave) 與兩位修正句、條數填 724（+68）；全套 724/724、shellcheck 零警告。見 state/backend-docs.report.md
+2026-09-24T15:47 leader-bklog [ACK]
+2026-09-24T15:53 bklog-reviewer-a -> leader-bklog [DONE] review 波 2: Important 0 條，見 report（新 Minor 4 條皆可留；Minor 1 是 07 --resume 半段測不到刪列鎖，突變實測仍綠，建議順手修）
+2026-09-24T15:53 leader-bklog [ACK]
+2026-09-24T15:53 leader-bklog -> bklog-backend-msg [TASK] reviewer 波 2 Minor 1：改寫 07_spawn.bats:288 那條（不新增 @test）：持鎖時背景跑 --resume，約 1 秒後斷言舊列仍在；report 附拿掉 dk-spawn:77-79 鎖的突變探針紅／綠。完成後改寫 state 為 done 再回 [FIXED]
+2026-09-24T15:53 leader-bklog -> bklog-backend-docs [TASK] BACKLOG.md 末尾加一列（今天、bklog 波 2 審查 Minor 3）：lib/ownership.sh:12 的 dk_owned 與 dk-spawn:57 的 first_glob 仍裸 awk -F'|' 切可改欄，含跳脫管線時錯位；建議改用 DK__BRIEF_SPLIT。其餘行不動。完成後改寫 state 為 done 再回 [FIXED]
+2026-09-24T15:57 bklog-backend-docs -> leader-bklog [FIXED] BACKLOG 表格末尾加了 bklog 波 2 審查 Minor 3 一列（dk_owned／first_glob 裸 awk 切欄，建議 DK__BRIEF_SPLIT），其餘行不動。根因：波 2 只修了 wave-open 與 all_globs，這兩處同類切法沒劃進範圍。見 report 追加段
+2026-09-24T15:57 leader-bklog [ACK]
+2026-09-24T15:59 bklog-backend-msg -> leader-bklog [FIXED] 波2 Minor 1：根因是 --resume 段只量耗時，但 append 本身就等鎖，分不出刪舊列有沒有拿鎖。已改寫同一條：持鎖時背景跑、1秒後斷言舊列仍在；突變探針紅綠與全套 724/724 見 report
+2026-09-24T15:59 leader-bklog [ACK]
