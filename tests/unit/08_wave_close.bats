@@ -20,12 +20,12 @@ teardown() { teardown_project; }
 }
 @test "gate 0: a state not done refuses unless --force" {
   sed -i 's/^status: done/status: working/' "$d/state/qa.md"
-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"not done: login-qa"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   run dk-wave-close --force; [ "$status" -eq 0 ]
 }
 @test "gate a: needs a review verdict or a recorded skip" {
   sed -i '/review 1 verdict/d' "$d/process.md"
-  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"review 1 verdict"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"review 1 verdict"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   echo "2026-09-10T10:00 review 1 skipped: 純文件波" >> "$d/process.md"; run dk-wave-close; [ "$status" -eq 0 ]
 }
 @test "gate b: every dev needs a report with content under ## 測試; review-group members do not" {
@@ -38,7 +38,7 @@ teardown() { teardown_project; }
 @test "gate c: DK_TEST_CMD runs in the worktree; failure keeps panes and shows the tail" {
   echo 'DK_TEST_CMD="cat tests/marker.txt"' >> "$DK_ROOT/settings.env"
   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"tests failed (cat tests/marker.txt)"* ]]; [[ "$output" == *"No such file"* ]]
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"; grep -q ' wave-close 1 tests failed (cat tests/marker.txt)$' "$d/process.md"; [ -f "$d/waves/1.test.log" ]
   mkdir -p "$WORKTREE_PATH/tests"; echo ok > "$WORKTREE_PATH/tests/marker.txt"   # under qa's ownership, or gate d refuses it
   run dk-wave-close; [ "$status" -eq 0 ]; grep -q ' wave-close 1 tests ok (cat tests/marker.txt) 2 agents closed$' "$d/process.md"
 }
@@ -62,7 +62,7 @@ teardown() { teardown_project; }
 @test "越界閘: a real change nobody in the wave owns refuses unless --force" {
   mkdir -p "$WORKTREE_PATH/src/web"; echo x > "$WORKTREE_PATH/src/web/x.ts"
   run dk-wave-close; [ "$status" -eq 1 ]; [[ "$output" == *"unowned change: src/web/x.ts"* ]]
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   run dk-wave-close --force; [ "$status" -eq 0 ]; grep -q 'violation unowned: src/web/x.ts' "$d/process.md"
 }
 @test "越界閘: an owned change nobody reported warns but still closes" {
@@ -73,7 +73,7 @@ teardown() { teardown_project; }
 }
 @test "越界閘: a touched path that never really changed is no longer a violation" {
   printf 'status: done\ntouched:\n  - src/web/x.ts\n' > "$d/state/backend.md"
-  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" != *"violation"* ]]; ! grep -q 'violation' "$d/process.md"
+  run dk-wave-close; [ "$status" -eq 0 ]; [[ "$output" != *"violation"* ]]; refute_grep -q 'violation' "$d/process.md"
 }
 @test "越界閘: a wave with no recorded base skips the diff gate with a warning" {
   sed -i '/ wave-open 1 base /d' "$d/process.md"
@@ -111,14 +111,14 @@ teardown() { teardown_project; }
 }
 @test "--agent closes one pane, drops its row, re-balances its tab" {
   run dk-wave-close --agent login-qa; [ "$status" -eq 0 ]; [ "$output" = "closed login-qa" ]
-  grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"; ! grep -q '^login-qa ' "$d/.panes"; grep -q '^login-backend ' "$d/.panes"
+  grep -q '^pane close wC:p3$' "$HERDR_STUB_LOG"; refute_grep -q '^login-qa ' "$d/.panes"; grep -q '^login-backend ' "$d/.panes"
   grep -q 'pane-close login-qa' "$d/process.md"; grep -q '^pane layout --pane wB:p1$' "$HERDR_STUB_LOG"
   run dk-wave-close --agent nobody; [ "$status" -eq 1 ]
 }
 @test "ownership matches member names exactly" {
   . "$DK_ROOT/lib/ownership.sh"
   printf '| qa-a | docs/** | — |\n' | sed -i '/^| qa | tests/r /dev/stdin' "$d/brief.md"
-  dk_owned "$d/brief.md" qa tests/x.ts; ! dk_owned "$d/brief.md" qa docs/x.md; dk_owned "$d/brief.md" qa-a docs/x.md
+  dk_owned "$d/brief.md" qa tests/x.ts; refute dk_owned "$d/brief.md" qa docs/x.md; dk_owned "$d/brief.md" qa-a docs/x.md
 }
 
 @test "verdict must account for every reviewer that was spawned" {
@@ -126,7 +126,7 @@ teardown() { teardown_project; }
   # 而流程看起來完全正常（RESULTS-2026-09-11 ⑧）
   echo "2026-09-11T10:00 review 1 spawned login-reviewer-a(claude) login-reviewer-b(codex)" >> "$d/process.md"
   run dk-wave-close                      # setup 已寫了 "review 1 verdict a: ok"，缺 b
-  [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  [ "$status" -eq 1 ]; [[ "$output" == *"reviewer b"* ]]; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   echo "2026-09-11T10:02 review 1 verdict a: ok b: skipped (spawn-failed)" >> "$d/process.md"
   run dk-wave-close; [ "$status" -eq 0 ]
 }

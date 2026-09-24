@@ -21,7 +21,7 @@ teardown() { teardown_project; }
   DK_AGENT=login-qa run dk-msg login-frontend "[HELLO] hi"; [ "$status" -eq 2 ]
   DK_AGENT=login-qa DK_ISOLATED=1 run dk-msg login-frontend "[BUG] x"; [ "$status" -eq 2 ]
   DK_AGENT=login-qa DK_ISOLATED=1 run dk-msg leader "[DONE] x"; [ "$status" -eq 0 ]
-  ! grep -q '^agent prompt login-frontend' "$HERDR_STUB_LOG"
+  refute_grep -q '^agent prompt login-frontend' "$HERDR_STUB_LOG"
 }
 @test "undelivered when wait fails" {
   HERDR_STUB_FAIL="agent wait" DK_AGENT=login-qa DK_MSG_RETRY_SEC=0 run dk-msg login-frontend "[BUG] x"
@@ -51,7 +51,7 @@ teardown() { teardown_project; }
   DK_AGENT=chore-it-1 DK_ROLE=it DK_CHORE_FILE="$DK_ROOT/tasks/_chores/x.md" DK_LEADER=wB:p1 \
     run dk-msg login-frontend "[QUESTION] x"
   [ "$status" -eq 2 ]
-  ! grep -q '^agent prompt' "$HERDR_STUB_LOG"
+  refute_grep -q '^agent prompt' "$HERDR_STUB_LOG"
 }
 
 @test "dk-msg retries a message that does not land before giving up" {

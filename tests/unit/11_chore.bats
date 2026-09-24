@@ -16,13 +16,13 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   [[ "$split" == *"--env DK_CHORE_FILE=$f"* ]]; [[ "$split" == *"--env DK_CHORE_CODE=0"* ]]
   grep -q '^agent start chore-frontend-1 --kind claude --pane wC:p2 -- --model opus --effort low' "$HERDR_STUB_LOG"
   grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
-  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
+  refute_grep -q '^worktree create' "$HERDR_STUB_LOG"
 }
 @test "chore --code makes a native git worktree branch and numbers agents" {
   dk-chore frontend "first" >/dev/null
   run dk-chore frontend "修登入頁 Safari 版面" --code
   [ "$status" -eq 0 ]
-  ! grep -q '^worktree create' "$HERDR_STUB_LOG"
+  refute_grep -q '^worktree create' "$HERDR_STUB_LOG"
   wt="$PROJECT/.worktrees/chore-safari"
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
   [ "$(git -C "$wt" rev-parse --abbrev-ref HEAD)" = chore/safari ]
@@ -54,7 +54,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   dk-chore frontend "翻譯 README" >/dev/null
   done_msg chore-frontend-1 "docs/README.en.md"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
-  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
+  grep -q '^pane close wC:p2$' "$HERDR_STUB_LOG"; refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"
   grep -q '| 翻譯 README | chore | done | docs/README.en.md |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "chore-close --code: merges branch, removes worktree, deletes branch" {
@@ -63,23 +63,23 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   done_msg chore-frontend-1 "fix done"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
   [ -f "$PROJECT/x.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'chore: fix'
-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
-  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
+  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$wt" ]
+  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $wt"
+  refute git -C "$PROJECT" rev-parse --verify -q chore/fix
   grep -Eq '\| fix \| chore \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "chore-close --code refuses when the worktree has uncommitted changes" {
   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"; echo dirty > "$wt/y.txt"
   done_msg chore-frontend-1 "fix done"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
-  [ -f "$wt/y.txt" ]; git -C "$PROJECT" rev-parse --verify -q chore/fix; ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  [ -f "$wt/y.txt" ]; git -C "$PROJECT" rev-parse --verify -q chore/fix; refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]; grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "chore-close refuses when not done; --abandon skips merge, removes worktree and branch" {
   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 1 ]; [[ "$output" == *"[DONE]"* ]]
   run dk-chore-close chore-frontend-1 --abandon; [ "$status" -eq 0 ]
-  [ ! -d "$wt" ]; ! git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
+  [ ! -d "$wt" ]; refute git -C "$PROJECT" rev-parse --verify -q chore/fix; grep -q '| fix | chore | abandoned |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "legacy chore with a herdr workspace is still removed through herdr and pruned" {
   dk-chore frontend "fix" --code >/dev/null; wt="$PROJECT/.worktrees/chore-fix"
@@ -88,7 +88,7 @@ done_msg() { # $1=agent $2=一句結果 —— 模擬員工跑 dk-msg leader "[D
   rm -rf "$wt"   # herdr (stub) owns the directory in the legacy flow; simulate it having removed it
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
   grep -q '^worktree remove --workspace wC --force$' "$HERDR_STUB_LOG"
-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"   # pruned
+  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $wt"   # pruned
 }
 @test "instruction containing a pipe still round-trips through INDEX" {
   dk-chore frontend "翻譯 a|b 文件" >/dev/null
@@ -152,7 +152,7 @@ X
   dk-chore frontend "fix" --code >/dev/null
   run dk-chore-close chore-frontend-1
   [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   git -C "$PROJECT" rev-parse --verify -q chore/fix
   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
   grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
@@ -164,7 +164,7 @@ X
     >> "$DK_ROOT/tasks/_chores/messages.log"
   run dk-chore-close chore-frontend-1
   [ "$status" -eq 1 ]; [[ "$output" == *"還沒回報 [DONE]"* ]]
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"
   [ -f "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
 }
 
@@ -219,12 +219,12 @@ X
   dk-chore frontend $'同步四個文件位置\n(1) AGENTS.md 第 23 行\n(2) roles/frontend.md' >/dev/null
   [ "$(grep -c '| chore | working |' "$DK_ROOT/tasks/INDEX.md")" -eq 1 ]
   grep -q '^| .* | 同步四個文件位置 | chore | working |' "$DK_ROOT/tasks/INDEX.md"
-  ! grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
+  refute_grep -q '^(1) AGENTS.md' "$DK_ROOT/tasks/INDEX.md"
   f=$(chore_files); grep -q '^(2) roles/frontend.md$' "$f"   # the chore file keeps the full text
   done_msg chore-frontend-1 "done"
   run dk-chore-close chore-frontend-1; [ "$status" -eq 0 ]
   grep -q '| 同步四個文件位置 | chore | done |' "$DK_ROOT/tasks/INDEX.md"
-  ! grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
+  refute_grep -q '| chore | working |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "chore --code keeps the live worker's worktree when the first prompt fails" {
   HERDR_STUB_FAIL="agent prompt" run dk-chore frontend "fix" --code
@@ -233,7 +233,7 @@ X
   [ -d "$wt" ]                                   # 員工已經站在裡面：rollback 不准再刪
   git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $wt"
   git -C "$PROJECT" rev-parse --verify -q chore/fix
-  ! grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
+  refute_grep -q '^pane close' "$HERDR_STUB_LOG"      # pane 留著，領導才看得到它卡在哪
   grep -q '^branch=chore/fix$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
   grep -q '| fix | chore | working |' "$DK_ROOT/tasks/INDEX.md"
 }
@@ -250,7 +250,7 @@ X
   f=$(chore_files)
   grep -q "^file=$f$" "$rec"          # 完整路徑，不是「在那個目錄下就算過」
   grep -q '^instr=同步四個文件位置$' "$rec"
-  ! grep -q 'AGENTS.md' "$rec"
+  refute_grep -q 'AGENTS.md' "$rec"
   grep -q '^branch=chore/' "$rec"
   grep -q '^workspace=-$' "$rec"
   grep -q '^pane=wC:p2$' "$rec"
@@ -287,7 +287,7 @@ X
   chmod 755 "$DK_ROOT/.sessions/chores"
   [ "$status" -ne 0 ]
   [ ! -d "$PROJECT/.worktrees/chore-fix" ]
-  ! git -C "$PROJECT" rev-parse --verify -q chore/fix
+  refute git -C "$PROJECT" rev-parse --verify -q chore/fix
   [ -z "$(chore_files)" ]
   [ ! -e "$DK_ROOT/.sessions/chores/chore-frontend-1" ]
 }

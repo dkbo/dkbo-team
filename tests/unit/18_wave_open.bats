@@ -10,8 +10,8 @@ teardown() { teardown_project; }
   grep -q " wave-open 1 base $sha members backend(M) qa(S)$" "$d/process.md"
   [ -f "$d/briefs/backend.md" ]; [ -f "$d/briefs/qa.md" ]; [ ! -f "$d/briefs/frontend-cart.md" ]
   grep -q '^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$' "$d/briefs/backend.md"
-  ! grep -q 'frontend-cart |' "$d/briefs/backend.md"
-  grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; ! grep -q '^| qa |' "$d/briefs/backend.md"
+  refute_grep -q 'frontend-cart |' "$d/briefs/backend.md"
+  grep -q '^| backend | src/api/\*\* | src/web/\*\* |$' "$d/briefs/backend.md"; refute_grep -q '^| qa |' "$d/briefs/backend.md"
   grep -q 'POST /login 空密碼回 400' "$d/briefs/backend.md"; grep -q '^| login API | backend | frontend-cart, qa |' "$d/briefs/backend.md"; grep -q 'backend(M) qa(S)' "$d/briefs/backend.md"
   grep -q "$d/brief.md" "$d/briefs/backend.md"; grep -q '登入 API 與表單' "$d/briefs/qa.md"
 }

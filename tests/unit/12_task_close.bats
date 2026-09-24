@@ -17,8 +17,8 @@ teardown() { teardown_project; }
   echo '# r' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]
   [ -f "$PROJECT/f.txt" ]; git -C "$PROJECT" log --oneline -3 | grep -q 'task login: 使用者登入'
-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$WORKTREE_PATH" ]
-  ! git -C "$PROJECT" worktree list --porcelain | grep -qx "worktree $WORKTREE_PATH"
+  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"; [ ! -d "$WORKTREE_PATH" ]
+  git -C "$PROJECT" worktree list --porcelain | refute_grep -qx "worktree $WORKTREE_PATH"
   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
   grep -Eq '\| 使用者登入 \| task \| done \| merged [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
@@ -35,14 +35,14 @@ teardown() { teardown_project; }
   run dk-task-close --abandon "需求改了"; [ "$status" -eq 0 ]
   grep -q '需求改了' "$d/report.md"; grep -q 'abandoned' "$d/report.md"
   [ ! -d "$WORKTREE_PATH" ]
-  ! git -C "$PROJECT" rev-parse --verify -q dk/login
+  refute git -C "$PROJECT" rev-parse --verify -q dk/login
   grep -q '| abandoned | 需求改了 |' "$DK_ROOT/tasks/INDEX.md"
 }
 @test "in-tree task (no worktree) closes without merge" {
   echo '# r' > "$d/report.md"
   sed -i "s|^DK_WORKTREE=.*|DK_WORKTREE=\"$PROJECT\"|; s|^DK_WORKSPACE=.*|DK_WORKSPACE=\"\"|" "$d/.task.env"
   run dk-task-close; [ "$status" -eq 0 ]; [[ "$output" == closed* ]]
-  ! grep -q '^worktree remove' "$HERDR_STUB_LOG"
+  refute_grep -q '^worktree remove' "$HERDR_STUB_LOG"
   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]
   grep -Eq '\| 使用者登入 \| task \| done \| in-tree [0-9a-f]{7} \|' "$DK_ROOT/tasks/INDEX.md"
@@ -60,14 +60,14 @@ teardown() { teardown_project; }
 @test "task-close deletes the merged task branch" {
   echo '# r' > "$d/report.md"
   run dk-task-close; [ "$status" -eq 0 ]
-  ! git -C "$PROJECT" rev-parse --verify -q dk/login
+  refute git -C "$PROJECT" rev-parse --verify -q dk/login
 }
 @test "task-close refuses when the worktree has uncommitted changes" {
   echo '# r' > "$d/report.md"; echo dirty > "$WORKTREE_PATH/g.txt"
   run dk-task-close; [ "$status" -eq 1 ]; [[ "$output" == *"uncommitted"* ]]
   [ -d "$WORKTREE_PATH" ]; [ -f "$WORKTREE_PATH/g.txt" ]   # nothing discarded
   git -C "$PROJECT" rev-parse --verify -q dk/login; [ -f "$DK_ROOT/.sessions/wB:p1" ]
-  ! git -C "$PROJECT" log --oneline -1 | grep -q 'task login'
+  git -C "$PROJECT" log --oneline -1 | refute_grep -q 'task login'
 }
 
 @test "task-close commits the task's memory in the main tree" {

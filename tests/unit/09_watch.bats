@@ -5,7 +5,7 @@ teardown() { teardown_project; }
 @test "first sighting records marker, no notify" {
   run dk-watch --once; [ "$status" -eq 0 ]
   [ -f "$d/.blocked/login-qa" ]; [ ! -f "$d/.blocked/login-frontend" ]
-  ! grep -q '^notification show' "$HERDR_STUB_LOG"
+  refute_grep -q '^notification show' "$HERDR_STUB_LOG"
 }
 @test "blocked past threshold notifies once" {
   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
@@ -163,7 +163,7 @@ cmark="$DK_ROOT/.sessions/chores.blocked"
   blocked_chore; chore_rec chore-frontend-1 leader-login
   run dk-watch --chores --once; [ "$status" -eq 0 ]
   [ -f "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1" ]
-  ! grep -q '^notification show' "$HERDR_STUB_LOG"
+  refute_grep -q '^notification show' "$HERDR_STUB_LOG"
 }
 @test "--chores: blocked past the threshold notifies the chore's own leader once" {
   blocked_chore; chore_rec chore-frontend-1 leader-login
@@ -178,7 +178,7 @@ cmark="$DK_ROOT/.sessions/chores.blocked"
   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
   run dk-watch --chores --once; [ "$status" -eq 0 ]
   grep -q '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG"
-  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  refute_grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
 }
 @test "--chores: 沒有記錄檔時守望直接退出" {
   blocked_chore
@@ -227,10 +227,10 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"; grep -q '^DK_KIND_DOWN="agy codex"$' "$d/.task.env"
 }
 @test "fresh reviewers, done reviewers, qa and legacy rows never time out" {
-  reviewer_row "$(date +%s)"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  reviewer_row "$(date +%s)"; dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
   sed -i "s/^login-reviewer-b wC:p4 [0-9]*/login-reviewer-b wC:p4 $old/" "$d/.panes"; printf 'status: done\n' > "$d/state/reviewer-b.md"
-  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
-  printf 'login-qa wC:p3 %s review 1 2\nlogin-frontend wC:p2\n' "$old" > "$d/.panes"; dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  printf 'login-qa wC:p3 %s review 1 2\nlogin-frontend wC:p2\n' "$old" > "$d/.panes"; dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
 }
 @test "a shorter DK_REVIEW_TIMEOUT_MIN is honoured" {
   echo 'DK_REVIEW_TIMEOUT_MIN="1"' >> "$DK_ROOT/settings.env"; reviewer_row "$(( $(date +%s) - 120 ))"
@@ -255,7 +255,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   HERDR_STUB_FAIL="agent wait" dk-watch --once
   [ "$(grep -c '^notification show dkbo: login-qa blocked' "$HERDR_STUB_LOG")" -eq 1 ]
   [ "$(grep -c ' blocked login-qa$' "$d/process.md")" -eq 1 ]
-  ! grep -q '^delivered$' "$d/.blocked/login-qa"
+  refute_grep -q '^delivered$' "$d/.blocked/login-qa"
   dk-watch --once                      # 領導終於閒下來
   grep -q '^agent prompt leader-login \[BLOCKED\] from dk-watch: login-qa' "$HERDR_STUB_LOG"
   grep -q '^delivered$' "$d/.blocked/login-qa"
@@ -266,7 +266,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   HERDR_STUB_FAIL="agent wait" dk-watch --once
   grep -q '^DK_KIND_DOWN="codex"$' "$d/.task.env"
   [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
-  ! grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
+  refute_grep -q '^delivered$' "$d/.blocked/login-reviewer-b.timeout"
   HERDR_STUB_FAIL="agent wait" dk-watch --once
   [ "$(grep -c '^notification show dkbo: login-reviewer-b timeout' "$HERDR_STUB_LOG")" -eq 1 ]
   [ "$(grep -c ' timeout login-reviewer-b (quota?) → kind codex down$' "$d/process.md")" -eq 1 ]
@@ -279,8 +279,8 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   blocked_chore; chore_rec chore-frontend-1 leader-login
   mkdir -p "$DK_ROOT/.sessions/chores.blocked"; echo 0 > "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
   HERDR_STUB_FAIL="agent wait" dk-watch --chores --once
-  ! grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
-  ! grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log" 2>/dev/null
+  refute_grep -q '^delivered$' "$DK_ROOT/.sessions/chores.blocked/chore-frontend-1"
+  refute_grep -q 'chore-frontend-1' "$DK_ROOT/tasks/_chores/messages.log" 2>/dev/null
   dk-watch --chores --once
   [ "$(grep -c '^agent prompt leader-login \[BLOCKED\] from dk-watch: chore-frontend-1' "$HERDR_STUB_LOG")" -eq 1 ]
   [ "$(grep -c '^notification show dkbo: chore-frontend-1 blocked' "$HERDR_STUB_LOG")" -eq 1 ]
@@ -293,7 +293,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
   sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"/" "$d/.task.env" 2>/dev/null || \
     echo "DK_WAVE_STARTED=\"$(( $(date +%s) - 60 ))\"" >> "$d/.task.env"
-  dk-watch --once; ! grep -q 'TIMEOUT. from dk-watch: wave' "$HERDR_STUB_LOG"   # 才過 1 分鐘
+  dk-watch --once; refute_grep -q 'TIMEOUT. from dk-watch: wave' "$HERDR_STUB_LOG"   # 才過 1 分鐘
   sed -i "s/^DK_WAVE_STARTED=.*/DK_WAVE_STARTED=\"$(( $(date +%s) - 2000 ))\"/" "$d/.task.env"
   dk-watch --once; dk-watch --once
   [ "$(grep -c '^agent prompt leader-login \[TIMEOUT\] from dk-watch: wave 1 ' "$HERDR_STUB_LOG")" -eq 1 ]
@@ -331,7 +331,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
 @test "still leaves no delivered mark when the pane id is unreachable too" {
   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"
   HERDR_STUB_MISSING="leader-login wB:p1" dk-watch --once
-  ! grep -q '^delivered$' "$d/.blocked/login-qa"
+  refute_grep -q '^delivered$' "$d/.blocked/login-qa"
 }
 
 # --- dev 波聚合：全員完成才推一則，取代員工逐筆的 [DONE] ---
@@ -409,7 +409,7 @@ redispatched() { # 領導派了複看，然後過了 25 分鐘
 
 @test "被重新指派後，上一輪留下的 status: done 不再擋住逾時" {
   neutral_screen; reviewer_row "$(( old - 1500 ))"; printf 'status: done\n' > "$d/state/reviewer-b.md"
-  dk-watch --once; ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"     # 首輪交了，這時吵它才是錯的
+  dk-watch --once; refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"     # 首輪交了，這時吵它才是錯的
   redispatched
   dk-watch --once
   grep -q '^agent prompt leader-login \[TIMEOUT\] from dk-watch: login-reviewer-b 逾時$' "$HERDR_STUB_LOG"
@@ -421,13 +421,13 @@ redispatched() { # 領導派了複看，然後過了 25 分鐘
   redispatched
   printf 'status: done\nnotes: 第二輪也看完了\n' > "$d/state/reviewer-b.md"
   dk-watch --once
-  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
 }
 
 @test "沒被重新指派過的 reviewer：首輪的 done 照樣擋住逾時" {
   neutral_screen; reviewer_row "$old"; printf 'status: done\n' > "$d/state/reviewer-b.md"
   dk-watch --once
-  ! grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
+  refute_grep -q 'TIMEOUT' "$HERDR_STUB_LOG"
 }
 
 @test "上一輪的 .timeout 已 delivered，複看再卡住仍會重新報一次" {
