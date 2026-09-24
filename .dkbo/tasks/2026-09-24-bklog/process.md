@@ -72,3 +72,4 @@
 2026-09-24T16:02 wave 2 耗時 30m（dev 15m、審查 6m）
 2026-09-24T16:02 commit d85111f wave 2
 2026-09-24T16:42 gate3 approved (人：合併)
+2026-09-24T16:42 task-close merged 8dc8442

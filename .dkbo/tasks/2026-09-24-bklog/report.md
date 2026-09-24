@@ -1,5 +1,5 @@
 # BACKLOG A–C 清理 結案
-結果：merged   分支：dk/bklog   波數：2（波 1 實作＋文件 4 人、波 2 整枝評議修復 3 人）
+結果：merged 8dc8442   分支：dk/bklog   波數：2（波 1 實作＋文件 4 人、波 2 整枝評議修復 3 人）
 ## 完成
 - AC1–AC19 全數達成（reviewer-a 逐條驗過，見 `state/reviewer-a.report.md`）：dk-watch 對 working 的 reviewer 不熔斷、dev／qa 閒置逾時提醒、`dk-kind down`、審查補派別名累加、領導→員工訊息背景送（含 FIFO 與 `undelivered` process 行）、重派已交付 dev 會清 latch 重新聚合、`dk-process` 拒收格式錯的 minor 行、`dk-brief-check` 無主測試 WARN／欄數閘／契約 `@波N`、跳脫感知切欄、`--run` 開在當下 workspace、state 行數規則、PROTOCOL／LEADER／SKILL／README 三份／CHANGELOG 0.16.0／VERSION，BACKLOG 刪 17 列。
 - 範圍外順修：`lib/repos.sh` 的 `dk_glob_check` 在 pipefail 下 SIGPIPE 偶發誤判（base 就有，實測 3000 次 20 次）。
@@ -39,8 +39,8 @@
 任務 2026-09-24-bklog
 | 階段 | 開始 | 結束 | 時長 | dev | 審查 |
 |---|---|---|---|---|---|
-| 任務 | 2026-09-24T08:06 | 2026-09-24T16:42 | 516m（進行中） | — | — |
+| 任務 | 2026-09-24T08:06 | 2026-09-24T16:42 | 516m | — | — |
 | 計畫 | 2026-09-24T08:06 | 2026-09-24T08:44 | 38m | — | — |
 | 波 1 | 2026-09-24T14:32 | 2026-09-24T15:30 | 58m | 33m | 22m |
 | 波 2 | 2026-09-24T15:32 | 2026-09-24T16:02 | 30m | 15m | 6m |
-| 結案 | 2026-09-24T16:02 | — | — | — | — |
+| 結案 | 2026-09-24T16:02 | 2026-09-24T16:42 | 40m | — | — |
