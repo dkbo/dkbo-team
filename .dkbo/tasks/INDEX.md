@@ -9,4 +9,4 @@
 | 2026-09-24 | 測試可信度 | task | done | merged d887626 |
 | 2026-09-24 | BACKLOG A–C 清理 | task | done | merged 8dc8442 |
 | 2026-09-24 | BACKLOG 剩餘六條（測試與守望） | task | done | merged 82bd82b |
-| 2026-09-25 | dk-status --json（dashboard 資料出口） | task | running | — |
+| 2026-09-25 | dk-status --json（dashboard 資料出口） | task | done | merged e99d452 |
