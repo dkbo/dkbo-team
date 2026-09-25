@@ -6,3 +6,8 @@ example/node_modules/
 .superpowers/
 .claude/worktrees/
 docs/
+# 原始碼倉自裝 dkbo 的產物（.dkbo/install.sh 產生；本倉不發佈這些）
+.claude/skills/
+.agents/
+AGENTS.md
+CLAUDE.md
