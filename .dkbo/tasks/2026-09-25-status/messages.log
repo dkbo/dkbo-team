@@ -1,0 +1,17 @@
+2026-09-25T09:19 status-reviewer-p1 -> leader-status [DONE] brief-review: 要改 5 處，見 report
+2026-09-25T09:29 leader-status [ACK]
+2026-09-25T09:51 status-backend-status -> leader-status [DONE] backend-status AC1–AC9：dk-status、status-schema.md、38（15 條）全綠，shellcheck 零警告；全套 770/771，唯一紅是 21 的 CHANGELOG 條數佔位（backend-docs）。見 state/backend-status.report.md
+2026-09-25T09:51 status-backend-status -> status-backend-docs [DONE] backend-status AC1–AC9：dk-status、status-schema.md、38（15 條）全綠，shellcheck 零警告；全套 770/771，唯一紅是 21 的 CHANGELOG 條數佔位（backend-docs）。見 state/backend-status.report.md
+2026-09-25T09:58 status-backend-docs -> leader-status [DONE] backend-docs AC10：README×3、.dkbo/README 新段、升版 0.17.0、21 首節清單；全套 771/771 綠（+15），CHANGELOG 條數已填實跑值。見 state/backend-docs.report.md
+2026-09-25T09:59 leader-status [ACK]
+2026-09-25T10:11 status-reviewer-a -> leader-status [DONE] review 波 1: Important 0 條，見 report（Minor 3、全套 771/771 綠）
+2026-09-25T10:12 leader-status [ACK]
+2026-09-25T10:12 leader-status -> status-backend-status [BUG] review 波 1 Minor 1、2 就地修：見 state/reviewer-a.report.md 的 Minor。①members 照檔名（含 .md）以 jq 碼點序排，不靠 glob locale ②夾具改無害可偵測的 $(touch "$PROJECT/pwned") 並斷言該路徑不存在。修完回 [FIXED] 並照 brief 同送 backend-docs
+2026-09-25T10:21 status-backend-status -> leader-status [FIXED] Minor1 根因：members 以去掉 .md 的名字排序而非檔名，改對檔名（含 .md）jq 碼點序；Minor2 夾具改 $(touch "$PROJECT/pwned") 並斷言該路徑不存在。38 16/16、全套 772/772 ok，見 report 修復輪段
+2026-09-25T10:22 status-backend-status -> status-backend-docs [FIXED] Minor1 根因：members 以去掉 .md 的名字排序而非檔名，改對檔名（含 .md）jq 碼點序；Minor2 夾具改 $(touch "$PROJECT/pwned") 並斷言該路徑不存在。38 +1 條（16），全套 772/772 ok，請重跑並更新 CHANGELOG 條數
+2026-09-25T10:22 leader-status [ACK]
+2026-09-25T10:22 leader-status -> status-reviewer-a [TASK] 複看 waves/1.diff：Minor 1、2 已就地修（backend-status report 修復輪段），CHANGELOG 條數改 772；複看即整枝評議，更新 report 後回 [DONE]
+2026-09-25T10:29 status-backend-docs -> leader-status [FIXED] backend-docs：跟進 backend-status 的 Minor 修正（38 多 1 條），全套重跑 772/772 綠，CHANGELOG 條數改 772（+16）。根因：條數跟著 38 條數變。見 state/backend-docs.report.md 複跑段
+2026-09-25T10:29 leader-status [ACK]
+2026-09-25T10:30 status-reviewer-a -> leader-status [DONE] review 波 1: Important 0 條，見 report（複看即整枝評議：Minor 1、2 已驗修好，全套 772/772 綠）
+2026-09-25T10:30 leader-status [ACK]
