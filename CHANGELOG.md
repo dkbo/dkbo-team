@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.17.0 — 2026-09-25
+
+- feat(status): 新增唯讀指令 `dk-status`，給獨立 repo 的 dkbo-team-dashboard 讀任務記憶，dashboard 不再直接解析 markdown。兩種模式：`dk-status --json` 印 list 文件（`schema_version`、`dkbo_version`、`generated_at`、`kinds_down`、`tasks`；`tasks` 依資料夾名升冪，每筆是任務摘要：狀態、分支、worktree、任務 tab、目前波次、計畫與已關閉的波數、建立／關卡①／結案／最後更新時間、`.panes` 列數與 ruling、`[自主]` ruling、Minor、`[UNDELIVERED]`、`[ESCALATE]` 計數）；`dk-status --json <任務>` 印 detail 文件（`<任務>` 收資料夾名或短名，短名取日期最晚的那個，規則同 `dk-timeline`），在摘要之外加 `repos`、`brief`（目標、驗收標準與勾選、所有權、波次表）、`waves`（每波開波／dev 完成／派審／裁定／關閉時間、測試原文與 `tests_ok`、commits）、`members`（state 各鍵）、`panes`、`rulings`、`events`、`messages` 與 `skipped_lines`。stdout 是單行 JSON（一律由 jq 產生），exit 0／1（找不到任務，stderr `dk: no task '<x>'`）／2（用法錯，stderr `dk-status: 目前只支援 --json（用法：dk-status --json [<任務>]）`）。唯讀：不寫、不建、不刪任何檔，不呼叫 herdr、不看 session 綁定，在 herdr 外（`HERDR_ENV`、`HERDR_PANE_ID` 都 unset）照樣成功；`kinds_down` 只列未過期的列（經 `dk_kinds_down_rows`）。任務目錄缺檔時對應欄位給 `null` 或 `[]`，時間戳不合法的 process／messages 行與解析不出寄件人或類型的 messages 行略過、計進 `skipped_lines`。`schema_version` 是 1，相容規則：只加欄位不升 `schema_version`，改名、刪欄、改型別、改語意才升，消費端遇到不認識的欄位要忽略。不做：用量、逐字稿、herdr 即時狀態、人讀輸出、雜務、所有權對照實際 diff。
+- docs(status): 新增 `.dkbo/status-schema.md`，列出 list 與 detail 的每一個鍵（型別、可否為 null、來源檔、一句說明）與相容規則，並寫明 `kinds_down[].until` 是本地時間（跨時區用 `until_epoch`）、messages 內文的換行續行會計進 `skipped_lines.messages`、閘門結果去 `events[]` 的 `wave-close`、`violation`、`unreported`、`review` 找。
+- docs(readme): 三份 README 的指令表（`.dkbo/README.md` 是「日常使用」段）各加 `dk-status --json [<任務>]` 一列，`.dkbo/README.md` 另加「給 dashboard 讀的 JSON」一段（兩種用法、不呼叫 herdr、相容規則、指向 `status-schema.md`）。
+- test: 新增 `tests/unit/38_status.bats` 守 AC1–AC10（介面與 exit 碼、list／detail 頂層鍵、欄位來源、缺檔容錯、JSON 特殊字元逐字取回、唯讀、schema 文件反向防漂移、list 不逐行叫 jq、三份 README 提到 `dk-status`）；`21_version` 首節清單換成 0.17.0 的條目。
+- 測試：772 bats（+16；新增 `38_status` 16 條：AC1 介面兩條、AC2 兩條、AC3、AC4 四條（含 members 依檔名碼點排序）、AC5 兩條（含檔尾沒有換行）、AC6、AC7、AC8、AC9、AC10）；shellcheck 零警告，並由 `37_shellcheck` 守。
+- 升級：多一個 bin（`dk-status`）與一份文件（`status-schema.md`），`roles/` 不受影響；沒有新 settings 鍵、新 `.task.env` 鍵、新依賴、新 lib、新 skill。
+
 ## 0.16.0 — 2026-09-24
 
 - feat(watch): reviewer 逾時時若 `agent_status` 仍是 `working`，不再熔斷它的 kind（不寫 `DK_KIND_DOWN`、不寫專案層 kinds-down），改推一次 `[TIMEOUT] from dk-watch: <agent> 逾時但仍在工作（未熔斷）`、process 記 `timeout <agent> working (no kind down)`，同一輪只推一次；它不再 working 且仍未交，才走既有的逾時熔斷；`agent_status` 拿不到照舊熔斷。依據：tasktab 整枝評議時 claude L 檔 reviewer 正在寫 report 就被判逾時，codex 與 agy 已先熔斷，一下子三個 kind 全倒。

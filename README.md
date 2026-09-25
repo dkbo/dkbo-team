@@ -4,7 +4,7 @@
 
 以 herdr 為底的多模型 AI 開發團隊套件。一位領導（Claude Code）在主 pane 讀需求、寫 brief、拆波、派工、裁定；員工（`claude` / `codex` / `agy`）各佔一個 pane 實作、測試、審查、互相傳訊。所有記憶都是小型 markdown，領導失憶可一鍵恢復。整個套件就是一個可攜目錄 `.dkbo/`，複製進任何 git 專案即可用。
 
-- 目前版本：`.dkbo/VERSION`（0.16.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
+- 目前版本：`.dkbo/VERSION`（0.17.0），變更紀錄見 [CHANGELOG.md](CHANGELOG.md)
 - Repo：https://github.com/dkbo/dkbo-team
 - 安裝、更新與疑難排解的完整手冊：**[.dkbo/README.md](.dkbo/README.md)**
 
@@ -52,7 +52,7 @@
 ```bash
 test "$HERDR_ENV" = 1 || { echo "不在 herdr 內"; exit 1; }
 git status --porcelain | grep -q . && { echo "工作樹不乾淨，先 commit"; exit 1; }
-VER=v0.16.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.17.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
@@ -91,6 +91,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
 | `dk-wave-close` | 四道閘後關 pane，並在 worktree 內 commit 這一波 |
 | `dk-process` / `dk-resume` | 記事件；印恢復包（brief、本波、裁定、未處理訊息，含任務／本波已進行時長與每位員工等了幾分鐘） |
 | `dk-timeline` | 只讀 process.md 算整張時間表（任務、計畫、每波的 dev 與審查、結案），結案時由 `dk-task-close` 附進 report.md |
+| `dk-status --json [<任務>]` | 唯讀輸出任務記憶的 JSON 給 dashboard（不帶任務印全部任務摘要，帶任務印單一任務詳情；不呼叫 herdr、不寫任何檔），schema 見 `.dkbo/status-schema.md` |
 | `dk-task-close` | 合併回主分支、清 worktree、INDEX 記 done；任務 tab 不自動關（最後一行印 `herdr tab close <id>`，看完 report 自己關） |
 | `dk-chore` / `dk-chore-close` | 派與收一件雜務 |
 | `dk-chore-tidy` | 雜務檔歸位到日期資料夾、`messages.log` 歸檔（沒有雜務在跑時） |
