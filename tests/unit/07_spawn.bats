@@ -308,3 +308,16 @@ hold_panes_lock() {
   [ "$(grep -c '^login-backend ' "$d/.panes")" -eq 1 ]
   refute_grep -q "^login-backend $old " "$d/.panes"; grep -q "^pane close $old$" "$HERDR_STUB_LOG"
 }
+
+@test "--model 只換模型、effort 照檔位，並記進 process.md" {
+  run dk-spawn frontend cart --tier S --model sonnet; [ "$status" -eq 0 ]
+  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model sonnet --effort low ' "$HERDR_STUB_LOG"
+  grep -q 'spawn login-frontend-cart (claude S) override-model sonnet' "$d/process.md"
+}
+
+@test "--model 遇到該 kind 沒有的模型就死，不碰 herdr；不帶值也死" {
+  run dk-spawn frontend cart --model gpt-5.5; [ "$status" -eq 1 ]
+  [[ "$output" == *"unknown model 'gpt-5.5'"* ]]
+  run grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$status" -ne 0 ]
+  run dk-spawn frontend cart --model; [ "$status" -eq 1 ]
+}
