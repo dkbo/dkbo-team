@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.18.0 — 2026-10-01
+
+- feat(spawn): `dk-spawn` 新增 `--model M` 與 `--effort E`，各換角色檔位 spec 的一半，沒給的那半照 `--tier`（`--tier S --model sonnet --effort medium` → sonnet/medium）；與 `--kind` 併用時換的是該 kind 的 `KIND_DEFAULT_TIERS`。模型與 effort 照舊由 `dk_kind_args` 對該 kind 的 `KIND_MODEL_EFFORTS` 驗，不合法在開 pane 前就死；不帶值也死。process 的 spawn 行照實記本來的檔位，尾端加 `override-model <M>`／`override-effort <E>`（`(kind tier)` 格式不變，`dk-watch` 照樣讀得到 kind）；`--handoff` 的 ruling 一併記換成的模型與 effort。依據：Sonnet 5.5 更新後 AA 的 sonnet/medium（41 分、$0.59、總回應 6.8s）與 S 檔的 opus/low（42 分、$0.55、20.4s）打平而快三倍，要能不改角色檔就實跑比較。
+- docs(run): run SKILL 派工那一步補 `--model`／`--effort` 用法（`--tier` 永遠填這份工作本來的檔位），並規定試跑別的組合時成員交付後記 `trial: <模型>/<effort> 替 <原 spec> — <成員> 返工 N 次、審查 Important N 條`，累積兩三筆再決定改不改 `KIND_DEFAULT_TIERS`。
+- docs(kind): `kinds/claude.sh` 的註解換成 Sonnet 5.5 更新後的 AA 數據（S／M／L 三段的分數、每題成本、總回應時間），舊的 sonnet/low 24 分作廢；`KIND_DEFAULT_TIERS` 不變，S 檔先實跑再換。
+- test: `tests/unit/07_spawn.bats` 新增 4 條（`--model`、`--effort` 各一條換值與 process 紀錄、各一條不合法與不帶值即死且不碰 herdr）；`21_version` 首節清單換成 0.18.0 的條目。
+- 測試：776 bats（+4；`07_spawn` 4 條）；shellcheck 零警告，並由 `37_shellcheck` 守。
+- 升級：只動 `bin/dk-spawn`、`kinds/claude.sh`、`skills/run/SKILL.md`，`roles/` 不受影響；沒有新 settings 鍵、新 `.task.env` 鍵、新依賴、新 lib、新 skill。
+
 ## 0.17.0 — 2026-09-25
 
 - feat(status): 新增唯讀指令 `dk-status`，給獨立 repo 的 dkbo-team-dashboard 讀任務記憶，dashboard 不再直接解析 markdown。兩種模式：`dk-status --json` 印 list 文件（`schema_version`、`dkbo_version`、`generated_at`、`kinds_down`、`tasks`；`tasks` 依資料夾名升冪，每筆是任務摘要：狀態、分支、worktree、任務 tab、目前波次、計畫與已關閉的波數、建立／關卡①／結案／最後更新時間、`.panes` 列數與 ruling、`[自主]` ruling、Minor、`[UNDELIVERED]`、`[ESCALATE]` 計數）；`dk-status --json <任務>` 印 detail 文件（`<任務>` 收資料夾名或短名，短名取日期最晚的那個，規則同 `dk-timeline`），在摘要之外加 `repos`、`brief`（目標、驗收標準與勾選、所有權、波次表）、`waves`（每波開波／dev 完成／派審／裁定／關閉時間、測試原文與 `tests_ok`、commits）、`members`（state 各鍵）、`panes`、`rulings`、`events`、`messages` 與 `skipped_lines`。stdout 是單行 JSON（一律由 jq 產生），exit 0／1（找不到任務，stderr `dk: no task '<x>'`）／2（用法錯，stderr `dk-status: 目前只支援 --json（用法：dk-status --json [<任務>]）`）。唯讀：不寫、不建、不刪任何檔，不呼叫 herdr、不看 session 綁定，在 herdr 外（`HERDR_ENV`、`HERDR_PANE_ID` 都 unset）照樣成功；`kinds_down` 只列未過期的列（經 `dk_kinds_down_rows`）。任務目錄缺檔時對應欄位給 `null` 或 `[]`，時間戳不合法的 process／messages 行與解析不出寄件人或類型的 messages 行略過、計進 `skipped_lines`。`schema_version` 是 1，相容規則：只加欄位不升 `schema_version`，改名、刪欄、改型別、改語意才升，消費端遇到不認識的欄位要忽略。不做：用量、逐字稿、herdr 即時狀態、人讀輸出、雜務、所有權對照實際 diff。

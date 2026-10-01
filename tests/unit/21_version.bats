@@ -43,9 +43,9 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  for w in 'feat(status)' 'dk-status --json' 'dk-status --json <任務>' '唯讀' '不呼叫 herdr' \
-           'schema_version' '只加欄位不升' 'status-schema.md' 'kinds_down' 'skipped_lines' \
-           'docs(readme)' '給 dashboard 讀的 JSON' 'test:' '38_status' '測試：'; do
+  for w in 'feat(spawn)' '--model M' '--effort E' 'override-model' 'override-effort' \
+           'dk_kind_args' 'docs(run)' 'trial:' 'docs(kind)' 'KIND_DEFAULT_TIERS' \
+           'test:' '07_spawn' '測試：'; do
     [[ "$sec" == *"$w"* ]] || { echo "CHANGELOG 首節缺 $w"; false; }
   done
   # 測試條數是實跑值，不留 N 佔位
