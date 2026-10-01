@@ -63,7 +63,7 @@ teardown() { teardown_project; }
   [ "$(grep -c 'UNDELIVERED' "$DK_ROOT/tasks/$(date +%F)-login/messages.log")" -eq 1 ]
 }
 
-# panova2/sportswitch 實跑：13 筆訊息 12 筆 UNDELIVERED。兩個獨立的洞，兩個方向各壞一邊。
+# 下游專案 A 的 sw 任務實跑：13 筆訊息 12 筆 UNDELIVERED。兩個獨立的洞，兩個方向各壞一邊。
 @test "leader addressing an employee by its short role name reaches the registered agent" {
   # 領導照 PROTOCOL 打 `dk-msg reviewer-a`，但 herdr 裡註冊的是 login-reviewer-a：
   # 實跑中三筆 [TASK] 就這樣全滅，reviewer-b 整場沒收到工作還被記成「codex down」。
@@ -146,7 +146,7 @@ dev_panes() { printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2
 }
 
 @test "dev 送給 qa 的 [DONE] 改背景送：當場返回，之後仍會送達並記 log" {
-  # qa 忙著時前景等它閒下來，dev 的 pane 會卡 12–30 分（panova autofold、gamemore 實測）。
+  # qa 忙著時前景等它閒下來，dev 的 pane 會卡 12–30 分（下游專案 A 的 autofold、下游專案 B 實測）。
   d="$DK_ROOT/tasks/$(date +%F)-login"; dev_panes "$d"
   printf 'status: done\n' > "$d/state/backend.md"
   DK_AGENT=login-backend run dk-msg login-qa "[DONE] API 好了，可以驗"

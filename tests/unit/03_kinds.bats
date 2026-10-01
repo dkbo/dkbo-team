@@ -96,7 +96,7 @@ refute_quota() { if quota_hits "$@"; then echo "$1 的額度式子誤中: $2"; f
 }
 
 # --- codex 的「Approaching rate limits / Switch model」選單停住等人按 Enter -------------
-# 樣本是 gamemore 實跑 herdr agent read 的原文。窄 pane 會把最後一行截斷，所以整句
+# 樣本是下游專案 B 實跑 herdr agent read 的原文。窄 pane 會把最後一行截斷，所以整句
 # `Press enter to confirm` 認不得 24、64 兩份；式子只收 `Press enter to` 這段前綴。
 block_hits() { printf '%s' "$2" | grep -qiE "$(dk_kind_re "$1" block)"; }
 # `! cmd` 在 bats 的 @test 函式裡不是可靠的否定斷言：POSIX 規定以 `!` 開頭的管線豁免
@@ -119,7 +119,7 @@ refute_block() { if block_hits "$@"; then echo "$1 的審批式子誤中: $2"; f
 # --- AC4（0.12.0）：codex 的快到額度選單不再誤判成撞額度 -----------------------
 # KIND_QUOTA_RE 拿掉了第 3 個分支 `rate limit`——它同時命中選單標題 `Approaching rate
 # limits` 與選單第 3 項的說明文字 `Hide future rate limit reminders`，跟 claude.sh 的
-# KIND_QUOTA_RE 第 2 個分支是同一個字串。三份樣本取自 panova headermerge 規劃領導 session
+# KIND_QUOTA_RE 第 2 個分支是同一個字串。三份樣本取自下游專案 A 的 headermerge 規劃領導 session
 # 630f5371 的 spike/segs_preview.txt（樣本 2.2＝寬 pane 完整選單，樣本 24/64＝窄 pane 截斷
 # 選單，已用在上面兩個測試）；第三份「上方另有耗盡訊息」的選單目前沒有實測過的合併原始截圖，
 # 用已各自實測過的耗盡片語（03_kinds.bats 既有斷言）疊在同一份選單原文之上構造。

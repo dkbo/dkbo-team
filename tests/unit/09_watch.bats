@@ -101,7 +101,7 @@ wpid() { sed -n 's/^DK_WATCH_PID="\([0-9]*\)"$/\1/p' "$d/.task.env"; }
 }
 
 # --- AC1/AC2/AC3: agent_status 前提 —— working 時不做畫面判定，狀態未知時照舊判定 ---
-# panova2/highfix 誤判的根因：正在工作時畫面上的字（自己寫的測試字串、殘留輸出）被
+# 下游專案 A 的 highfix 任務誤判的根因：正在工作時畫面上的字（自己寫的測試字串、殘留輸出）被
 # 當成撞額度或卡審批。agent_status 是比畫面更可信的第一訊號，working 就不必看畫面。
 
 screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$1" > "$HERDR_STUB_RESPONSES/agent_read.json"; }
@@ -314,7 +314,7 @@ reviewer_row() { printf 'login-reviewer-b wC:p4 %s review 1 3\n' "$1" >> "$d/.pa
   [ "$(grep -c 'herdr-degraded' "$d/process.md")" -le 2 ]   # 每個行程樹一次
 }
 
-# panova2/sportswitch：領導 pane 沒被註冊成 leader-<short>，守望的三個出口全部靜默失效 ——
+# 下游專案 A 的 sw 任務：領導 pane 沒被註冊成 leader-<short>，守望的三個出口全部靜默失效 ——
 # reviewer-b 逾時的 .timeout 標記躺在磁碟上沒有 delivered，領導是自己發現它沒動的。
 @test "blocked notification falls back to the leader pane id when leader-<short> is gone" {
   mkdir -p "$d/.blocked"; echo 0 > "$d/.blocked/login-qa"

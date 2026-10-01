@@ -75,7 +75,7 @@ teardown() { teardown_project; }
 
 @test "乾淨檢查只看已追蹤檔：未追蹤檔不算髒（.dkbo/ 不進版控的專案）" {
   # 領導 2026-09-20T09:41 ruling：員工的 worktree 只看得到 HEAD，未追蹤檔本來就不影響它；
-  # 照 AC4 的字面把未追蹤也算髒，panova 那種 .dkbo/ 不進版控的專案每次 --run 都會被自己擋下。
+  # 照 AC4 的字面把未追蹤也算髒，下游專案 A 那種 .dkbo/ 不進版控的專案每次 --run 都會被自己擋下。
   setup_multirepo                      # $PROJECT 的 .dkbo/ 自始至終是未追蹤的
   echo junk > "$REPO_API/untracked.txt"
   DK_REPOS="main=. api=$REPO_API shared=$REPO_SHARED"

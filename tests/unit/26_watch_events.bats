@@ -20,7 +20,7 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   [ "$status" -eq 0 ]; [ -n "$output" ]          # 未知 kind 仍要有式子，不能空手而回
 }
 
-# --- tick：畫面成為 blocked 的第二訊號（panova2 的 agy） ---
+# --- tick：畫面成為 blocked 的第二訊號（下游專案 A 的 agy） ---
 
 @test "審批 UI 在畫面上、herdr 卻回 idle：仍偵測得到" {
   screen 'Requesting permission for:\n rg foo src\nRun this command?\n> 1. Yes'
@@ -116,7 +116,7 @@ screen() { printf '{"id":"cli:agent:read","result":{"read":{"text":"%s"}}}\n' "$
   [ ! -f "$d/.blocked/login-qa.limit" ]
 }
 
-# --- timeout：卡審批不該被當成 kind 掛了（panova2 誤熔斷 agy） ---
+# --- timeout：卡審批不該被當成 kind 掛了（下游專案 A 誤熔斷 agy） ---
 
 @test "reviewer 逾時但畫面是審批 UI：報 BLOCKED、不熔斷 kind" {
   printf 'login-reviewer-c wC:p4 %s review 1 3\n' "$(( $(date +%s) - 1500 ))" > "$d/.panes"

@@ -35,7 +35,7 @@ if [ "${HERDR_STUB_FAIL:-}" = "$cmd $sub" ]; then
   echo '{"error":{"code":"stubbed_failure"}}' >&2; exit 1
 fi
 # HERDR_STUB_MISSING: space-separated agent targets herdr does not know. Real herdr answers
-# agent_not_found with a non-zero rc, which is what made every dk-msg in the sportswitch task
+# agent_not_found with a non-zero rc, which is what made every dk-msg in the sw task
 # undeliverable; without this the stub answers every target and no test can see it.
 for m in ${HERDR_STUB_MISSING:-}; do
   if [ "$cmd" = agent ] && [ "$m" = "${3:-}" ]; then
@@ -43,7 +43,7 @@ for m in ${HERDR_STUB_MISSING:-}; do
   fi
 done
 # 真 herdr 的 rename 會改變之後 agent get 讀到的名字。stub 不模擬這一步的話，「rename 回 rc=0
-# 卻沒生效」與正常長得一模一樣，dk-task-new 的守衛就無從測起 —— sportswitch 整場訊息全滅正是
+# 卻沒生效」與正常長得一模一樣，dk-task-new 的守衛就無從測起 —— sw 整場訊息全滅正是
 # 卡在這個分不出來的縫。HERDR_STUB_RENAME_NOOP=1 演的就是那種靜默失敗。
 if [ "$cmd" = agent ] && [ "$sub" = rename ] && [ -z "${HERDR_STUB_RENAME_NOOP:-}" ]; then
   n="${4:-}"

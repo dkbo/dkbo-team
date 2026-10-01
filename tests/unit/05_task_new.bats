@@ -102,8 +102,8 @@ teardown() { teardown_project; }
 }
 
 @test "task-new records a rename that reported success but never took effect" {
-  # panova2/sportswitch：領導 pane 是人手開的 claude，21:29 的 rename 回了 rc=0 卻沒生效，
-  # process.md 因此一片乾淨 —— 而整場 12 筆訊息全部投不到 leader-sportswitch。
+  # 下游專案 A 的 sw 任務：領導 pane 是人手開的 claude，21:29 的 rename 回了 rc=0 卻沒生效，
+  # process.md 因此一片乾淨 —— 而整場 12 筆訊息全部投不到 leader-sw。
   # 只看 exit code 的守衛看不見這種靜默失敗，要把名字讀回來比對。
   HERDR_STUB_RENAME_NOOP=1 run dk-task-new login x
   [ "$status" -eq 0 ]
