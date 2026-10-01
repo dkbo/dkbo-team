@@ -321,3 +321,16 @@ hold_panes_lock() {
   run grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$status" -ne 0 ]
   run dk-spawn frontend cart --model; [ "$status" -eq 1 ]
 }
+
+@test "--effort 只換 effort；與 --model 併用時檔位照實記" {
+  run dk-spawn frontend cart --tier S --model sonnet --effort medium; [ "$status" -eq 0 ]
+  grep -q -- '--model sonnet --effort medium ' "$HERDR_STUB_LOG"
+  grep -q 'spawn login-frontend-cart (claude S) override-model sonnet override-effort medium' "$d/process.md"
+}
+
+@test "--effort 遇到該模型不收的 effort 就死；不帶值也死" {
+  run dk-spawn frontend cart --effort ultra; [ "$status" -eq 1 ]
+  [[ "$output" == *"unknown effort 'ultra'"* ]]
+  run grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$status" -ne 0 ]
+  run dk-spawn frontend cart --effort; [ "$status" -eq 1 ]
+}
