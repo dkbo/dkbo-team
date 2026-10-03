@@ -359,6 +359,14 @@ all_dev_done() { printf 'status: done\n' > "$d/state/backend.md"; printf 'status
   grep -q '^delivered$' "$d/.blocked/wave-1.devdone"
 }
 
+@test "型態「待命」的 dev 不算進聚合：其他 dev 交齊就推，訊息與 process 標出待命的人" {
+  fixture_brief "$d"; dev_wave; printf 'status: done\n' > "$d/state/backend.md"; printf 'status: working\n' > "$d/state/frontend.md"
+  sed -i 's/^| 1 | 實作 | qa | 驗 API | S | 全過 | |$/| 1 | 實作 | qa | 驗 API | S | 全過 | |\n| 1 | 待命 | frontend | 只修 qa 的 BUG | M | qa 的 BUG 全 FIXED | |/' "$d/brief.md"
+  grep -q '^| 1 | 待命 | frontend |' "$d/brief.md"
+  run dk-watch --once; [ "$status" -eq 0 ]
+  grep -q '^agent prompt leader-login \[DONE\] from dk-watch: wave 1 dev 全員完成（1 位：backend；待命 frontend 不等）→ dk-review-pack 1$' "$HERDR_STUB_LOG"
+  grep -q ' dev-done wave 1 (1: backend) standby: frontend$' "$d/process.md"
+}
 @test "聚合只推一次" {
   dev_wave; all_dev_done
   dk-watch --once; dk-watch --once
@@ -646,6 +654,13 @@ idle_msg() { echo "^agent prompt leader-login \\[TIMEOUT\\] from dk-watch: $1 �
   [ "$(grep -c ' idle login-backend 25min$' "$d/process.md")" -eq 1 ]
   grep -q "^$old\$" "$d/.blocked/login-backend.idle"
   grep -q '^DK_KIND_DOWN=""$' "$d/.task.env"; [ ! -f "$DK_ROOT/.sessions/kinds-down" ]
+}
+@test "型態「待命」的 dev 閒著等 qa 不推閒置提醒（對照上一條：同樣條件的實作 dev 會推）" {
+  fixture_brief "$d"; sed -i 's/^| 1 | 實作 | backend | POST \/login |/| 1 | 待命 | backend | POST \/login |/' "$d/brief.md"
+  grep -q '^| 1 | 待命 | backend |' "$d/brief.md"
+  idle_wave
+  dk-watch --once
+  refute_grep 'login-backend 閒置' "$HERDR_STUB_LOG"; refute_grep -q ' idle login-backend' "$d/process.md"
 }
 @test "AC2: dev 還沒全員完成時 qa 閒置超過門檻不推" {
   idle_wave

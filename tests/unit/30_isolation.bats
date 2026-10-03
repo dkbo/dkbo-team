@@ -35,7 +35,7 @@ teardown() { teardown_project; rm -rf "$BAIT"; }
 @test "setup_project 之後環境裡只剩 harness 自己設的 DK_*" {
   leaked=""
   for v in $(compgen -v | grep '^DK_' || true); do
-    case "$v" in DK_ROOT|DK_NO_WATCH) ;; *) leaked="$leaked $v";; esac
+    case "$v" in DK_ROOT|DK_NO_WATCH|DK_ACCOUNT_DIR) ;; *) leaked="$leaked $v";; esac
   done
   [ -z "$leaked" ] || { echo "洩漏的變數:$leaked" >&2; false; }
 }

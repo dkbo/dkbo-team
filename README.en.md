@@ -4,7 +4,7 @@
 
 A multi-model AI development team packaged as one portable directory, `.dkbo/`, built on top of herdr. One leader (Claude Code) sits in the main pane, reads the request, writes the brief, splits the work into waves, dispatches, and rules on escalations. Workers (`claude`, `codex`, `agy`) each get their own pane to implement, test, review, and message each other. Every piece of memory is a small markdown file, so a leader that loses its context recovers with one command. Copy `.dkbo/` into any git project and it works.
 
-- Current version: `.dkbo/VERSION` (0.18.1); history in [CHANGELOG.md](CHANGELOG.md)
+- Current version: `.dkbo/VERSION` (0.19.0); history in [CHANGELOG.md](CHANGELOG.md)
 - Repo: https://github.com/dkbo/dkbo-team
 - Full install, update and troubleshooting manual: **[.dkbo/README.md](.dkbo/README.md)** (Traditional Chinese)
 
@@ -52,7 +52,7 @@ Paste this into a Claude Code session running inside herdr at the project root:
 ```bash
 test "$HERDR_ENV" = 1 || { echo "not inside herdr"; exit 1; }
 git status --porcelain | grep -q . && { echo "working tree dirty, commit first"; exit 1; }
-VER=v0.18.1; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
+VER=v0.19.0; tmp=$(mktemp -d) && git clone -q --depth 1 --branch "$VER" https://github.com/dkbo/dkbo-team.git "$tmp" \
   && (cd "$tmp/.dkbo" && rm -rf tasks decisions.md PROJECT.md settings.env .sessions) \
   && cp -r "$tmp/.dkbo" ./.dkbo && rm -rf "$tmp"
 .dkbo/install.sh && git add -A && git commit -m "chore: add dkbo"
@@ -85,7 +85,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
 | `dk-task-new` / `dk-brief-check` | Create the task directory only (no worktree — `/dkbo-run` materializes it at handoff); mechanical brief check |
 | `dk-brief-review` | Before work starts, dispatch 1 to 3 reviewers to review the brief and the raw request (an AI gate, the second one before gate 1) |
 | `dk-wave-open N` / `dk-spawn <role>` | Open a wave and write member slices (`--refresh` re-derives every member's slice for wave N from the current brief and resets the wave timeout); open a worker pane and prompt it |
-| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <text>]` | List kinds tripped at the project level and their recovery time; clear the breaker for one kind; record by hand a quota exhaustion confirmed elsewhere (without `--until` it guesses now + 5 hours) |
+| `dk-kind [status]` / `dk-kind up <k>` / `dk-kind down <k> [--until YYYY-MM-DDTHH:MM] [--note <text>]` | List tripped kinds and their recovery time (this project's, plus account-level ones recorded by other projects on this machine); clear the breaker for one kind; record by hand a quota exhaustion confirmed elsewhere (without `--until` it guesses now + 5 hours) |
 | `dk-msg <target> "[TYPE] body"` | Wait until the target is idle, deliver, log to messages.log |
 | `dk-review-pack N` / `dk-review` | Build the diff pack; dispatch one to three reviewers |
 | `dk-wave-close` | Four gates, then close panes and commit the wave inside the worktree |

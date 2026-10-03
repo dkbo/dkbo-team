@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.19.0 — 2026-10-03
+
+- feat(procs): 新增 `lib/procs.sh`，收員工留下的 listen 行程。herdr 關 pane 只收前景行程，qa 用 nohup／& 起的 `vite preview` 會一直活著佔埠：下游專案 B 的 5174 被一支 9/25 的行程佔了八天，三個任務（兩個專案）的 brief 都撞上它。判斷「綁在某個 worktree 上」的依據：cwd 在 worktree 裡，或命令列寫著 worktree 路徑或它的 scratchpad 編碼（非英數字元換成 `-`）。只收 listen 中的行程；領導站在主樹，它起的 dev server 不算。listen 清單取自 `ss -ltnpH`，沒有 ss 就用 `lsof`，兩者都沒有就什麼都不做。
+  - `dk-wave-close` 關 pane 後收掉綁在本任務 worktree 上的 listen 行程，記 `reap <pid> port <p>`；`--no-worktree` 的任務（worktree 就是主樹）不收。
+  - `dk-task-close` 刪 worktree 前同樣收一次，記 `reap <pid> (<worktree>)`。
+  - `dk-wave-open`（含 `--refresh`）先收綁在本專案已刪除 worktree 上的孤兒，記 `reap orphan <pid> port <p> (<worktree>)`。明文路徑看 `.worktrees/` 之後第一段是否還在；scratchpad 編碼無法反解，改拿現存的 worktree 逐一編碼比對。接著檢查本波成員在獨佔資源欄宣告的 `port:N`，被佔用就 WARN（印出佔用的 pid、命令列與換埠步驟）並記 `port-busy <port> (<成員>) pid <pid>`，照樣開波。
+- feat(kind): kinds-down 多一份帳號層（`${DK_ACCOUNT_DIR:-$XDG_STATE_HOME/dkbo}/kinds-down`，預設 `~/.local/state/dkbo/`）。額度跟著 CLI 登入走：agy 在下游專案 A 撞了額度，下游專案 B 20 分鐘後照樣派 agy reviewer，空等到整波逾時才發現，這是第三次。`dk_kinds_down_set`（`dk-watch` 判熔斷、`dk-kind down` 都走它）同時寫專案層與帳號層，帳號層的任務名欄帶專案名（`<專案>/<任務>`）。`dk_kinds_down_rows` 合併兩層，每個 kind 只留一列、取較晚恢復的，專案層排前面；`dk-kind up` 兩層一起清。`dk-kind status`、`dk-resume`、`dk-status` 的 `kinds_down` 都讀合併後的結果。
+- feat(watch): 波次表的型態欄可寫 `待命`，給只修 qa 回報 BUG 的成員用。這種成員要等 qa 驗完才交得了件，算進 dev 聚合的話「dev 全員完成」會拖到 qa 結束才發，領導只能靠整波逾時醒來派審查（下游專案 B 的 tankart 波 3 空等 19 分鐘）。`dk-watch` 的聚合與閒置提醒都跳過待命成員：聚合訊息寫 `（N 位：…；待命 <成員> 不等）`，process 行尾加 ` standby: <成員>`。`dk-wave-close` 的 gate 0 照舊要求它 `status: done`。`lib/brief.sh` 新增 `dk_brief_wave_standby`。
+- feat(spawn): `dk-spawn` 新增兩道派工前檢查。
+  - 波次表成員手上的切片波號不是開著的那一波（或根本沒有開著的波）就拒絕，並指出該先 `dk-wave-open`。依據：tankart 波 4 開波失敗後，同一行的 dk-spawn 照跑，兩人拿到波 3 的切片。reviewer、計畫審查、雜務員工不吃波次切片，不受影響。
+  - 別名寫成 `<角色>-<別名>` 時，去掉重複的角色前綴並提醒。依據：`dk-spawn babylon babylon-hud` 的 state 名變成 `babylon-babylon-hud`，對不上切片。
+- feat(brief): `dk-brief-check` 新增三項檢查。
+  - qa 這類 group: review 的成員，可改欄可以寫 `—`（腳本與截圖放 scratchpad）；其他成員寫 `—` 照舊 FAIL。
+  - 可改欄的 glob 若在 brief 其他地方緊接著被寫成「占位／不得寫入」就 FAIL，並指出行號。依據：所有權閘只看 glob，擋不住照 glob 寫進 worktree 的人，tankart 的 qa 兩次把腳本寫進 `scripts/qa/<任務>/`。
+  - 同波 dev 工作量不均時 WARN：同波有 L 也有 S，或檔位不同、AC 數差 1.5 倍以上（且最多的至少 3 條）。工作量看難度欄的檔位，加上「做什麼」與「完成條件」兩欄提到的 AC 編號，範圍展開、重複不計；待命成員不算。另外，同一個角色在同一波拆成兩位，共用契約裡卻沒有它們之間的契約，也 WARN。拿六個已結案任務的 brief 回測，只有實際最快與最慢差 10 分鐘以上的波（13、23、29 分鐘）會提醒（13、23、29 分鐘，另一波是後來該寫成待命的那一波），全是 L 檔的波不吵。
+- feat(review): `dk-review-pack` 另寫 `waves/N.diff.sums`，每個變更檔一行，含 repo、檔名與 -U10 diff 的 cksum；`dk-review-pack N --sums` 只印、不寫。`dk-wave-close` 拿最後一份 sums 比對最終 diff：一樣記 `review-covered N`；審查後又改過、新增或還原的檔就列出來，記 `review-drift N: <檔…>`，不擋結波。沒有 sums 的舊差異包不比對。依據：下游專案 A 的 cuteui，reviewer 以為 qa 還在改而跳過 e2e，其實快照就是最終版，結案報告卻寫「沒有未經審查的波」。
+- docs: 以下文件同步本版的行為。
+  - `skills/run/SKILL.md`：開波時的孤兒收拾與 port-busy、開波失敗就停、待命成員不算進聚合、`review-drift` 怎麼處理。
+  - `skills/plan/SKILL.md`：qa 寫 `—`、不劃占位 glob、型態 `待命`、排波看最重的那位（拆人或分波的判準）。
+  - `roles/qa.md`：腳本放 scratchpad、自己起的 server 交件前要關。
+  - `roles/reviewer.md`：差異包裡 qa 的檔照樣審。
+  - `templates/brief.md`：型態欄的三種值。
+  - `LEADER.md`、`.dkbo/README.md`：帳號層熔斷。
+  - 兩份頂層 README 的 `dk-kind` 列。
+- test: 為本版的行為補測試。
+  - 新增 `tests/unit/39_procs.bats`（6 條，用 `exec -a` 起假的 listen 行程）。
+  - `07_spawn` +3、`09_watch` +2、`16_brief_check` +5、`19_review_pack` +3、`34_kind_down` +4。
+  - 新增 `tests/stub/ss`：單元測試不得看到開發機上真的 listen 行程。
+  - `helpers.bash` 的 `setup_project` 把 `DK_ACCOUNT_DIR` 與 `XDG_STATE_HOME` 指進夾具。
+  - `16_brief_check` 的 tab 格數那條改成只斷言格數 WARN，因為同角色拆五位另有新的 WARN。
+  - `30_isolation` 的白名單加 `DK_ACCOUNT_DIR`。
+  - `21_version` 首節清單換成 0.19.0 的條目。
+- 測試：799 bats（+23；`39_procs` 6、`07_spawn` 3、`09_watch` 2、`16_brief_check` 5、`19_review_pack` 3、`34_kind_down` 4）；shellcheck 零警告，並由 `37_shellcheck` 守。
+- 升級：多一個 lib（`lib/procs.sh`），`roles/qa.md` 與 `roles/reviewer.md` 各多一句。用 rsync 升級的專案若改過這兩份角色檔，要手動合併。另有一個新環境變數 `DK_ACCOUNT_DIR`，選填，給測試隔離用。沒有新的 settings 鍵、`.task.env` 鍵、依賴、skill。`ss`／`lsof` 兩者都沒有的機器，行程收拾不生效，其餘照舊。
+
 ## 0.18.1 — 2026-10-01
 
 - docs(anon): 出貨碼（`bin/`、`lib/`、`kinds/`、`skills/`、`settings.env` 與 seed 範本）、`tests/` 的註解、`decisions.md` 與本檔先前各版的條目，不再寫外部專案的名稱：改成「下游專案 A／B」，任務名裡帶專案名的改成 `sw`，`DK_REPOS` 範例改成 `../api-backend`、`../shared-lib`。事件、數字與根因的描述不變。依據：vendoring `lib/` 的下游 repo 會把這些名字一起帶出去。`.dkbo/tasks/` 的任務紀錄與舊 tag 不動。

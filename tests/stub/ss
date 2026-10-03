@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# ss 的替身：單元測試不得看到開發機上真的 listen 行程（lib/procs.sh 會收掉它們）。
+# $SS_STUB_LISTEN 指向的檔每行一組「PORT PID」，照 `ss -ltnpH` 的格式印出；沒設就什麼都不印。
+[ -n "${SS_STUB_LISTEN:-}" ] && [ -f "$SS_STUB_LISTEN" ] || exit 0
+while read -r port pid; do
+  [ -n "$pid" ] || continue
+  printf 'LISTEN 0      511        127.0.0.1:%s      0.0.0.0:*    users:(("node",pid=%s,fd=27))\n' "$port" "$pid"
+done < "$SS_STUB_LISTEN"

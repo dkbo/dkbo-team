@@ -284,3 +284,32 @@ future_ts() { # 分鐘數 → 從現在起算那一刻的本地 "YYYY-MM-DDTHH:M
   run dk-kind bogus; [ "$status" -eq 2 ]
   [[ "$output" == *"status"* ]]; [[ "$output" == *"up <kind>"* ]]; [[ "$output" == *"down <kind> [--until YYYY-MM-DDTHH:MM] [--note <文字>]"* ]]
 }
+
+# --- 帳號層：額度跟著 CLI 登入走，不跟著專案走 ------------------------------
+
+@test "帳號層：登記同時寫專案層與帳號層，帳號層的任務名帶專案名" {
+  e=$(( $(date +%s) + 3600 ))
+  dk_kinds_down_set agy "$e" exact 2026-10-03-cuteui login-reviewer-b 'Individual quota reached'
+  grep -q "^agy $e exact .* 2026-10-03-cuteui login-reviewer-b " "$(dk_kinds_down_file)"
+  grep -q "^agy $e exact .* $(basename "$PROJECT")/2026-10-03-cuteui login-reviewer-b " "$DK_ACCOUNT_DIR/kinds-down"
+}
+@test "帳號層：別的專案登記的熔斷，本專案讀得到（dk_kinds_down_rows、dk-kind status）" {
+  e=$(( $(date +%s) + 3600 )); mkdir -p "$DK_ACCOUNT_DIR"
+  echo "agy $e exact 2026-10-03T10:13 other/2026-10-03-cuteui other-reviewer-b quota" > "$DK_ACCOUNT_DIR/kinds-down"
+  [ ! -f "$(dk_kinds_down_file)" ]
+  [ "$(dk_kinds_down_rows | awk '{print $1}')" = agy ]
+  run dk-kind; [ "$status" -eq 0 ]; [[ "$output" == *"agy  down until"*"from other/2026-10-03-cuteui"* ]]
+}
+@test "帳號層：同一個 kind 兩邊都有時只印一列，取較晚恢復的；過期的不印" {
+  now=$(date +%s); mkdir -p "$DK_ACCOUNT_DIR" "$(dirname "$(dk_kinds_down_file)")"
+  printf 'agy %s exact t p/a x h\ncodex %s exact t p/a x h\n' "$((now+100))" "$((now-10))" > "$DK_ACCOUNT_DIR/kinds-down"
+  printf 'agy %s exact t a x h\n' "$((now+50))" > "$(dk_kinds_down_file)"
+  run dk_kinds_down_rows; [ "${#lines[@]}" -eq 1 ]; [[ "${lines[0]}" == "agy $((now+100)) "* ]]
+}
+@test "帳號層：dk-kind up 兩邊一起清" {
+  e=$(( $(date +%s) + 3600 ))
+  dk_kinds_down_set codex "$e" guess t a h
+  run dk-kind up codex; [ "$status" -eq 0 ]
+  [ -z "$(dk_kinds_down_rows)" ]
+  refute_grep -q '^codex ' "$DK_ACCOUNT_DIR/kinds-down"
+}

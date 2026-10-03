@@ -30,6 +30,9 @@ setup_project() {
   export PATH="$REPO_ROOT/tests/stub:$REPO_ROOT/tests/stub/cli:$PROJECT/.dkbo/bin:$PATH"
   export HERDR_ENV=1 HERDR_PANE_ID=wB:p1 HERDR_WORKSPACE_ID=wB HERDR_TAB_ID=wB:t1
   export DK_ROOT="$PROJECT/.dkbo"
+  # 帳號層 kinds-down（lib/kinds.sh）預設在 $XDG_STATE_HOME/dkbo：測試不得讀寫開發機那一份。
+  # XDG_STATE_HOME 也一併指進夾具 —— gate c 會剝掉 DK_*，剝掉之後還是落在夾具裡。
+  export DK_ACCOUNT_DIR="$PROJECT/.account-state" XDG_STATE_HOME="$PROJECT/.xdg-state"
   export DK_NO_WATCH=1   # unit tests do not launch the background watcher (Task 9 has one test that unsets this)
   cd "$PROJECT"
 }

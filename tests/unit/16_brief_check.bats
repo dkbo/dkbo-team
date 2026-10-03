@@ -47,7 +47,8 @@ teardown() { teardown_project; }
   for m in a b c d; do printf '| backend-%s | db/%s/** | — |\n' "$m" "$m" | sed -i '/^| qa | tests/r /dev/stdin' "$b"; done
   for m in a b c d; do printf '| 1 | 實作 | backend-%s | 表 | S | 過 | |\n' "$m" | sed -i '/^| 1 | 實作 | qa/r /dev/stdin' "$b"; done   # keep wave 1 rows contiguous
   run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" == *"WARN 波次表 1: dev 成員 5 位超過 tab 1 的 4 格"* ]]; [[ "$output" != OK ]]
-  echo 'DK_TAB1_SLOTS="6"' >> "$DK_ROOT/settings.env"; run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+  # 同一個 backend 角色拆成五位、彼此沒有契約，另有「同角色拆人」的 WARN（下面專門測）；這裡只看格數那條
+  echo 'DK_TAB1_SLOTS="6"' >> "$DK_ROOT/settings.env"; run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" != *"超過 tab 1"* ]]
 }
 @test "dies cleanly without a bound task or brief" {
   rm "$DK_ROOT/.sessions/wB:p1"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]
@@ -287,4 +288,47 @@ ac8_repo() {
   echo 'DK_TAB1_SLOTS="1"' >> "$DK_ROOT/settings.env"
   run dk-brief-check
   [[ "$output" == *"WARN 波次表 1: dev 成員 2 位超過 tab 1 的 1 格"* ]] || { echo "$output"; false; }
+}
+
+# --- 占位所有權與 qa 的 — ---------------------------------------------------
+
+@test "qa（group: review）的可改欄可以寫 —；dev 不行" {
+  sed -i 's#^| qa | tests/\*\* | — |#| qa | — | src/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+  fixture_brief "$d"; sed -i 's#^| backend | src/api/\*\* | src/web/\*\* |#| backend | — | src/web/** |#' "$b"
+  run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"FAIL 所有權 backend: 可改欄為空（只有 qa 這類 group: review 的成員可以寫 —）"* ]]
+}
+@test "可改欄的 glob 在 brief 別處被寫成占位／不得寫入 → FAIL 指出行號" {
+  sed -i 's#^| qa | tests/\*\* | — |#| qa | tests/**, scripts/qa/login/** | — |#' "$b"
+  sed -i 's#^bash 3.2+；不得使用 bash 4 語法$#&\nqa 的探測腳本一律放 scratchpad，`scripts/qa/login/**` 只是占位、不得寫入。#' "$b"
+  ln=$(grep -n '只是占位' "$b" | cut -d: -f1)
+  run dk-brief-check; [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL 所有權 qa: 可改欄的 scripts/qa/login/** 在第 $ln 行被寫成占位／不得寫入"* ]]
+  [[ "$output" != *"tests/**"*"占位"* ]]
+}
+
+# --- 同一波 dev 的負載（只 WARN） --------------------------------------------
+
+@test "同一波 dev 檔位不同且 AC 數差 1.5 倍以上 → WARN 工作量不均，列出每位的檔位與 AC 數" {
+  sed -i 's#^| 1 | 實作 | qa | 驗 API | S | 全過 | |$#| 1 | 實作 | frontend-cart | 主題換皮（AC4）、摘要卡（AC5）、活動欄（AC6） | L | AC4–AC8 綠 | |\n&#' "$b"
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$#| 1 | 實作 | backend | API（AC1）、fixture（AC3） | M | AC1–AC3 綠 | 預設 |#' "$b"
+  sed -i 's#^| 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |$#| 2 | 實作 | backend | 收尾 | S | 可用 | kinds: claude codex |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN 波次表 1: dev 工作量不均（backend M AC×3、frontend-cart L AC×5）"* ]]
+}
+@test "檔位相同、AC 差不多的同一波不吵；型態「待命」的不算" {
+  sed -i 's#^| 1 | 實作 | qa | 驗 API | S | 全過 | |$#| 1 | 實作 | frontend-cart | AC4、AC5 | M | 綠 | |\n&#' "$b"
+  sed -i 's#^| 1 | 實作 | backend | POST /login | M | 測試過 | 預設 |$#| 1 | 實作 | backend | AC1–AC3 | M | 綠 | 預設 |#' "$b"
+  sed -i 's#^| 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |$#| 2 | 實作 | backend | 收尾 | M | 可用 | kinds: claude codex |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+  sed -i 's#^| 1 | 實作 | frontend-cart | AC4、AC5 | M |#| 1 | 待命 | frontend-cart | 只修 qa 的 BUG | S |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
+}
+@test "同一個角色在同一波拆成兩位、彼此之間沒有共用契約 → WARN；補上契約就不吵" {
+  sed -i 's#^| frontend-cart | src/web/\*\* | src/api/types.ts |$#| frontend-cart | src/web/cart/** | src/api/types.ts |\n| frontend-shell | src/web/shell/** | src/api/types.ts |#' "$b"
+  sed -i 's#^| 2 | 實作 | frontend-cart | 表單 | S | 可用 | kinds: claude codex |$#&\n| 2 | 實作 | frontend-shell | 殼層 | S | 可用 | |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN 波次表 2: frontend-cart 與 frontend-shell 是同一個角色拆成的兩位，共用契約裡沒有它們之間的契約"* ]]
+  sed -i 's#^| login API | backend | frontend-cart, qa |.*$#&\n| 殼層 hooks | frontend-shell@波2 | frontend-cart@波2 | useCart() | 動它要先 ESCALATE |#' "$b"
+  run dk-brief-check; [ "$status" -eq 0 ]; [ "$output" = OK ]
 }

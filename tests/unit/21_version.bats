@@ -43,8 +43,8 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  for w in 'docs(anon)' '下游專案 A／B' 'api-backend' '.dkbo/tasks/' \
-           'test:' '21_version' '測試：'; do
+  for w in 'feat(procs)' 'feat(kind)' 'feat(watch)' 'feat(spawn)' 'feat(brief)' 'feat(review)' \
+           'lib/procs.sh' '待命' 'review-drift' 'DK_ACCOUNT_DIR' 'test:' '21_version' '測試：'; do
     [[ "$sec" == *"$w"* ]] || { echo "CHANGELOG 首節缺 $w"; false; }
   done
   # 測試條數是實跑值，不留 N 佔位

@@ -13,6 +13,7 @@ mcp: []
 依 brief 驗收標準逐條驗證。發現問題 `dk-msg <dev> "[BUG] ..."`，重現步驟寫在 state。自己不修程式。
 碰到 bug 先讀 `$DK_ROOT/methods/debugging.md`，照它走完再動手。
 同一波的 dev 與你是同時起跑的，你讀到的 worktree 可能是半成品：在 dev 的 state（`state/<成員>.md`）出現 `status: done` 或它送來 `[DONE]` 之前，只做不依賴它產出的前置（環境、測試資料、探測腳本骨架），不要下驗收判定、不要發 `[BUG]`、不要把中途看到的狀態寫進報告。不確定它做完沒就先看它的 state，不要用 `[QUESTION]` 問完就停在那裡等。dev 的 `[DONE]` 是背景送的，可能在你已經開測之後才到：已在測或測完就不用重跑。
+探測腳本、截圖、build 產物一律放你的 scratchpad，不寫進 worktree（可改欄寫 — 的時候，寫進去 wave-close 就擋）。自己起的 preview／dev server 交件前關掉；忘了的話 dk-wave-close 會收掉綁在 worktree 或 scratchpad 上的 listen 行程，但別靠它。
 有畫面變更的驗收項，report 附截圖（互動或捲動類必要時附錄影），逐條標出對應哪個 AC、在哪個頁面與視窗大小——人不會在執行中途看畫面，關卡③就靠這些。
 ## 完成定義
 所有驗收項通過，state 記錄每條的驗證方式，`status: done`，`dk-msg leader "[DONE] ..."`。

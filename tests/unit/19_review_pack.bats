@@ -72,3 +72,40 @@ multirepo_open() {   # 重建成多 repo 的 fixture 並開波 1
   grep -q '^## repo api$' "$d/waves/task.diff"; grep -q 'api: a' "$d/waves/task.diff"
   refute_grep '^## repo main$' "$d/waves/task.diff"
 }
+
+# --- 審後變動：pack 另存逐檔 cksum，dk-wave-close 拿它比對最終 diff ---
+
+@test "pack 另存 N.diff.sums（每個變更檔一行 repo、檔名、cksum）；--sums 只印不寫" {
+  mkdir -p "$WORKTREE_PATH/src/api" "$WORKTREE_PATH/tests"
+  echo a > "$WORKTREE_PATH/src/api/login.ts"; echo t > "$WORKTREE_PATH/tests/login.test.ts"
+  dk-review-pack 1 >/dev/null
+  [ "$(wc -l < "$d/waves/1.diff.sums")" -eq 2 ]
+  grep -qP '^main\tsrc/api/login.ts\t[0-9]+$' "$d/waves/1.diff.sums"
+  before=$(md5sum "$d/waves/1.diff" "$d/waves/1.diff.sums")
+  run dk-review-pack 1 --sums; [ "$status" -eq 0 ]
+  [ "$output" = "$(cat "$d/waves/1.diff.sums")" ]; [ "$(md5sum "$d/waves/1.diff" "$d/waves/1.diff.sums")" = "$before" ]
+}
+@test "dk-wave-close：審查後沒人再改 → 記 review-covered；改過、新增、還原的檔 → 列出並記 review-drift，不擋結波" {
+  mkdir -p "$WORKTREE_PATH/src/api" "$WORKTREE_PATH/tests"
+  echo a > "$WORKTREE_PATH/src/api/login.ts"; echo t > "$WORKTREE_PATH/tests/login.test.ts"
+  printf 'login-backend wC:p2 0 dev 1 1\nlogin-qa wC:p3 0 review 1 2\n' > "$d/.panes"
+  printf 'status: done\nwave: 1\ntouched:\n  - src/api/login.ts\n' > "$d/state/backend.md"
+  printf 'status: done\nwave: 1\ntouched:\n  - tests/login.test.ts\n  - tests/e2e.test.ts\n' > "$d/state/qa.md"
+  printf '# r\n## 測試\n### 紅\n$ t\nFAIL\n### 綠\n$ t\nok\n' > "$d/state/backend.report.md"
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
+  dk-review-pack 1 >/dev/null
+  cp -r "$PROJECT" "$PROJECT.snap"   # 同一個起點跑兩種結局
+  run dk-wave-close; [ "$status" -eq 0 ]
+  grep -q ' review-covered 1$' "$d/process.md"; refute_grep -q 'review-drift' "$d/process.md"
+  rm -rf "$PROJECT"; mv "$PROJECT.snap" "$PROJECT"
+  echo t2 >> "$WORKTREE_PATH/tests/login.test.ts"; echo e > "$WORKTREE_PATH/tests/e2e.test.ts"
+  run dk-wave-close; [ "$status" -eq 0 ]
+  [[ "$output" == *"審查之後又改過、reviewer 沒看過最終版的檔：tests/e2e.test.ts tests/login.test.ts"* ]]
+  grep -q ' review-drift 1: tests/e2e.test.ts tests/login.test.ts$' "$d/process.md"
+}
+@test "沒有 sums 的舊差異包（升級前打的）不比對、不吵" {
+  printf 'login-qa wC:p3 0 review 1 2\n' > "$d/.panes"; printf 'status: done\nwave: 1\ntouched:\n' > "$d/state/qa.md"
+  echo "$(date +%Y-%m-%dT%H:%M) review 1 verdict a: ok" >> "$d/process.md"
+  dk-review-pack 1 >/dev/null; rm "$d/waves/1.diff.sums"
+  run dk-wave-close; [ "$status" -eq 0 ]; refute_grep -qE 'review-(covered|drift)' "$d/process.md"
+}

@@ -334,3 +334,26 @@ hold_panes_lock() {
   run grep -q '^agent start' "$HERDR_STUB_LOG"; [ "$status" -ne 0 ]
   run dk-spawn frontend cart --effort; [ "$status" -eq 1 ]
 }
+
+# --- 派工前的兩道檢查：別名重複角色前綴、切片不是開著的這一波 ---
+
+@test "別名寫成「角色-別名」時去掉重複的角色前綴並提醒（state 名不會變成 frontend-frontend-cart）" {
+  run dk-spawn frontend frontend-cart; [ "$status" -eq 0 ]
+  [[ "$output" == *"別名是角色的後綴，'frontend-cart' 改成 'cart'"* ]]
+  grep -q '^login-frontend-cart ' "$d/.panes"; refute_grep -q 'frontend-frontend' "$d/.panes"
+}
+@test "沒有開著的波時，拿著上一波切片的波次成員派不出去；開著第 2 波時拿第 1 波切片的也一樣" {
+  fixture_brief "$d"
+  dk-wave-open 1 >/dev/null; [ -f "$d/briefs/backend.md" ]
+  sed -i 's/^DK_WAVE=.*/DK_WAVE=""/' "$d/.task.env"     # 第 1 波關了、第 2 波 dk-wave-open 失敗
+  run dk-spawn backend; [ "$status" -eq 1 ]; [[ "$output" == *"沒有開著的波"*"第 1 波留下的"* ]]
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="2"/' "$d/.task.env"
+  run dk-spawn backend; [ "$status" -eq 1 ]; [[ "$output" == *"backend 的切片是第 1 波的，現在開的是第 2 波"* ]]
+  sed -i 's/^DK_WAVE=.*/DK_WAVE="1"/' "$d/.task.env"
+  run dk-spawn backend; [ "$status" -eq 0 ]
+}
+@test "不在波次表裡的（reviewer）不受切片波號檢查" {
+  fixture_brief "$d"; mkdir -p "$d/briefs"; echo '# x — 給 reviewer-a 的切片（波 1）' > "$d/briefs/reviewer-a.md"
+  run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
+}
