@@ -10,7 +10,7 @@ teardown() { teardown_project; }
   [[ "$split" == *"--env DK_TASK_DIR=$d"* ]]; [[ "$split" == *"--env DK_ROLE=frontend"* ]]
   [[ "$split" == *"--env DK_AGENT=login-frontend-cart"* ]]; [[ "$split" == *"--env DK_LEADER=leader-login"* ]]
   [[ "$split" == *"--env DK_ISOLATED=0"* ]]
-  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"' --name login-frontend-cart$' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort medium --permission-mode auto --add-dir '"$PROJECT"' --name login-frontend-cart$' "$HERDR_STUB_LOG"
   p=$(grep '^agent prompt login-frontend-cart' "$HERDR_STUB_LOG")
   [[ "$p" == *"$DK_ROOT/roles/frontend.md"* ]]; [[ "$p" == *"$d/brief.md"* ]]; [[ "$p" == *"$d/state/frontend-cart.report.md"* ]]
   [[ "$p" == *"$d/state/frontend-cart.md"* ]]; [[ "$p" == *"禁止使用 subagent"* ]]; [[ "$p" == *"--wait --until working --timeout 15000" ]]
@@ -310,9 +310,9 @@ hold_panes_lock() {
 }
 
 @test "--model 只換模型、effort 照檔位，並記進 process.md" {
-  run dk-spawn frontend cart --tier S --model sonnet; [ "$status" -eq 0 ]
-  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model sonnet --effort low ' "$HERDR_STUB_LOG"
-  grep -q 'spawn login-frontend-cart (claude S) override-model sonnet' "$d/process.md"
+  run dk-spawn frontend cart --tier M --model opus; [ "$status" -eq 0 ]
+  grep -q '^agent start login-frontend-cart --kind claude --pane wC:p2 -- --model opus --effort high ' "$HERDR_STUB_LOG"
+  grep -q 'spawn login-frontend-cart (claude M) override-model opus' "$d/process.md"
 }
 
 @test "--model 遇到該 kind 沒有的模型就死，不碰 herdr；不帶值也死" {
@@ -323,9 +323,9 @@ hold_panes_lock() {
 }
 
 @test "--effort 只換 effort；與 --model 併用時檔位照實記" {
-  run dk-spawn frontend cart --tier S --model sonnet --effort medium; [ "$status" -eq 0 ]
-  grep -q -- '--model sonnet --effort medium ' "$HERDR_STUB_LOG"
-  grep -q 'spawn login-frontend-cart (claude S) override-model sonnet override-effort medium' "$d/process.md"
+  run dk-spawn frontend cart --tier S --model opus --effort low; [ "$status" -eq 0 ]
+  grep -q -- '--model opus --effort low ' "$HERDR_STUB_LOG"
+  grep -q 'spawn login-frontend-cart (claude S) override-model opus override-effort low' "$d/process.md"
 }
 
 @test "--effort 遇到該模型不收的 effort 就死；不帶值也死" {

@@ -5,7 +5,7 @@ teardown() { teardown_project; }
 @test "dk-leader opens a named leader pane" {
   run dk-leader pay "金流"; [ "$status" -eq 0 ]; [ "$output" = "leader-pay wC:p2" ]
   grep -q -- "--current --direction right --cwd $PROJECT --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1" "$HERDR_STUB_LOG"
-  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"' --name dk/pay$' "$HERDR_STUB_LOG"
+  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort medium --permission-mode auto --add-dir '"$PROJECT"' --name dk/pay$' "$HERDR_STUB_LOG"
   grep -q 'dk-task-new pay "金流"' "$HERDR_STUB_LOG"
 }
 @test "dk-leader validates short name" { run dk-leader Pay x; [ "$status" -eq 1 ]; }
@@ -62,7 +62,7 @@ mk() { # 一個過了關卡①、還沒實體化的任務
   grep -q "^DK_BASE=\"$base\"$" "$d/.task.env"
   # 交棒
   grep -q '^agent rename wB:p1 --clear$' "$HERDR_STUB_LOG"
-  grep -q "^agent start leader-login --kind claude --pane wB:p10 -- --model opus --effort high --permission-mode auto --add-dir $PROJECT --name dk/login\$" "$HERDR_STUB_LOG"
+  grep -q "^agent start leader-login --kind claude --pane wB:p10 -- --model opus --effort medium --permission-mode auto --add-dir $PROJECT --name dk/login\$" "$HERDR_STUB_LOG"
   grep -q '^agent prompt leader-login .*--wait --until working' "$HERDR_STUB_LOG"
   [ "$(cat "$DK_ROOT/.sessions/wB:p10")" = "$(basename "$d")" ]
   [ ! -f "$DK_ROOT/.sessions/wB:p1" ]

@@ -18,7 +18,7 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
   : > "$HERDR_STUB_LOG"; run dk-review --kinds "agy" 2; [ "$status" -eq 0 ]; [[ "$output" == "review 2: login-reviewer-a(claude) login-reviewer-b(codex) login-reviewer-c(agy)" ]]; grep -q -- '--kind agy' "$HERDR_STUB_LOG"
   [ "$(grep ' review 2 spawned ' "$d/process.md" | tail -1 | sed 's/^[^ ]* //')" = "review 2 spawned login-reviewer-a(claude) login-reviewer-b(codex) login-reviewer-c(agy)" ]   # AC4：同波補派拿下一個別名、名單累加
   : > "$HERDR_STUB_LOG"; run dk-review --kinds "claude codex agy claude" --tier L; [ "$status" -eq 0 ]
-  [ "$(grep -c '^agent start login-reviewer-' "$HERDR_STUB_LOG")" -eq 3 ]; grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
+  [ "$(grep -c '^agent start login-reviewer-' "$HERDR_STUB_LOG")" -eq 3 ]; grep -q -- '--model opus --effort medium' "$HERDR_STUB_LOG"
 }
 @test "downed kinds are skipped; all down exits 1 with the skip hint" {
   open_wave 1; sed -i 's/^DK_KIND_DOWN=.*/DK_KIND_DOWN="codex"/' "$d/.task.env"
@@ -27,8 +27,9 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 }
 @test "--task reviews the whole branch pack" {
   mkdir -p "$d/waves"; echo diff > "$d/waves/task.diff"
-  run dk-review --task --tier L; [ "$status" -eq 0 ]; [ "$output" = "review task: login-reviewer-a(claude)" ]
+  run dk-review --task --tier L --effort high; [ "$status" -eq 0 ]; [ "$output" = "review task: login-reviewer-a(claude)" ]
   grep -q ' review task spawned login-reviewer-a(claude)$' "$d/process.md"; grep -q "$d/waves/task.diff" "$d/briefs/reviewer-a.md"; grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
+  grep -q 'spawn login-reviewer-a (claude L) .*override-effort high' "$d/process.md"   # 檔位照實記
   rm "$d/waves/task.diff"; run dk-review --task; [ "$status" -eq 1 ]; [[ "$output" == *"dk-review-pack --task"* ]]
 }
 @test "refuses without a diff pack, with a skip: column, or a bad tier" {
@@ -50,18 +51,24 @@ open_wave() { dk-wave-open "$1" >/dev/null; mkdir -p "$d/waves"; echo diff > "$d
 }
 @test "reviewer tier defaults to DK_REVIEW_TIER (ships as L)" {
   open_wave 1; run dk-review; [ "$status" -eq 0 ]
-  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort high' "$HERDR_STUB_LOG"
+  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort medium' "$HERDR_STUB_LOG"
 }
 @test "DK_REVIEW_TIER=M lowers reviewers to the M tier without touching roles/reviewer.md" {
   printf 'DK_REVIEW_TIER="M"\n' >> "$DK_ROOT/settings.env"
   open_wave 1; run dk-review; [ "$status" -eq 0 ]
-  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort medium' "$HERDR_STUB_LOG"
-  grep -q '^  L: opus/high$' "$DK_ROOT/roles/reviewer.md"   # 角色檔的 tier 語義沒被動過
+  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model sonnet --effort high' "$HERDR_STUB_LOG"
+  grep -q '^  L: opus/medium$' "$DK_ROOT/roles/reviewer.md"   # 角色檔的 tier 語義沒被動過
 }
 @test "--tier still overrides DK_REVIEW_TIER" {
   printf 'DK_REVIEW_TIER="L"\n' >> "$DK_ROOT/settings.env"
   open_wave 1; run dk-review --tier M; [ "$status" -eq 0 ]
-  grep -q -- '--model opus --effort medium' "$HERDR_STUB_LOG"
+  grep -q -- '--model sonnet --effort high' "$HERDR_STUB_LOG"
+}
+@test "--effort 只換 effort（L 檔預設 opus/medium，整枝評議拉到 high）；不帶值或不合法就死、不派人" {
+  open_wave 1; run dk-review --tier L --effort high; [ "$status" -eq 0 ]
+  grep -q '^agent start login-reviewer-a --kind claude --pane wC:p2 -- --model opus --effort high' "$HERDR_STUB_LOG"
+  : > "$HERDR_STUB_LOG"; run dk-review --effort; [ "$status" -eq 1 ]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
+  run dk-review --effort ultra; [ "$status" -eq 1 ]; refute_grep -q '^agent start' "$HERDR_STUB_LOG"
 }
 @test "a DK_REVIEW_TIER that is not M or L is refused, naming settings.env" {
   printf 'DK_REVIEW_TIER="S"\n' >> "$DK_ROOT/settings.env"

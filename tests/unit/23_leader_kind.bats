@@ -25,7 +25,7 @@ teardown() { teardown_project; }
   echo 'DK_LEADER_KIND="codex"' >> "$DK_ROOT/settings.env"
   run dk-leader pay 金流 --kind claude; [ "$status" -eq 0 ]
   # --name dk/pay：AC19，CLI 那側的 session 顯示名＝workspace 名（kinds/claude.sh 的 kind_session_args）
-  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort high --permission-mode auto --add-dir '"$PROJECT"' --name dk/pay$' "$HERDR_STUB_LOG"
+  grep -q '^agent start leader-pay --kind claude --pane wC:p2 -- --model opus --effort medium --permission-mode auto --add-dir '"$PROJECT"' --name dk/pay$' "$HERDR_STUB_LOG"
 }
 
 @test "init skill asks for the leader kind" {

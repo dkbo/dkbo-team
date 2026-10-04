@@ -67,7 +67,7 @@ have_request() { printf '人要一個登入功能，空密碼要擋掉。\n' > "
   : > "$HERDR_STUB_LOG"
   run dk-brief-review --kinds "claude codex agy claude" --tier L; [ "$status" -eq 0 ]
   [ "$(grep -c '^agent start login-reviewer-p' "$HERDR_STUB_LOG")" -eq 3 ]
-  grep -q -- '--model opus --effort high' "$HERDR_STUB_LOG"
+  grep -q -- '--model opus --effort medium' "$HERDR_STUB_LOG"
   run dk-brief-review --tier S; [ "$status" -eq 1 ]
 }
 @test "熔斷的 kind 被跳過；全滅回非零並給出該記的 process 行" {

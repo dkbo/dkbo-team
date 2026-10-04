@@ -2,8 +2,8 @@
 name: it
 kind: claude
 tiers:
-  S: opus/low
-  M: opus/low
+  S: sonnet/medium
+  M: sonnet/medium
   L: opus/medium
 worktree: true
 group: dev

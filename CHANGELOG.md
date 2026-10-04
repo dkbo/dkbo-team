@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- feat(kinds)!: claude 三檔重排，S、M 改用 Sonnet 5.5，L 上限降到 opus/medium。`KIND_DEFAULT_TIERS` 由 `S=opus/low M=opus/medium L=opus/high` 改成 `S=sonnet/medium M=sonnet/high L=opus/medium`。角色檔：pm、frontend、backend、qa、it 的 S 一律 `sonnet/medium`；pm、frontend、backend、qa、reviewer 的 M 由 `opus/medium` 改 `sonnet/high`，it 的 M 由 `opus/low` 改 `sonnet/medium`（推理量也升一階）；pm、frontend、backend、qa、reviewer 的 L 由 `opus/high` 改 `opus/medium`，it 的 L 本來就是 `opus/medium`。領導（`dk-leader` 讀 `KIND_DEFAULT_TIERS` 的 L）與例行波審查（`DK_REVIEW_TIER=L`）因此都變成 opus/medium；reviewer 的 M 與 L 仍解析到不同旗標。依據：2026-09-30 AA 的 S 段 sonnet/medium 41 分 $0.59 6.8s 對 opus/low 42 分 $0.55 20.4s，打平而快三倍；M 段 sonnet/high 47 分 $1.08 對 opus/medium 51 分 $1.34、L 段 opus/medium 51 對 opus/high 54 $1.82 42s，使用者取速度與額度，接受分數差。**沒有實跑數據**：原訂累積兩三筆 `trial:` 行再改，使用者決定先改；品質出問題退回 opus 時照記 `trial:` 留證據。
+- feat(review): `dk-review` 新增 `--effort E`，只換 effort、檔位照實記（照傳 `dk-spawn --effort`，process 的 spawn 行尾加 `override-effort <E>`）；不帶值就死，該 kind 不收的 effort 在開 pane 前就死。opus/high 不再是任何檔位的預設，只在兩處拉上去：
+  - 整枝評議：`dk-review --task --tier L --effort high`；只有一波的任務，波 1 審查就是整枝評議，照同樣派；修復波代替整枝評議的 `dk-review N --tier L` 也加 `--effort high`。整枝評議是全任務唯一一次看整份 diff，漏掉的問題要到合併後才浮出來。
+  - 第二輪換腦袋時原本就是 L 檔：`dk-spawn … --handoff … --tier L --effort high`。L 已是最高檔，不加 effort 就只能換 kind。
+  - `skills/run/SKILL.md` 與 `PROTOCOL.md` 照此改寫。
+
 ## 0.19.0 — 2026-10-03
 
 - feat(procs): 新增 `lib/procs.sh`，收員工留下的 listen 行程。herdr 關 pane 只收前景行程，qa 用 nohup／& 起的 `vite preview` 會一直活著佔埠：下游專案 B 的 5174 被一支 9/25 的行程佔了八天，三個任務（兩個專案）的 brief 都撞上它。判斷「綁在某個 worktree 上」的依據：cwd 在 worktree 裡，或命令列寫著 worktree 路徑或它的 scratchpad 編碼（非英數字元換成 `-`）。只收 listen 中的行程；領導站在主樹，它起的 dev server 不算。listen 清單取自 `ss -ltnpH`，沒有 ss 就用 `lsof`，兩者都沒有就什麼都不做。

@@ -2,9 +2,9 @@
 name: frontend
 kind: claude
 tiers:
-  S: opus/low
-  M: opus/medium
-  L: opus/high
+  S: sonnet/medium
+  M: sonnet/high
+  L: opus/medium
 worktree: true
 group: dev
 mcp: []

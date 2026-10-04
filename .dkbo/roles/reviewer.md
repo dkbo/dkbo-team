@@ -2,8 +2,8 @@
 name: reviewer
 kind: claude
 tiers:
-  M: opus/medium
-  L: opus/high
+  M: sonnet/high
+  L: opus/medium
 worktree: true
 group: review
 mcp: []
