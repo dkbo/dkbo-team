@@ -43,8 +43,8 @@ teardown() { teardown_project; }
 }
 @test "CHANGELOG 首節列出本版的每一條變更" {
   sec=$(awk '/^## [0-9]/{n++} n==1' "$REPO_ROOT/CHANGELOG.md")
-  for w in 'feat(procs)' 'feat(kind)' 'feat(watch)' 'feat(spawn)' 'feat(brief)' 'feat(review)' \
-           'lib/procs.sh' '待命' 'review-drift' 'DK_ACCOUNT_DIR' 'test:' '21_version' '測試：'; do
+  for w in 'feat(kinds)!' 'KIND_DEFAULT_TIERS' 'sonnet/medium' 'sonnet/high' 'opus/medium' \
+           'feat(review)' '--effort E' '--effort high' 'test:' '20_review' '21_version' '測試：' '升級：'; do
     [[ "$sec" == *"$w"* ]] || { echo "CHANGELOG 首節缺 $w"; false; }
   done
   # 測試條數是實跑值，不留 N 佔位

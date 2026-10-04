@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.20.0 — 2026-10-04
 
 - feat(kinds)!: claude 三檔重排，S、M 改用 Sonnet 5.5，L 上限降到 opus/medium。`KIND_DEFAULT_TIERS` 由 `S=opus/low M=opus/medium L=opus/high` 改成 `S=sonnet/medium M=sonnet/high L=opus/medium`。角色檔：pm、frontend、backend、qa、it 的 S 一律 `sonnet/medium`；pm、frontend、backend、qa、reviewer 的 M 由 `opus/medium` 改 `sonnet/high`，it 的 M 由 `opus/low` 改 `sonnet/medium`（推理量也升一階）；pm、frontend、backend、qa、reviewer 的 L 由 `opus/high` 改 `opus/medium`，it 的 L 本來就是 `opus/medium`。領導（`dk-leader` 讀 `KIND_DEFAULT_TIERS` 的 L）與例行波審查（`DK_REVIEW_TIER=L`）因此都變成 opus/medium；reviewer 的 M 與 L 仍解析到不同旗標。依據：2026-09-30 AA 的 S 段 sonnet/medium 41 分 $0.59 6.8s 對 opus/low 42 分 $0.55 20.4s，打平而快三倍；M 段 sonnet/high 47 分 $1.08 對 opus/medium 51 分 $1.34、L 段 opus/medium 51 對 opus/high 54 $1.82 42s，使用者取速度與額度，接受分數差。**沒有實跑數據**：原訂累積兩三筆 `trial:` 行再改，使用者決定先改；品質出問題退回 opus 時照記 `trial:` 留證據。
 - feat(review): `dk-review` 新增 `--effort E`，只換 effort、檔位照實記（照傳 `dk-spawn --effort`，process 的 spawn 行尾加 `override-effort <E>`）；不帶值就死，該 kind 不收的 effort 在開 pane 前就死。opus/high 不再是任何檔位的預設，只在兩處拉上去：
   - 整枝評議：`dk-review --task --tier L --effort high`；只有一波的任務，波 1 審查就是整枝評議，照同樣派；修復波代替整枝評議的 `dk-review N --tier L` 也加 `--effort high`。整枝評議是全任務唯一一次看整份 diff，漏掉的問題要到合併後才浮出來。
   - 第二輪換腦袋時原本就是 L 檔：`dk-spawn … --handoff … --tier L --effort high`。L 已是最高檔，不加 effort 就只能換 kind。
   - `skills/run/SKILL.md` 與 `PROTOCOL.md` 照此改寫。
+- test: `20_review` 新增 1 條（`--effort` 換值、不帶值與不合法即死且不派人），`--task` 那條改驗 `--effort high` 與 process 紀錄；`07_spawn`、`11_chore`、`13_leader`、`23_leader_kind`、`28_brief_review` 的旗標期望值跟著新檔位改；`21_version` 首節清單換成 0.20.0 的條目。
+- 測試：800 bats（+1；`20_review` 1 條）；shellcheck 零警告，並由 `37_shellcheck` 守。
+- 升級：六份角色檔的 tiers 都改了，`kinds/claude.sh` 的 `KIND_DEFAULT_TIERS` 也改了。用 rsync 升級的專案若改過角色檔的 kind 或 tiers（例如把某個角色換成 agy），升完要重改回去。另動 `bin/dk-review`、`lib/review.sh`、`skills/run/SKILL.md`、`PROTOCOL.md`。沒有新的 settings 鍵、`.task.env` 鍵、依賴、lib、skill。
 
 ## 0.19.0 — 2026-10-03
 
