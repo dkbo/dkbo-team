@@ -17,7 +17,7 @@
   - 同波 dev 工作量不均時 WARN：同波有 L 也有 S，或檔位不同、AC 數差 1.5 倍以上（且最多的至少 3 條）。工作量看難度欄的檔位，加上「做什麼」與「完成條件」兩欄提到的 AC 編號，範圍展開、重複不計；待命成員不算。另外，同一個角色在同一波拆成兩位，共用契約裡卻沒有它們之間的契約，也 WARN。拿六個已結案任務的 brief 回測，只有實際最快與最慢差 10 分鐘以上的波（13、23、29 分鐘）會提醒（13、23、29 分鐘，另一波是後來該寫成待命的那一波），全是 L 檔的波不吵。
 - feat(review): `dk-review-pack` 另寫 `waves/N.diff.sums`，每個變更檔一行，含 repo、檔名與 -U10 diff 的 cksum；`dk-review-pack N --sums` 只印、不寫。`dk-wave-close` 拿最後一份 sums 比對最終 diff：一樣記 `review-covered N`；審查後又改過、新增或還原的檔就列出來，記 `review-drift N: <檔…>`，不擋結波。沒有 sums 的舊差異包不比對。依據：下游專案 A 的 cuteui，reviewer 以為 qa 還在改而跳過 e2e，其實快照就是最終版，結案報告卻寫「沒有未經審查的波」。
 - docs: 以下文件同步本版的行為。
-  - `skills/run/SKILL.md`：開波時的孤兒收拾與 port-busy、開波失敗就停、待命成員不算進聚合、`review-drift` 怎麼處理。
+  - `skills/run/SKILL.md`：開波時的孤兒收拾與 port-busy、開波失敗就停、待命成員不算進聚合、`review-drift` 怎麼處理；`trial:` 行多記耗時（spawn 到 `[DONE]` 的分鐘數）與 qa 首輪 `[BUG]` 數，試跑的是 qa 本人時改記漏驗條數——返工次數看不出改用 Sonnet 是不是把成本轉給了 qa 與 reviewer，速度也是試 Sonnet 的主要理由之一。
   - `skills/plan/SKILL.md`：qa 寫 `—`、不劃占位 glob、型態 `待命`、排波看最重的那位（拆人或分波的判準）。
   - `roles/qa.md`：腳本放 scratchpad、自己起的 server 交件前要關。
   - `roles/reviewer.md`：差異包裡 qa 的檔照樣審。
