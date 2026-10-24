@@ -379,3 +379,9 @@ S
   refute_grep -F '（--run 開在當下所在的 workspace）' "$d/process.md"
   refute_grep -qF '→' <<< "$output"
 }
+@test "DK_LAYOUT=tabs: the planning leader opens a plan/<short> tab instead of splitting" {
+  echo 'DK_LAYOUT="tabs"' >> "$DK_ROOT/settings.env"
+  run dk-leader pay "金流"; [ "$status" -eq 0 ]; [ "$output" = "leader-pay wB:p10" ]
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+  grep -q "^tab create --workspace wB --cwd $PROJECT --label plan/pay --no-focus --env DK_ROOT=$DK_ROOT --env HERDR_ENV=1\$" "$HERDR_STUB_LOG"
+}

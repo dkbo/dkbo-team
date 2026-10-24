@@ -49,6 +49,7 @@ teardown() { teardown_project; }
   run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" == *"WARN 波次表 1: dev 成員 5 位超過 tab 1 的 4 格"* ]]; [[ "$output" != OK ]]
   # 同一個 backend 角色拆成五位、彼此沒有契約，另有「同角色拆人」的 WARN（下面專門測）；這裡只看格數那條
   echo 'DK_TAB1_SLOTS="6"' >> "$DK_ROOT/settings.env"; run dk-brief-check; [ "$status" -eq 0 ]; [[ "$output" != *"超過 tab 1"* ]]
+  echo 'DK_TAB1_SLOTS="4"' >> "$DK_ROOT/settings.env"; echo 'DK_LAYOUT="tabs"' >> "$DK_ROOT/settings.env"; run dk-brief-check; [[ "$output" != *"超過 tab 1"* ]]
 }
 @test "dies cleanly without a bound task or brief" {
   rm "$DK_ROOT/.sessions/wB:p1"; run dk-brief-check; [ "$status" -eq 1 ]; [[ "$output" == *"no task bound"* ]]

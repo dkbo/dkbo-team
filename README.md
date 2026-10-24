@@ -41,7 +41,7 @@
 
 **雜務**：「翻譯 README 成英文」「先修登入頁那個 bug」這類不屬於任務的小事，領導用 `dk-chore` 派一位員工，`--code` 的會在獨立 worktree 分支工作並於 `dk-chore-close` 時合併回來。雜務員工用 `dk-msg leader` 回報，腳本會等領導閒置再送，不會漏訊。
 
-**版面**：領導佔 tab 1 左欄，員工填右側 2×2 或 3×2；第 5 位起自動開新 tab，關 pane 後自動均分。
+**版面**：領導佔 tab 1 左欄，員工填右側 2×2 或 3×2；第 5 位起自動開新 tab，關 pane 後自動均分。`settings.env` 設 `DK_LAYOUT="tabs"` 則不切窗格，每位員工（含 pm、雜務、規劃領導）各開一個 tab，關 pane 時 tab 跟著收。
 
 ## 快速開始
 
@@ -107,7 +107,7 @@ kind 是 AI CLI 的旗標對應，在 `.dkbo/kinds/`：`claude`（opus / sonnet�
   skills/             init、add-role，與大腦／計畫／執行三篇階段規範（install.sh 會 symlink 進 .claude/skills 與 .agents/skills）
   PROTOCOL.md         通訊協定：訊息類型、升報規則、停止條件、state / report 格式
   PROJECT.md          專案事實，≤40 行，init 預填
-  settings.env        DK_LEADER_KIND、DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIER、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS、DK_WAVE_TIMEOUT_MIN
+  settings.env        DK_LEADER_KIND、DK_TEST_CMD、DK_REVIEW_KINDS、DK_REVIEW_MIN、DK_REVIEW_TIER、DK_REVIEW_TIMEOUT_MIN、DK_TAB1_SLOTS、DK_LAYOUT、DK_WAVE_TIMEOUT_MIN
   roles/  kinds/      角色檔；各 AI CLI 的旗標對應
   bin/  lib/          dk-* 腳本與共用函式
   templates/          brief、切片、state、report、chore 範本

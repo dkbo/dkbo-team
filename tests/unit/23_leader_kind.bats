@@ -38,7 +38,7 @@ teardown() { teardown_project; }
 
 @test "settings.env 有整波逾時這個鍵" {
   grep -q '^DK_WAVE_TIMEOUT_MIN=' "$DK_ROOT/settings.env"
-  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 10 ]   # 0.10.0 多了 DK_REPOS 與 DK_SETUP_CMD
+  [ "$(grep -c '^DK_' "$DK_ROOT/settings.env")" -eq 11 ]   # 0.10.0 多了 DK_REPOS 與 DK_SETUP_CMD；之後多了 DK_LAYOUT
 }
 @test "dk_settings provides and exports DK_REVIEW_TIER, defaulting to L" {
   rm -f "$DK_ROOT/settings.env"

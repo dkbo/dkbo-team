@@ -357,3 +357,17 @@ hold_panes_lock() {
   fixture_brief "$d"; mkdir -p "$d/briefs"; echo '# x — 給 reviewer-a 的切片（波 1）' > "$d/briefs/reviewer-a.md"
   run dk-spawn reviewer a --isolated; [ "$status" -eq 0 ]
 }
+@test "DK_LAYOUT=tabs: the first employee opens tab 2 labelled with its agent name, nothing is split" {
+  echo 'DK_LAYOUT="tabs"' >> "$DK_ROOT/settings.env"
+  run dk-spawn frontend cart; [ "$status" -eq 0 ]; [ "$output" = "login-frontend-cart wB:p10" ]
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+  grep -q "^tab create --workspace wB --cwd $WORKTREE_PATH --label login-frontend-cart --no-focus " "$HERDR_STUB_LOG"
+  grep -Eq '^login-frontend-cart wB:p10 [0-9]+ dev 2 1$' "$d/.panes"; grep -q '^DK_TABS="2=wB:t2"$' "$d/.task.env"
+}
+@test "DK_LAYOUT=tabs: pm gets its own tab in the main tree, kept out of DK_TABS" {
+  echo 'DK_LAYOUT="tabs"' >> "$DK_ROOT/settings.env"
+  run dk-spawn pm; [ "$status" -eq 0 ]
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+  grep -q "^tab create --workspace wB --cwd $PROJECT --label login-pm --no-focus " "$HERDR_STUB_LOG"
+  grep -Eq '^login-pm wB:p10 [0-9]+ dev 0 0$' "$d/.panes"; refute_grep -q '^DK_TABS="2=' "$d/.task.env"
+}

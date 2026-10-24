@@ -56,3 +56,16 @@ expect() { [ "$(dk_layout_slot dev "$p")" = "$1" ] || { echo "got: $(dk_layout_s
   printf 'a wB:p2\nb wB:p3 0 dev 1 2\n' > "$d/.panes"
   HERDR_STUB_FAIL="pane layout" dk_layout_even 1; refute_grep -q '^pane resize' "$HERDR_STUB_LOG"
 }
+@test "DK_LAYOUT=tabs: every employee gets a new tab from tab 2 on, tab 1 stays the leader's" {
+  export DK_LAYOUT=tabs
+  expect "NEWTAB 2 1"; echo "a wB:p10 0 dev 2 1" >> "$p"
+  expect "NEWTAB 3 1"; printf 'pm wB:p9 0 dev 0 0\nb wB:p11 0 dev 3 1\n' >> "$p"
+  expect "NEWTAB 4 1"
+}
+@test "DK_LAYOUT=tabs: dk_layout_even never resizes a one-pane tab, still closes an emptied one" {
+  export DK_LAYOUT=tabs
+  d=$(fixture_task login x); export DK_TASK_DIR="$d"; sed -i 's/^DK_TABS=.*/DK_TABS="2=wB:t2 3=wB:t3"/' "$d/.task.env"; dk_task_env
+  printf 'z wB:p20 0 review 3 1\n' > "$d/.panes"
+  dk_layout_even 3; refute_grep -q '^pane layout' "$HERDR_STUB_LOG"
+  dk_layout_even 2; grep -q '^tab close wB:t2$' "$HERDR_STUB_LOG"
+}

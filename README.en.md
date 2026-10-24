@@ -41,7 +41,7 @@ you ──chat──▶ leader (Claude Code, left column of tab 1)
 
 **Chores.** Small jobs outside any task ("translate the README", "fix that login page bug first") go through `dk-chore`, which dispatches one worker. With `--code` the worker gets its own worktree branch that `dk-chore-close` merges back. Chore workers report with `dk-msg leader`, which waits for the leader to be idle before delivering, so nothing is lost while the leader is mid-turn.
 
-**Layout.** The leader owns the left column of tab 1; workers fill a 2×2 or 3×2 grid on the right. From the fifth worker a new tab is opened automatically, and closed panes trigger a re-balance.
+**Layout.** The leader owns the left column of tab 1; workers fill a 2×2 or 3×2 grid on the right. From the fifth worker a new tab is opened automatically, and closed panes trigger a re-balance. Set `DK_LAYOUT="tabs"` in `settings.env` to skip splitting altogether: every worker (pm, chores and the planning leader included) gets its own tab, which closes with its pane.
 
 ## Quick start
 
@@ -107,7 +107,7 @@ All live in `.dkbo/bin/` and wrap herdr. Only the leader uses them; workers use 
   skills/             init, add-role, plus the brain / plan / run stage rules (install.sh symlinks them into .claude/skills and .agents/skills)
   PROTOCOL.md         messaging protocol: types, escalation rules, stop conditions, state / report formats
   PROJECT.md          project facts, ≤40 lines, pre-filled by init
-  settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIER, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS, DK_WAVE_TIMEOUT_MIN
+  settings.env        DK_LEADER_KIND, DK_TEST_CMD, DK_REVIEW_KINDS, DK_REVIEW_MIN, DK_REVIEW_TIER, DK_REVIEW_TIMEOUT_MIN, DK_TAB1_SLOTS, DK_LAYOUT, DK_WAVE_TIMEOUT_MIN
   roles/  kinds/      role files; flag mappings per AI CLI
   bin/  lib/          dk-* scripts and shared functions
   templates/          brief, slice, state, report and chore templates

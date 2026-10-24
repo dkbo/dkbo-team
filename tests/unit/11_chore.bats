@@ -416,3 +416,12 @@ X
   [[ "$seg" == *'共用'* ]]
   [[ "$seg" == *'ESCALATE'* ]]
 }
+@test "DK_LAYOUT=tabs: a chore opens its own tab in the leader's workspace instead of splitting" {
+  echo 'DK_LAYOUT="tabs"' >> "$DK_ROOT/settings.env"
+  run dk-chore frontend "查一下" --tier S; [ "$status" -eq 0 ]
+  refute_grep -q '^pane split' "$HERDR_STUB_LOG"
+  tc=$(grep '^tab create' "$HERDR_STUB_LOG"); [[ "$tc" == "tab create --workspace wB --cwd $PROJECT --label chore-frontend-1 --no-focus "* ]]
+  [[ "$tc" == *"--env DK_CHORE_CODE=0"* ]]
+  grep -q '^pane=wB:p10$' "$DK_ROOT/.sessions/chores/chore-frontend-1"
+  grep -q '^agent start chore-frontend-1 --kind claude --pane wB:p10 ' "$HERDR_STUB_LOG"
+}
