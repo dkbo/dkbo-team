@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- feat(kinds): Haiku 5.5（2026-10-07 發布，第一個有 effort 的 Haiku）進 S 檔：frontend、backend 的 S 由 `sonnet/medium` 改 `haiku/medium`，it 的 S 由 `sonnet/medium` 改 `haiku/high`（多步驟終端操作）。`kinds/claude.sh` 的 `KIND_MODEL_EFFORTS` 加上 `haiku:low,medium,high,xhigh,max`；`KIND_DEFAULT_TIERS` 不動。qa、pm、reviewer 是抓錯的關卡，不換；M 檔不用 haiku。依據（註解在 `kinds/claude.sh`）：AA 的 haiku/medium 34 分 $0.05、haiku/high 38 分 $0.08，對 sonnet/medium 41 分 $0.48；FrontierCode medium ≈ high；但 TTFT 13–28s，牆鐘不比 sonnet/medium 快。**沒有實跑數據**，品質出問題退回 `sonnet/medium` 並記 `trial:` 行。
+- test: `03_kinds` 的「未知 model」改用 `fable/low`（haiku 現在是合法 model）；`11_chore` 的 frontend S 檔期望值改成 `--model haiku --effort medium`。
+- 測試：806 bats（+0）；shellcheck 零警告。
+- 升級：frontend、backend、it 三份角色檔的 S 檔改了，`kinds/claude.sh` 也改了；用 rsync 升級的專案若改過這些角色的 kind 或 tiers，升完要重改回去。**Claude Code 2.1.293 的 `haiku` 別名仍指 Haiku 4.5**：要在使用者層 `settings.json` 的 `env` 設 `ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-5-5`，否則 S 檔跑的是 4.5；別名更新後即可刪掉。沒有新的 settings 鍵、`.task.env` 鍵、依賴、lib、skill。
+
 ## 0.21.0 — 2026-10-24
 
 - feat(layout): `settings.env` 新鍵 `DK_LAYOUT`，預設 `grid`（原本的切格版面，行為不變）；設成 `tabs` 就不切窗格，一人一個 herdr tab。dev／qa／reviewer 從 tab 2 起各開一個 tab（tab 名＝agent 名，照舊記 `DK_TABS`，`dk-task-close` 照舊收），tab 1 只留領導；pm（`worktree: false`）開在主樹的獨立 tab；`dk-chore` 在領導所在的 workspace 開 `chore-<角色>-N` tab；規劃領導（`dk-leader <short> "<名>"`）開 `plan/<short>` tab；`dk-leader --run` 本來就開 tab，不變。值打錯或留空一律當 `grid`。
