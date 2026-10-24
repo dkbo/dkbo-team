@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2034  # KIND_* are read by lib/kinds.sh after sourcing
 # 每個 model 各自宣告它真的支援的 effort（不是 models × efforts 的笛卡兒積）。
-KIND_MODEL_EFFORTS="opus:low,medium,high,xhigh,max sonnet:low,medium,high,xhigh,max"
+KIND_MODEL_EFFORTS="opus:low,medium,high,xhigh,max sonnet:low,medium,high,xhigh,max haiku:low,medium,high,xhigh,max"
 # 三檔全換 opus、只用 effort 分檔（2026-09-23，Opus 5.5 發布隔天）：Artificial Analysis 的
 # opus/medium 已追平 fable/high、成本約三分之一；Vals 的 Terminal-Bench 2.1 opus 87.6% 對 sonnet 74.5%。
 # Anthropic 的〈What a task costs on Opus 5.5〉也說機械式改動留在 Opus 5.5 low，Sonnet/Haiku 只給查找、不給寫碼。
@@ -15,6 +15,13 @@ KIND_MODEL_EFFORTS="opus:low,medium,high,xhigh,max sonnet:low,medium,high,xhigh,
 # （dk-review --task --tier L --effort high）與已是 L 檔的第二輪換腦袋（dk-spawn --handoff --tier L --effort high）。
 # 品質出問題就退回 S=opus/low／M=opus/medium／L=opus/high，並照 run SKILL 記 trial: 行留證據。
 # sonnet 留在 KIND_MODEL_EFFORTS 供 dk-spawn／dk-leader 的 --model 手動指定。
+# 2026-10-08 Haiku 5.5（10/7 發布，第一個有 effort 的 Haiku）進 frontend、backend、it 的 S 檔；KIND_DEFAULT_TIERS 不動。
+#   AA：haiku/medium 34 $0.05 TTFT 13.4s、haiku/high 38 $0.08 TTFT 28s（sonnet/medium 41 $0.48 TTFT 2s）。
+#   FrontierCode（窄範圍寫碼）medium 41.6% ≈ high 41.9%、max 46.4%；Terminal-Bench 4.0 medium 約 20%、max 39.2%（sonnet 70.6%）。
+#   所以單點改動的 frontend、backend 用 medium；多步驟終端操作的 it 用 high；xhigh/max 成本逼近 sonnet、延遲到分鐘級，不用。
+#   qa、pm、reviewer 是抓錯的關卡，不換。M 檔不用 haiku/max：成本與 sonnet/high 同級、終端題約一半、TTFT 415s。
+#   Claude Code 2.1.293 的 haiku 別名仍指 4.5：使用者層 settings.json 設 env ANTHROPIC_DEFAULT_HAIKU_MODEL=claude-haiku-5-5，
+#   別名更新後刪掉即可；這裡只寫別名，不寫版本。品質出問題退回 sonnet/medium，記 trial: 行。
 KIND_DEFAULT_TIERS="S=sonnet/medium M=sonnet/high L=opus/medium"
 KIND_PROMPT_QUEUES=unknown   # layer-3 smoke updates this: does a prompt sent while working queue?
 # auto 而非 acceptEdits：員工的 cwd 是 worktree，但切片、state、report 都在主樹的 .dkbo/ 下，

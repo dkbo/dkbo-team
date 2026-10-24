@@ -2,7 +2,7 @@
 name: it
 kind: claude
 tiers:
-  S: sonnet/medium
+  S: haiku/high
   M: sonnet/medium
   L: opus/medium
 worktree: true

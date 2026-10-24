@@ -23,7 +23,7 @@ teardown() { teardown_project; }
   [ "$(dk_kind_args agy gemini-3.8-flash/medium)" = "--model gemini-3.8-flash --effort medium --dangerously-skip-permissions --add-dir $DK_PROJECT_ROOT" ]
 }
 @test "rejects unknown model or effort" {
-  run dk_kind_args claude haiku/low; [ "$status" -eq 1 ]
+  run dk_kind_args claude fable/low; [ "$status" -eq 1 ]
   run dk_kind_args claude opus/ultra; [ "$status" -eq 1 ]
 }
 @test "claude 宣告了 CLI 2.1.280 起接受的 xhigh 與 max" {

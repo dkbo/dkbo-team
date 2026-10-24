@@ -2,7 +2,7 @@
 name: frontend
 kind: claude
 tiers:
-  S: sonnet/medium
+  S: haiku/medium
   M: sonnet/high
   L: opus/medium
 worktree: true
