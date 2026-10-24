@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.21.0 — 2026-10-24
+
+- feat(layout): `settings.env` 新鍵 `DK_LAYOUT`，預設 `grid`（原本的切格版面，行為不變）；設成 `tabs` 就不切窗格，一人一個 herdr tab。dev／qa／reviewer 從 tab 2 起各開一個 tab（tab 名＝agent 名，照舊記 `DK_TABS`，`dk-task-close` 照舊收），tab 1 只留領導；pm（`worktree: false`）開在主樹的獨立 tab；`dk-chore` 在領導所在的 workspace 開 `chore-<角色>-N` tab；規劃領導（`dk-leader <short> "<名>"`）開 `plan/<short>` tab；`dk-leader --run` 本來就開 tab，不變。值打錯或留空一律當 `grid`。
+  - herdr 0.9.0 實測：tab 裡最後一個 pane 關掉時 tab 會自己消失，所以 `dk-wave-close`、`dk-chore-close`、`--resume` 照舊關 pane 即可，不另外關 tab。
+  - `lib/layout.sh`：tabs 模式下 `dk_layout_slot` 每次回 `NEWTAB`，`dk_layout_even` 不 resize（清空的 tab 照樣關）。`lib/common.sh` 新增 `dk_tabs_mode`，`dk_settings` 載入並 export `DK_LAYOUT`；`dk-chore` 改為也讀 settings。
+  - tabs 模式下 `dk-spawn --split`、角色檔的 `split:` 不起作用；`dk-brief-check` 不再發「超過 tab 1 格數」的 WARN。
+  - **尚未在真 herdr 上整波實跑**，只在 stub 上驗過。
+- test: `17_layout` 新增 2 條（tabs 模式的槽位、不 resize 但收空 tab），`07_spawn` 2 條（員工開 tab、pm 開 tab 不記 `DK_TABS`），`11_chore` 1 條，`13_leader` 1 條；`16_brief_check` 格數那條加驗 tabs 模式不警告；`23_leader_kind` 的 settings 鍵數 10 → 11；`21_version` 首節清單換成 0.21.0 的條目。
+- 測試：806 bats（+6；`17_layout` 2、`07_spawn` 2、`11_chore` 1、`13_leader` 1）；shellcheck 零警告，並由 `37_shellcheck` 守。
+- 升級：新增 settings 鍵 `DK_LAYOUT`；用 rsync 升級的專案若保留舊的 `settings.env`，沒有這個鍵就照 `grid` 跑，要 tabs 模式自己加一行 `DK_LAYOUT="tabs"`。另動 `bin/dk-spawn`、`bin/dk-chore`、`bin/dk-leader`、`bin/dk-brief-check`、`lib/common.sh`、`lib/layout.sh`、`LEADER.md`、`skills/init/SKILL.md`、`templates/seed/settings.seed.env`。沒有新的 `.task.env` 鍵、依賴、lib、skill。
+
 ## 0.20.0 — 2026-10-04
 
 - feat(kinds)!: claude 三檔重排，S、M 改用 Sonnet 5.5，L 上限降到 opus/medium。`KIND_DEFAULT_TIERS` 由 `S=opus/low M=opus/medium L=opus/high` 改成 `S=sonnet/medium M=sonnet/high L=opus/medium`。角色檔：pm、frontend、backend、qa、it 的 S 一律 `sonnet/medium`；pm、frontend、backend、qa、reviewer 的 M 由 `opus/medium` 改 `sonnet/high`，it 的 M 由 `opus/low` 改 `sonnet/medium`（推理量也升一階）；pm、frontend、backend、qa、reviewer 的 L 由 `opus/high` 改 `opus/medium`，it 的 L 本來就是 `opus/medium`。領導（`dk-leader` 讀 `KIND_DEFAULT_TIERS` 的 L）與例行波審查（`DK_REVIEW_TIER=L`）因此都變成 opus/medium；reviewer 的 M 與 L 仍解析到不同旗標。依據：2026-09-30 AA 的 S 段 sonnet/medium 41 分 $0.59 6.8s 對 opus/low 42 分 $0.55 20.4s，打平而快三倍；M 段 sonnet/high 47 分 $1.08 對 opus/medium 51 分 $1.34、L 段 opus/medium 51 對 opus/high 54 $1.82 42s，使用者取速度與額度，接受分數差。**沒有實跑數據**：原訂累積兩三筆 `trial:` 行再改，使用者決定先改；品質出問題退回 opus 時照記 `trial:` 留證據。
